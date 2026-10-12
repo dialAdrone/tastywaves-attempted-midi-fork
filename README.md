@@ -9,7 +9,7 @@ before it can be any fun: the update path, the USB rescue, USB-MIDI, USB audio, 
 screen and a place to keep settings. It all works, so you start with the part you actually want to write.
 
 ```
-firmware/src/dinghy.c     <- your firmware: ~200 lines, a 4-voice sine. Start here.
+firmware/src/vavewave.c     <- your firmware: ~200 lines, a 4-voice sine. Start here.
 firmware/src/platform.c   <- the plumbing (boot, USB, updates, audio ISR, settings). Done; read it, don't fight it.
 firmware/src/*.c, hal/    <- Felucca's platform, as SLOOP carries it, unchanged
 ```
@@ -35,7 +35,7 @@ rest. The smallest boat of the family, after the felucca and the sloop.
 | **Screen** | 240 x 240, text in two sizes, rectangles, lines, pixels. |
 | **Settings** | `settings_load()` / `settings_save()`: up to 256 bytes with a CRC in their own flash sector. |
 | **A crash screen** | A fault shows where it happened (the PC), then the FM-1 restarts. |
-| **Host mode** | The same `dinghy.c` on your computer: the screen as an image, the sound as a WAV. No FM-1 needed to try an idea. |
+| **Host mode** | The same `vavewave.c` on your computer: the screen as an image, the sound as a WAV. No FM-1 needed to try an idea. |
 | **Checks** | The build fails on what bricks or breaks an FM-1 firmware: a 64-bit division, a call into the chip ROM, too much RAM, a register touched outside `hal/`. |
 
 ## Quick start
@@ -53,8 +53,8 @@ git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
 Then:
 
 ```sh
-./build.sh                                  # -> build/dinghy.fwsc
-tests/run_host.sh                           # -> build/host/dinghy.wav and screen PNGs, no FM-1 needed
+./build.sh                                  # -> build/vavewave.fwsc
+tests/run_host.sh                           # -> build/host/vavewave.wav and screen PNGs, no FM-1 needed
 ```
 
 On macOS the build runs the toolchain in a `linux/amd64` Docker container by itself (have Docker running).
@@ -63,7 +63,7 @@ On macOS the build runs the toolchain in a `linux/amd64` Docker container by its
 **Install** your build over USB from the command line (once: `pip3 install mido python-rtmidi`):
 
 ```sh
-python3 tools/fm1_install.py build/dinghy.fwsc   # asks before it writes; restarts the FM-1 into Dinghy
+python3 tools/fm1_install.py build/vavewave.fwsc   # asks before it writes; restarts the FM-1 into Dinghy
 python3 tools/fm1_install.py --info              # what runs on the connected FM-1
 ```
 
@@ -73,14 +73,14 @@ risk.
 
 ## Your first change
 
-Open [firmware/src/dinghy.c](firmware/src/dinghy.c). The sound is `app_audio()`: it gets an empty buffer of
+Open [firmware/src/vavewave.c](firmware/src/vavewave.c). The sound is `app_audio()`: it gets an empty buffer of
 stereo frames and adds to it. Make the sine a square:
 
 ```c
 s = ((int32_t)ph < 0 ? 8000 : -8000) * amp >> 15;     /* instead of s = (sine(ph) * amp) >> 15; */
 ```
 
-`tests/run_host.sh` and listen to `build/host/dinghy.wav`. Then `./build.sh` and install. That is the whole loop.
+`tests/run_host.sh` and listen to `build/host/vavewave.wav`. Then `./build.sh` and install. That is the whole loop.
 
 ## Where to go next
 

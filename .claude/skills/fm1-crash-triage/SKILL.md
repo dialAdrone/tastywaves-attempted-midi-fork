@@ -5,8 +5,8 @@ description: Diagnose a crash or boot failure of the FM-1 firmware from the red 
 # Crash triage
 
 1. Ask for (or take from the user) the three hex numbers on the red screen: **vector**, **PC**, **return address**.
-2. Find the code: `./build.sh` writes `build/dinghy.dis` (must be the *same build* that crashed; rebuild the same
-   commit if needed). `grep -n "<pc-hex-without-0x>:" build/dinghy.dis` and read ±20 lines; map to the source
+2. Find the code: `./build.sh` writes `build/vavewave.dis` (must be the *same build* that crashed; rebuild the same
+   commit if needed). `grep -n "<pc-hex-without-0x>:" build/vavewave.dis` and read ±20 lines; map to the source
    function by the nearest label.
 3. Typical causes on this chip: stack overflow (24 KB; guard bands fault) → large locals; write into guard
    band/boot-info (`fm1_guard`); out-of-range array index (voice/table); runtime exceeding the watchdog

@@ -27,7 +27,7 @@ ISR:        per voice: env -> osc(s) -> filter -> amp -> sum -> (optional global
 ```
 
 - Keep a `struct patch` (all params, Q15 or small ints) in RAM; main writes fields, ISR reads them. Persist the
-  struct via `settings_save` (≤256 B; add a version byte + validate ranges after load as dinghy.c does).
+  struct via `settings_save` (≤256 B; add a version byte + validate ranges after load as vavewave.c does).
 - Parameters from encoders: `fm1_enc_take(ENC_KNOBn)` returns signed detents; clamp, apply, redraw value.
 - Presets: 256 B = e.g. 8 presets x 32 B, or widen flash range for more.
 
@@ -42,7 +42,7 @@ ISR:        per voice: env -> osc(s) -> filter -> amp -> sum -> (optional global
   indexed by cutoff knob; do not compute `tan()` at runtime.
 - Envelope ADSR: linear in Q15 with per-stage step computed from time via table; exponential = multiply by Q15
   coefficient each block.
-- LFO: second phase accumulator, `sine()` from dinghy.c or triangle `(ph>>16) ^ ...`.
+- LFO: second phase accumulator, `sine()` from vavewave.c or triangle `(ph>>16) ^ ...`.
 - Square/saw: straight from phase (`(int32_t)ph >> 17`), aliasing is audible — consider PolyBLEP-like correction
   in fixed point, or bandlimited wavetables per octave in `.pool` built at boot.
 - FM (the FM-1 name!): operator out = `sine(ph + (mod * depth >> n))`; `ENC_ALGORITHM` is the natural algorithm

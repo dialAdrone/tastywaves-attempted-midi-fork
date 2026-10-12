@@ -6,8 +6,8 @@ description: Cut a versioned release build and install a .fwsc on a connected M-
 
 **Hardware write — get explicit user confirmation before step 3.**
 
-1. `./build.sh --release X.Y` (one digit each) → `build/dinghy-X.Y.fwsc`, identity `FM-1_99Y`. Without
-   `--release`: `build/dinghy.fwsc`, identity `FM-1_990`. Own firmware → pick own identity in `tools/build.py`
+1. `./build.sh --release X.Y` (one digit each) → `build/vavewave-X.Y.fwsc`, identity `FM-1_95Y`. Without
+   `--release`: `build/vavewave.fwsc`, identity `FM-1_950`. Own firmware → pick own identity in `tools/build.py`
    (see `docs/MAKE-IT-YOURS.md`; check the taken list).
 2. `.venv/bin/python tools/fm1_install.py --info` — what runs on the connected FM-1 (needs `mido python-rtmidi`).
 3. `.venv/bin/python tools/fm1_install.py build/<file>.fwsc` — it asks before writing; FM-1 restarts into the new

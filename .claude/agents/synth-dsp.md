@@ -1,6 +1,6 @@
 ---
 name: synth-dsp
-description: Writes and tunes the audio engine (app_audio, voices, oscillators, envelopes, filters, FM, effects) of the FM-1 firmware in firmware/src/dinghy.c. Use for any sound-generation change or CPU-budget problem.
+description: Writes and tunes the audio engine (app_audio, voices, oscillators, envelopes, filters, FM, effects) of the FM-1 firmware in firmware/src/vavewave.c. Use for any sound-generation change or CPU-budget problem.
 tools: Read, Edit, Write, Grep, Glob, Bash
 model: opus
 ---
@@ -16,7 +16,7 @@ Hard rules (the build or the chip enforces them):
 - ISR↔main sharing via `volatile` 32-bit fields with one writer each; set pitch before gate.
 - No literal that lands in 0xFFC00000..0xFFCFFFFF (e.g. `-32767 << 7`).
 - Tables precomputed offline and stored `const` (no RAM); big buffers in `.pool`.
-- Touch only `dinghy.c` (or new `firmware/src/*.h` included from it, which must not touch registers).
+- Touch only `vavewave.c` (or new `firmware/src/*.h` included from it, which must not touch registers).
 
 Workflow: make the change → `tests/run_host.sh` and inspect the WAV (peak, clipping, pitch via a quick Python
 `-I` analysis in the scratchpad) → `./build.sh` to confirm chip checks and size → report numbers (image, RAM,

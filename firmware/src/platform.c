@@ -12,7 +12,7 @@
  *   settings            one 4 KiB flash sector with a CRC (settings_load / settings_save)
  *   crash screen        the PC of a fault, then a reboot
  *
- * The app (dinghy.c) includes this file first and supplies:
+ * The app (vavewave.c) includes this file first and supplies:
  *   static void app_audio(int32_t *out, uint32_t n)   audio ISR: n stereo frames, L R L R, Q15 (+-32767), out is zero
  *   static void app_main(void)                        never returns; calls platform_poll() often (every few ms)
  */
@@ -39,7 +39,7 @@ enum { ENC_SELECT = 0, ENC_ALGORITHM = 1, ENC_KNOB1 = 2, ENC_KNOB2 = 3, ENC_KNOB
 #include "bootguard.h"
 
 #ifndef APP_NAME
-#define APP_NAME "DINGHY"
+#define APP_NAME "VAVEWAVE"
 #endif
 #ifndef FELUCCA_ID
 #define FELUCCA_ID "FM-1_950"                   /* package identity: 95N = this fork, build N (tools/build.py) */

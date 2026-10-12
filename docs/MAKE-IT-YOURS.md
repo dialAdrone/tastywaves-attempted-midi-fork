@@ -10,14 +10,14 @@ works: `./build.sh` and `tests/run_host.sh` (see the [README](../README.md)).
 
 ## 2. Name it
 
-- `dinghy.c` is yours: rename it if you like (and the one line in `tools/build.py` that compiles it).
+- `vavewave.c` is yours: rename it if you like (and the one line in `tools/build.py` that compiles it).
 - At its top, before `#include "platform.c"`:
 
   ```c
   #define APP_NAME "MYSYNTH"        /* the rescue and the crash screen say this */
   ```
 
-- The package file names (`dinghy.fwsc`) are in `tools/build.py`: search for `dinghy`.
+- The package file names (`vavewave.fwsc`) are in `tools/build.py`: search for `dinghy`.
 - Make your own logo; `assets/logo.svg` is Dinghy's.
 
 ## 3. Your package identity
@@ -35,7 +35,7 @@ hub use it to tell firmwares apart: two firmwares with the same identity look li
 ## 4. Release
 
 ```sh
-./build.sh --release 0.2        # -> build/dinghy-0.2.fwsc, identity FM-1_992, the version "0.2" on the screen
+./build.sh --release 0.2        # -> build/vavewave-0.2.fwsc, identity FM-1_992, the version "0.2" on the screen
 ```
 
 On GitHub: a release with a tag (`v0.2`) and the `.fwsc` attached. Say what changed in its notes: the hub links

@@ -16,4 +16,4 @@ description: Recipe for adding a new synth parameter end to end - encoder or but
 6. **Persist**: existing `dirty && quiet() && fm1_ms - t_change > 2000` block saves. Do not add other save sites.
 7. **Test**: if the input is an encoder, host mode needs an `enc` script verb (extend `tests/host.c`:
    `fm1_enc_take` currently returns 0). Run `tests/run_host.sh`, read the PNGs, then `./build.sh`.
-8. Update `docs/CODEMAP.md` (dinghy.c anatomy) with the parameter and its range.
+8. Update `docs/CODEMAP.md` (vavewave.c anatomy) with the parameter and its range.

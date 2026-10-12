@@ -1,0 +1,10 @@
+# exercises every script verb: keys, btn, enc, midi
+100 keys 0x80
+300 enc 2 3
+400 enc 2 -1
+500 btn 1
+600 keys 0
+700 enc 0 1
+800 midi 0x90 69 100
+1000 midi 0x80 69 0
+1200 end

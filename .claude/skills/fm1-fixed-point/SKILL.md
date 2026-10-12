@@ -12,7 +12,7 @@ Full recipes: `docs/SYNTH-DESIGN.md`. Quick card:
 - Smoothing: `y += ((target - y) * k) >> 15` (k Q15), once per block for control values.
 - Clamp BEFORE shifting left; never create the constant `-32767 << 7` (ROM address check).
 - Division: `/` only on 32-bit, divisor checked non-zero (zero does not trap, gives garbage).
-- Sine: reuse `sine(ph)` in dinghy.c (±32767 over 2^32 phase).
+- Sine: reuse `sine(ph)` in vavewave.c (±32767 over 2^32 phase).
 - Signed shifts of negatives are arithmetic on this toolchain; `x >> n` rounds toward −∞ — fine for audio, but
   watch DC offsets in filters (add rounding `+ (1 << (n-1))` if a DC bias matters).
 - Test numerics on host with the same integer code (host cc is fine), but remember host has float: grep for

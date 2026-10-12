@@ -1,15 +1,15 @@
 # Code map (read this instead of re-reading the source)
 
-Dinghy = one compilation unit. `build.py` compiles **only** `firmware/src/dinghy.c`; it `#include`s
+Dinghy = one compilation unit. `build.py` compiles **only** `firmware/src/vavewave.c`; it `#include`s
 `platform.c`, which `#include`s everything else (`libc.c lcd.c gfx.c usb.c fm1_flash.h ota.c recovery.c`, HAL
 headers). Static functions everywhere, no linking between .c files. Target: JieLi AC791N, pi32v2, JieLi clang
-4.0.1, no FPU, no libgcc. Goal of this repo: custom **M-VAVE FM-1 synth firmware** by editing `dinghy.c`.
+4.0.1, no FPU, no libgcc. Goal of this repo: custom **M-VAVE FM-1 synth firmware** by editing `vavewave.c`.
 
 ## Files that matter (and sizes)
 
 | file | lines | what | touch? |
 | --- | --- | --- | --- |
-| `firmware/src/dinghy.c` | 193 | THE APP: 4-voice sine, panel, screen, MIDI, settings | **yes** |
+| `firmware/src/vavewave.c` | 193 | THE APP: 4-voice sine, panel, screen, MIDI, settings | **yes** |
 | `firmware/src/platform.c` | 344 | boot, ISRs (timer5, alnk0), `platform_poll`, settings, MIDI, OTA glue, crash screen | rarely |
 | `firmware/src/gfx.c` | 183 | canvas (`cv_*`), `draw_text_box`, fonts (data in `firmware/gen/felucca_font.h`) | no |
 | `firmware/src/lcd.c` | 130 | ST7789 SPI DMA driver | no |
@@ -34,9 +34,9 @@ main loop (app_main)     -> platform_poll(); read fm1_in / fm1_input_edges / fm1
 ```
 
 Audio ISR output: Q15 ±32767, `out` pre-zeroed, you **add**. Budget 5.8 ms/block, aim < 2.9 ms.
-Main↔ISR sharing: `volatile` 32-bit, one writer each (dinghy.c: voice `inc`/`gate` written by main, `amp`/`ph` by ISR).
+Main↔ISR sharing: `volatile` 32-bit, one writer each (vavewave.c: voice `inc`/`gate` written by main, `amp`/`ph` by ISR).
 
-## dinghy.c anatomy
+## vavewave.c anatomy
 
 - `voice[NV=4]`: `inc` (phase step), `gate` (target level Q15), `amp` (ISR-owned glide), `ph`, `age`, `note`.
 - `sine(ph)`: parabola approximation (~0.1%), integer only.
@@ -57,15 +57,19 @@ Main↔ISR sharing: `volatile` 32-bit, one writer each (dinghy.c: voice `inc`/`g
 - Audio: 44.1 kHz stereo, 24-bit I2S, DAC ceiling −6 dBFS; USB audio 44.1/48 (FIR resampler in usb.c).
 - Flash 1 MiB: settings sector 0xFC000 (4 KiB, ≤256 B payload), OTA staging 0xE0000. More storage → widen
   `FL_RANGE_OK` in platform.c (0x97000..0xFBFFF is free in Dinghy).
+- Black keys are silk-screened (F#3..): OP1 OP2 OP3 | OP4 OP5 | OP6 PIT GLO | MONO POLY | unlabelled; no encoder shows a push switch. Stock screen: 4 icon+value columns top, waveform middle, patch name bottom.
 - Rescue: hold OCT- at power-on, or 2 boot crashes. Web hub / `fm1_install.py` always works if OTA kept on.
 
 ## Host mode (tests/host.c) — what it can and cannot do
 
-- Script lines: `T keys MASK`, `T btn ID`, `T midi ST D1 D2`, `T end` (ms). Output: `-<ms>.ppm→png`, `.wav`,
-  stdout MIDI-out / settings-saved log. 3rd arg FPS → frame sequence.
-- **Gaps** (extend host.c when a feature needs them): `fm1_enc_take` always returns 0 (no encoder events),
-  `fm1_led_key` is a no-op, no ADC/MASTER, no flash persistence between runs, `fm1_input_note_edges` returns 0,
-  `fm1_adc_read` and `fm1_ticks` absent, no timing/CPU measurement.
+- Script lines (T in ms): `T keys MASK`, `T btn ID`, `T enc ID DELTA` (ID 0..6 = ENC_SELECT..ENC_PRESETS, signed
+  detents, + = clockwise; `fm1_enc_take` returns the sum since the last call, then 0), `T midi ST D1 D2`, `T end`.
+  Output: `-<ms>.ppm→png`, `.wav`, stdout MIDI-out / settings-saved / `LED id on|off` (on change) log. 3rd arg FPS →
+  frame sequence. Example: `tests/scripts/enc_demo.txt`; `fm1_input_note_edges` reports scripted key presses.
+- Self-check of the fake: `cc -Wall -Wno-unused-function -DDINGHY_HOST -Ifirmware/src -Ifirmware/gen -o build/host/selftest
+  tests/host_selftest.c && build/host/selftest` (asserts enc accumulation/reset, note edges).
+- **Gaps** (extend host.c when a feature needs them): no ADC/MASTER, no flash persistence between runs,
+  `fm1_adc_read` and `fm1_ticks` absent, no timing/CPU measurement (task T5).
 - Host is x86 with `float` available: **host success does not prove the chip build** (float, 64-bit div, ROM refs
   only fail in `./build.sh`).
 
@@ -88,10 +92,23 @@ Main↔ISR sharing: `volatile` 32-bit, one writer each (dinghy.c: voice `inc`/`g
 
 Skills: `fm1-build-test`, `fm1-fixed-point`, `fm1-add-control`, `fm1-crash-triage`, `fm1-release-install`.
 Controller flow for a feature: `synth-dsp` and/or `panel-ui` (parallel if files don't collide: both edit
-`dinghy.c`, so serialise or split the code into headers first) → `fm1-build-verifier` → `rules-reviewer` →
+`vavewave.c`, so serialise or split the code into headers first) → `fm1-build-verifier` → `rules-reviewer` →
 (user ok) `release-engineer`.
 
 ## Build baseline (unmodified Dinghy, 2026-10-11)
 
 image 55076 B of 581564; RAM .data+.bss 12368 B of 98304; pool 30720 B of 344064; package 610110 B, identity FM-1_990 (since changed to FM-1_950, same size).
 Python is pinned to 3.12 (`.python-version`): python-rtmidi has no cp313 macOS wheel and fails to compile.
+
+## Wavetables (T15, branch `wavetable_synth`; not yet used by firmware)
+
+- `tools/gen_wavetables.py` (numpy, PC only) synthesises the 12 factory tables x 32 frames (SAWSQ PWM HARM VOWEL
+  FMIDX FOLD ORGAN BELL NOISE SHAPE REED STAIR) → `firmware/gen/wavetables.h` (`WT_DATA` int16, `WT_DIR[12]`
+  {name, frames, offset}, `WT_LEVEL_OFF[6]`) + `build/wavetables.bin`. Frame = 6 mip levels of `256>>L` samples + 1
+  guard, harmonics `64>>L`, 510 int16 = 1020 B; table 32,640 B; total **391,680 B**. Per-table gain, peak 0.9 FS.
+  Not included from `firmware/src` yet; while it stays unincluded the image does not change (55,076 B).
+- Level rule without a divide: the smallest L with `inc < 2^(25+L)`.
+- `tests/wavetable_spectrum.py [--variants]` is an integer model of the oscillator plus an FFT alias report →
+  `build/wavetable_spectrum.{txt,png}`. Findings are in `docs/research/wavetable-spectrum.md`: with **linear**
+  interpolation the scheme measures only about 20 dBc in the worst case, because each level is just 4x oversampled.
+  An 8-tap Q15 polyphase sinc reaches 63 dBc.

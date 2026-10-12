@@ -6,13 +6,13 @@ description: Build the FM-1 firmware and test it on the computer. Use after any 
 
 From repo root:
 
-1. **Host (fast, no chip):** `tests/run_host.sh` → `build/host/dinghy.wav`, `build/host/dinghy-1000.png`,
+1. **Host (fast, no chip):** `tests/run_host.sh` → `build/host/vavewave.wav`, `build/host/vavewave-1000.png`,
    `-3000.png`; stdout lists MIDI out and settings saves. Custom script / film:
-   `build/host/dinghy build/host/out my_script.txt [FPS]`  (script verbs: `T keys MASK`, `T btn ID`,
+   `build/host/vavewave build/host/out my_script.txt [FPS]`  (script verbs: `T keys MASK`, `T btn ID`,
    `T midi ST D1 D2`, `T end`; ms times, `#` comments). `APP_VER=x tests/run_host.sh` sets the version text.
 2. **Inspect the result:** read the PNGs with the Read tool; for the WAV, analyse in the scratchpad with
    `python3 -I` (peak, RMS, clipping count, dominant frequency via FFT) rather than guessing.
-3. **Chip build:** `./build.sh` (macOS: Docker must run). Expect `ok` lines + `package build/dinghy.fwsc`.
+3. **Chip build:** `./build.sh` (macOS: Docker must run). Expect `ok` lines + `package build/vavewave.fwsc`.
    Report image/RAM/pool numbers. `FAIL` lines: see `docs/RULES.md`.
 4. A host pass does not prove the chip build: float / 64-bit divide / ROM constants fail only in step 3.
 

@@ -1,0 +1,15 @@
+# Wavetable oscillator bench (BENCH 1 in firmware/src/vavewave.c). Starts with the 12-note chord held, LINEAR.
+# 2 s per setting: LINEAR, CUBIC, SINC8 (EDIT = btn 6); then chord off (PLAY = btn 12) and A4 alone (key 16)
+# in each interpolator, for a pitch / alias check; then voices cycle (SEL = btn 3) with the chord on again.
+# Host timing is the computer's, not the FM-1's.
+2000 btn 6
+4000 btn 6
+6000 btn 12
+6100 keys 0x10000
+8000 btn 6
+10000 btn 6
+12000 keys 0
+12100 btn 12
+12200 btn 3
+13000 btn 3
+14000 end

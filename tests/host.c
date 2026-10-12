@@ -1,22 +1,24 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* A fake FM-1 on a computer: the app (firmware/src/dinghy.c) runs unchanged on it. platform.c includes
+/* A fake FM-1 on a computer: the app (firmware/src/vavewave.c) runs unchanged on it. platform.c includes
  * this file instead of the hardware when DINGHY_HOST is set. A script presses keys over time; out come
  * the screen (PPM, at the times SHOT asks) and the sound (WAV, as the FM-1 sends it over USB).
  *
  *   mkdir -p build/host
- *   cc -O2 -Wall -DDINGHY_HOST -Ifirmware/src -Ifirmware/gen -o build/host/dinghy firmware/src/dinghy.c
- *   build/host/dinghy build/host/dinghy        (-> build/host/dinghy.wav, build/host/dinghy-<ms>.ppm)
- *   build/host/dinghy OUT script.txt [FPS]    (your own script; with FPS: OUT-NNNNN.ppm, a frame every 1/FPS s:
+ *   cc -O2 -Wall -DDINGHY_HOST -Ifirmware/src -Ifirmware/gen -o build/host/vavewave firmware/src/vavewave.c
+ *   build/host/vavewave build/host/vavewave        (-> build/host/vavewave.wav, build/host/vavewave-<ms>.ppm)
+ *   build/host/vavewave OUT script.txt [FPS]    (your own script; with FPS: OUT-NNNNN.ppm, a frame every 1/FPS s:
  *                                             a film of your firmware, e.g. ffmpeg -r 30 -i OUT-%05d.ppm ...)
  *
- * Change SCRIPT below to try your own app. */
+ * Script lines (ms first): keys MASK | btn ID | enc ID DELTA | midi ST D1 D2 | end. enc ID is 0..6 (ENC_SELECT ..
+ * ENC_PRESETS), DELTA signed detents, + = clockwise; fm1_enc_take() returns what has accumulated, then 0, as on the
+ * device. LED changes are logged as "LED id on/off". Change SCRIPT0 below to try your own app. */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
 #ifndef APP_NAME
-#define APP_NAME "DINGHY"
+#define APP_NAME "VAVEWAVE"
 #endif
 #ifndef APP_VER
 #define APP_VER "0.0"
@@ -24,13 +26,42 @@
 #define FS 44100u
 #define HALF_FRAMES 256u
 
+/* fm1_ticks: on the FM-1 a free-running 24 MHz counter (hal/fm1_time.h). Here: the host's monotonic clock at the
+ * same rate, so code that times itself (app_audio's cpu_last / cpu_max) compiles and shows plausible numbers.
+ * They measure this computer, not the chip: never read CPU headroom from a host run. The screens that show them
+ * therefore differ from run to run. */
+#include <time.h>
+#define FM1_TICKS_PER_US 24u
+static uint32_t fm1_ticks(void)
+{
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)((uint64_t)ts.tv_sec * 24000000u + (uint64_t)ts.tv_nsec * 24u / 1000u);
+}
+
 static volatile uint32_t fm1_ms;
 static struct { uint32_t notes, buttons; } fm1_in;
-static uint32_t host_edges;
+static uint32_t host_edges, host_note_edges;
+static int32_t host_enc[7];
+static uint64_t host_led;
 static uint32_t fm1_input_edges(uint32_t *released) { uint32_t b = host_edges; host_edges = 0; *released = 0; return b; }
-static uint32_t fm1_input_note_edges(void) { return 0; }   /* (the script sets fm1_in.notes) */
-static int32_t fm1_enc_take(uint32_t e) { (void)e; return 0; }
-static void fm1_led_key(uint32_t id, int on) { (void)id; (void)on; }
+static uint32_t fm1_input_note_edges(void) { uint32_t b = host_note_edges; host_note_edges = 0; return b; }
+static int32_t fm1_enc_take(uint32_t e)         /* detents since the last call (+ = clockwise), then 0 */
+{
+    int32_t d;
+    if (e >= 7u) return 0;
+    d = host_enc[e]; host_enc[e] = 0;
+    return d;
+}
+static void fm1_led_key(uint32_t id, int on)
+{
+    uint64_t m = 1ull << (id & 63u);
+    on = on != 0;
+    if (id < 64u && (host_led & m ? 1 : 0) != on) {
+        host_led ^= m;
+        printf("%6u ms  LED %u %s\n", fm1_ms, id, on ? "on" : "off");
+    }
+}
 
 /* the screen: 240 x 240 RGB565, as the ST7789 gets it (gfx.c sends the bytes swapped) */
 static uint16_t fb[240 * 240];
@@ -85,8 +116,9 @@ static void app_audio(int32_t *out, uint32_t n);
 static void app_main(void);
 
 /* the script: at t ms, keys down (bit k = key k, 0 = F3), a button edge, a MIDI message. A script file (the second
- * argument) replaces it, a line each: "T keys MASK" (hex or decimal), "T btn ID", "T midi ST D1 D2", "T end" */
-typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; } host_ev_t;
+ * argument) replaces it, a line each: "T keys MASK" (hex or decimal), "T btn ID", "T enc ID DELTA", "T midi ST D1 D2",
+ * "T end" */
+typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; int enc; int32_t delta; } host_ev_t;
 static const host_ev_t SCRIPT0[] = {
     {200, 1u << 7, -1, 0, 0, 0},                                /* C4 */
     {700, 1u << 7 | 1u << 11 | 1u << 14, -1, 0, 0, 0},          /* + E4 G4: a chord */
@@ -109,13 +141,19 @@ static void read_script(const char *path)
     uint32_t n = 0;
     if (!f) { perror(path); exit(1); }
     while (fgets(line, sizeof line, f) && n < 4096u) {
-        host_ev_t e = {0, 0, -1, 0, 0, 0};
+        host_ev_t e = {0, 0, -1, 0, 0, 0, 0, 0};
         unsigned a = 0, b = 0, c = 0;
         if (line[0] == '#' || sscanf(line, "%u %15s", &e.t, what) != 2) continue;
         if (!strcmp(what, "end")) { end_ms = e.t; continue; }
         if (!strcmp(what, "keys")) { sscanf(line, "%*u %*s %i", (int *)&e.keys); }
         else if (!strcmp(what, "btn")) { sscanf(line, "%*u %*s %d", &e.btn); }
         else if (!strcmp(what, "midi")) { sscanf(line, "%*u %*s %i %u %u", (int *)&a, &b, &c); e.st = (uint8_t)a; e.d1 = (uint8_t)b; e.d2 = (uint8_t)c; }
+        else if (!strcmp(what, "enc")) {
+            int id = -1, d = 0;
+            if (sscanf(line, "%*u %*s %d %d", &id, &d) != 2 || id < 0 || id > 6) continue;
+            e.enc = id; e.delta = d;
+            if (!d) continue;
+        }
         else continue;
         ev[n++] = e;
     }
@@ -124,7 +162,7 @@ static void read_script(const char *path)
     script_n = n;
 }
 
-static const char *host_out = "build/host/dinghy";
+static const char *host_out = "build/host/vavewave";
 static int16_t *wav;
 static uint32_t wav_n;
 
@@ -176,8 +214,12 @@ static void platform_poll(void)                 /* one call = one millisecond */
             mq_w++;
         } else if (script[step].btn >= 0)
             host_edges |= 1u << script[step].btn;
-        else
+        else if (script[step].delta)
+            host_enc[script[step].enc] += script[step].delta;
+        else {
+            host_note_edges |= script[step].keys & ~fm1_in.notes;
             fm1_in.notes = script[step].keys;
+        }
         step++;
     }
     owed += FS;                                 /* the frames this millisecond is worth, in blocks as the ISR renders */
