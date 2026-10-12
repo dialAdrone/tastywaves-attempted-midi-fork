@@ -6,7 +6,7 @@ cd "$(dirname "$0")/.."
 mkdir -p build/host
 cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER="\"${APP_VER:-dev}\"" -Ifirmware/src -Ifirmware/gen -o build/host/dinghy firmware/src/dinghy.c
 build/host/dinghy build/host/dinghy
-python3 - <<'PY'
+"${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}" - <<'PY'
 from pathlib import Path
 from PIL import Image
 for p in sorted(Path("build/host").glob("dinghy-*.ppm")):
