@@ -322,7 +322,7 @@ static void ui_linea(uint32_t y, const char *left, const ui_view_t *v)
     d = ui_num(d, v->voices);
     d = ui_cat(d, "/");
     d = ui_num(d, v->voices_max);
-    d = ui_cat(d, " CPU ");
+    d = ui_cat(d, " CPU");
     if (v->cpu < 10u) d = ui_cat(d, " ");
     d = ui_num(d, v->cpu);
     ui_cat(d, "%");
@@ -350,7 +350,7 @@ static void ui_left_text(char *out, const ui_view_t *v)       /* the left part o
     static const char *const OSC[4] = {"OSC1", "OSC2", "SUB", "NOISE"};
     char *d = out;
     switch (v->page) {
-    case UI_P_EDIT: d = ui_cat(d, "EDIT "); d = ui_cat(d, OSC[v->sub & 3u]); d = ui_cat(d, " "); ui_cat(d, v->tname); break;
+    case UI_P_EDIT: d = ui_cat(d, OSC[v->sub & 3u]); d = ui_cat(d, " "); ui_cat(d, v->tname); break;
     case UI_P_ENV: d = ui_cat(d, "ENV "); ui_cat(d, v->sub ? "FILTER" : "AMP"); break;
     case UI_P_FX: ui_cat(d, v->sub ? "FILTER 2/2" : "FILTER 1/2"); break;
     case UI_P_LFO: ui_cat(d, v->sub ? "LFO 2/2" : "LFO 1/2"); break;
