@@ -1,0 +1,27 @@
+# UI design demo (tests/ui_demo.c): each "shot" writes build/host/ui-NAME.png. Keys: a 5-note chord.
+100 keys 0x0001084A
+# home 1: waterfall of SAWSQ, position 1500
+400 shot home1_waterfall
+# table VOWEL, position moved
+500 enc 1 3
+600 enc 0 10
+900 shot home1_waterfall_vowel
+1000 btn 8
+1300 shot home2_spectrum
+1400 enc 1 4
+1500 enc 0 -8
+1800 shot home2_spectrum_fmidx
+2000 btn 8
+2300 shot home3_minimal
+2400 btn 6
+2500 enc 3 -4
+2700 shot edit_osc1
+2800 btn 4
+2900 enc 2 5
+3000 enc 5 6
+3300 shot env_amp
+3400 btn 4
+3500 enc 3 -10
+3800 shot env_filter
+4000 btn 8
+4200 end

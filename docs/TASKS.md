@@ -37,9 +37,9 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - [x] **T13** (2026-10-11) Decisions 1-6 made (12 voices, 12x32 own tables, BEND in v1, upload wanted, one core, map as proposed); name (7) still open.
 - [~] **T14** (2026-10-12: first bench numbers in Log; SEL 0/1/4/8 and FX table readings pending) Measure on device: CPU clock, per-voice cost, XIP read cost (needs T10). Owner: `synth-dsp`.
 - [x] **T15** (2026-10-12; FINDING: linear interpolation fails 60 dB, worst 19.6 dB; see docs/research/wavetable-spectrum.md; decision pending) `tools/gen_wavetables.py` + host spectrum test of the mip scheme. Owner: `synth-dsp`.
-- [ ] **T16** Engine v1 in the ISR: osc/mip/morph, SVF, envs, LFO, drive, delay; event ring + derived struct.
+- [x] **T16** (2026-10-12; synth.h + patch.h, host-verified only, CPU is an estimate ~65 % worst, not yet on device) Engine v1 in the ISR: osc/mip/morph, SVF, envs, LFO, drive, delay; event ring + derived struct.
 - [ ] **T17** Parameter table, patch struct, preset log at 0xE5000 (widen FL_RANGE_OK), MIDI CC map. Owner: `panel-ui`.
-- [ ] **T18** UI pages, waterfall screen, LED behaviour per WAVETABLE_DESIGN.md section 4. Owner: `panel-ui`.
+- [~] **T18** (2026-10-12 phase 2 done: panel wired to engine in panel.h/ui_screens.h/vavewave.c, 8 factory patches, SAVE stub in settings sector, font sheet + tools/gen_font.py; awaiting font pick and a device check, draw time unmeasured) UI pages, waterfall screen, LED behaviour per WAVETABLE_DESIGN.md section 4. Owner: `panel-ui`.
 - [~] **T19** (prior art done: docs/research/sample-transfer.md; protocol proposal in WAVETABLE_DESIGN.md 9a) Design the upload protocol and storage layout (WAVETABLE_DESIGN.md section 9): SysEx ids/commands,
       region, header + CRC, behaviour while playing. Owner: `researcher` for prior art (Felucca/SLOOP sample upload),
       then `synth-dsp`; `rules-reviewer` signs off.
@@ -52,6 +52,18 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
       with T15's generator logic; measure cost.
 - [ ] **T25** Pool budget: define the map (delay, active tables, user slots) and enforce with a build check.
 - [x] **T26** (2026-10-12, answered by user: no audio input jack; sampling is over USB via browser, see sample-transfer research) Research: does the FM-1 have an audio input worth sampling? (`researcher`)
+- [ ] **T27** Arp + modulation step sequencer: design note (docs/ARP-SEQ-DESIGN.md) before code. Panel buttons exist:
+      ARP (id 10) and SEQ (id 11) open the screens, PLAY (12) start/stop, REC (13) step/live record. Decide: clock
+      (internal tempo on a knob, MIDI clock in/out; check realtime 0xF8/FA/FB/FC reach midi_get), arp modes (up, down,
+      up-down, played, random, chord) x octaves x gate x swing x latch, step lane (note, velocity, gate, tie/rest, plus
+      per-step modulation values: position, cutoff, BEND, drive), pattern length, storage (patterns in the preset log,
+      ~256 B per 64 steps), keys as steps, screens (reuse the fixed 4-knob pages). Owner: `panel-ui` + `synth-dsp`.
+- [ ] **T28** Arp/sequencer engine: clock ticked in the audio ISR once per block (optionally sample offset), emits
+      note events through the existing event ring; step modulation writes to the patch params through the smoother;
+      latch/hold; voice stealing with drone use. Cost <0.5 % of block. Depends on T16, T27.
+- [ ] **T29** ARP and SEQ screens + LEDs (dark in v1 until this lands), step grid on the 27 keys, tempo readout.
+      Depends on T18, T27, T17 (storage).
+
 
 ## Log
 
@@ -66,3 +78,6 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - 2026-10-12 Rename to VAVEWave done (build + host + selftest green; image 55080 B). T15 done: generator + spectrum test; linear interpolation FAILS the 60 dB target (19.6 dB worst); 8-tap sinc gets 63.3 dBc at higher CPU. Sample-transfer research (SLOOP/zp12) started.
 - 2026-10-12 Sample-transfer research done: all firmwares GPL-3.0-only (SLOOP is not commercial); nobody samples on-device; SysEx upload protocol proposed.
 - 2026-10-12 T8/T10 done; bench build (BENCH 1: 12 voices x 2 osc, no filter/env/FX, 12 tables) reviewed SAFE by rules-reviewer and installed on the FM-1 by the user (identity FM-1_950). Plays, keys respond. MAX of the audio block, 12 voices x 2 osc, 12 different tables: LINEAR 17.1 %, CUBIC 4-TAP 33.0 %, SINC 8-TAP 44.0 %, SHED 0. Per osc-sample that is about 39 / 75 / 100 cycles at 240 MHz, close to the instruction counts (37 / 71 / 84), so 240 MHz at ~1 IPC is consistent. SINC costs ~16 cycles more than its instruction count (multiply/load stalls, tap table).
+- 2026-10-12 Baseline committed a789e55. 8 held keys at SINC 8-TAP: MAX 28.3 %, SHED 0 (the 4-voice limit seen earlier was the SEL setting). T16 engine v1 and T18 phase 1 (UI mock-ups) done by agents, uncommitted. Engine: BEND is now a smooth sine warp (CZ two-segment warp aliased at 23-49 dBc). Estimated worst case ~65 % of block with all features on (12 voices, sinc, BEND, sub, noise, HP); needs on-device check with the bench readout before FX are added. Effects (chorus/flange/phaser/reverb) not started: hook only (fx_chain[4]).
+- 2026-10-12 User asked for an arpeggiator and a modulation step sequencer, opened with the ARP and SEQ buttons (exist on the panel: ids 10 and 11). T27-T29 added; to follow T17 (patch storage) and a device check of the engine.
+- 2026-10-12 T18 phase 2: panel wired to the engine (build 512,688 B image, RAM 18.7 KB; host/ui/engine/panel tests green). Not on the device yet. Font sheet at build/host/fonts/, shipped font unchanged.

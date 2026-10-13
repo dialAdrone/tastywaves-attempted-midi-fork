@@ -1,29 +1,37 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* VAVEWave: a wavetable synth for the M-VAVE FM-1, on the Dinghy platform (Felucca / SLOOP). Today still
- * Dinghy's 4-voice sine; the wavetable engine is being built (docs/WAVETABLE_DESIGN.md).
+/* VAVEWave: a wavetable synth for the M-VAVE FM-1, on the Dinghy platform (Felucca / SLOOP). The v1 engine
+ * (firmware/src/synth.h, 12 voices x 2 wavetable osc, SVF, 2 ADSR, LFO, BEND, drive; docs/WAVETABLE_DESIGN.md) is
+ * driven through patch.h; the front panel is panel.h (what each control does) and ui_screens.h (the screens).
  * This is the file to change. Everything below it (platform.c) is done: updates, the USB rescue,
  * USB-MIDI, USB audio, keys, knobs, LEDs, the screen, a settings sector.
  *
- *   keys       play sines, 4 voices; the notes go out over USB-MIDI too
+ *   keys       play, 12 voices; the notes go out over USB-MIDI too (EDIT held: OP1..OP4 black keys pick the oscillator)
  *   OCT- OCT+  the octave (kept in flash)
- *   HOME       restart the ISR cost maximum (shown on screen: last / max per block, us and % of 5.8 ms)
+ *   HOME EDIT FX ENV LFO SEL GLO   the page; the same button again: next set / HOME look (2 -> 1 -> 3, kept in flash)
+ *   KNOB1-4    the page's four values; ALGORITHM = table; SELECT = position; PRESETS = patch (loads after 400 ms)
+ *   SAVE       the patch into the settings sector (a stub for T17: one user patch overlay; see panel.h)
+ *   EDIT+HOME  restart the ISR cost maximum (GLO page shows it; the status line shows the live CPU %)
  *   MASTER     the volume (platform.c)
- *   USB-MIDI   notes in play the sines, with their velocity
- * BENCH 1 (below) replaces the sine with the wavetable oscillator CPU bench (firmware/src/wtbench.h):
+ *   USB-MIDI   notes (velocity), CCs (patch.h patch_cc), pitch bend, aftertouch
+ * BENCH 1 (below) replaces the engine with the wavetable oscillator CPU bench (firmware/src/wtbench.h):
  *   12 voices x 2 oscillators, a held 12-note chord at start; EDIT interpolator (linear / Catmull-Rom / 8-tap sinc),
  *   SEL voices rendered (0 1 4 8 12), PLAY hold the chord on/off, FX all voices on one table / 12 tables.
  *
- * The code: engine.h (voices, app_audio, play/stop), wtbench.h (BENCH oscillators), ui.h (drawing), here the
- * main loop. One translation unit: platform.c and the headers are included, not linked.
+ * The code: engine.h (voices, app_audio, play/stop), wtbench.h (BENCH oscillators), ui.h (BENCH drawing),
+ * ui_screens.h + panel.h (the UI), here the main loop. One translation unit: platform.c and the headers are
+ * included, not linked.
  *
  * Rules of the road (the chip has no FPU and no libgcc): integers only, no float, no 64-bit division.
  * tests/host.c runs this file on a computer: the screen as a PNG, the sound as a WAV.
  * What platform.c offers: docs/API.md. The chip's rules: docs/RULES.md. */
 #include "platform.c"
 
-#define BENCH 1                                 /* 1 = wavetable oscillator CPU bench (throwaway), 0 = the sine synth */
+#ifndef BENCH
+#define BENCH 0                                 /* 1 = wavetable oscillator CPU bench (throwaway), 0 = the v1 engine */
+#endif
 #include "engine.h"
 #include "ui.h"
+#include "ui_screens.h"
 
 #if BENCH
 static const uint8_t CHORD[NV] = {36, 43, 48, 52, 55, 60, 64, 67, 72, 76, 79, 84};   /* C2 .. C6, mip levels 0..2 */
@@ -40,103 +48,170 @@ static void bench_hold(int on)
             voice[v].gate = 0;
     }
 }
-#endif
 
 static void app_main(void)
 {
-    struct { int8_t oct; } set = {0};           /* what survives a power-off (add yours, up to 256 bytes) */
+    static const uint8_t NVS[] = {0, 1, 4, 8, NV};
+    struct { int8_t oct; } set = {0};           /* what survives a power-off */
     uint32_t prev = 0, k, t_change = 0, dirty = 0, lit_drawn = ~0u, t_cost = 0, last_drawn = ~0u, max_drawn = ~0u;
+    uint32_t ip = IP_LIN, nvi = sizeof NVS - 1u, same = 0, hold = 1, cfg_dirty = 1, shed_base = 0, shed_drawn = ~0u;
     int32_t oct_drawn = 99;
     uint8_t held[27] = {0};                     /* the note each key plays */
-#if BENCH
-    static const uint8_t NVS[] = {0, 1, 4, 8, NV};
-    uint32_t ip = IP_LIN, nvi = sizeof NVS - 1u, same = 0, hold = 1, cfg_dirty = 1, shed_base = 0, shed_drawn = ~0u;
-#else
-    uint32_t note_drawn = ~0u;
-#endif
     settings_load(&set, sizeof set);
     if (set.oct < -2 || set.oct > 2) set.oct = 0;
-
-#if BENCH
     draw_bench_static();
     bench_ip = ip; bench_nv = NVS[nvi]; bench_same = same;
     bench_hold(1);
-#else
-    lcd_fill(0, 0, 240, 240, C_BLACK);
-    draw_text_box(0, 18, 240, &FONT_L, APP_NAME, C_ACC, 1);
-    draw_text_box(0, 52, 240, &FONT_S, "wavetable synth  v" APP_VER, C_OFF, 1);
-#endif
 
     for (;;) {
         uint32_t keys, down, up, rel, b, lit = 0, base = (uint32_t)(KEY0 + 12 * set.oct);
         uint8_t st, d1, d2;
         platform_poll();
 
-        keys = fm1_in.notes;                    /* bit k: key k (0 = F3 .. 26 = G5) */
+        keys = fm1_in.notes;
         down = keys & ~prev;
         up = prev & ~keys;
         prev = keys;
-        for (k = 0; k < 27u; k++) {                 /* (a key stops the note it started: the octave may change meanwhile) */
+        for (k = 0; k < 27u; k++) {
             if (down >> k & 1u) { held[k] = (uint8_t)(base + k); play(held[k], 100); midi_send(0x90, held[k], 100); }
             if (up >> k & 1u) { stop(held[k]); midi_send(0x80, held[k], 0); }
         }
 
-        b = fm1_input_edges(&rel);              /* buttons pressed since the last call (bit = button id) */
+        b = fm1_input_edges(&rel);
         if (b & (1u << BTN_OCT_DOWN) && set.oct > -2) { set.oct--; dirty = 1; t_change = fm1_ms; }
         if (b & (1u << BTN_OCT_UP) && set.oct < 2) { set.oct++; dirty = 1; t_change = fm1_ms; }
-        if (b & (1u << BTN_HOME)) cpu_reset_req++;   /* the max starts over */
-#if BENCH
         if (b & (1u << BTN_EDIT)) { ip = (ip + 1u) % IP_N; bench_ip = ip; cfg_dirty = 1; }
         if (b & (1u << BTN_SEL)) { nvi = (nvi + 1u) % sizeof NVS; bench_nv = NVS[nvi]; cfg_dirty = 1; }
         if (b & (1u << BTN_FX)) { same ^= 1u; bench_same = same; cfg_dirty = 1; }
         if (b & (1u << BTN_PLAY)) { hold ^= 1u; bench_hold((int)hold); cfg_dirty = 1; }
-        if (b & (1u << BTN_HOME)) shed_base = bench_shed_blocks;
+        if (b & (1u << BTN_HOME)) { cpu_reset_req++; shed_base = bench_shed_blocks; }
         if (cfg_dirty || set.oct != oct_drawn) {     /* a new setting: a new maximum */
             if (cfg_dirty) { cpu_reset_req++; shed_base = bench_shed_blocks; }
             draw_bench_cfg(ip, NVS[nvi], same, hold, set.oct);
             cfg_dirty = 0;
             oct_drawn = set.oct;
         }
-#endif
 
-        while (midi_get(&st, &d1, &d2)) {       /* USB-MIDI in, any channel */
-            if ((st & 0xF0u) == 0x90u && d2) play(d1, d2);
-            else if ((st & 0xF0u) == 0x80u || (st & 0xF0u) == 0x90u) stop(d1);
-        }
+        while (midi_get(&st, &d1, &d2))
+            eng_midi(st, d1, d2);
 
         base = (uint32_t)(KEY0 + 12 * set.oct);
-        for (k = 0; k < NV; k++)                /* what sounds, on the keys of this octave */
-            if (voice[k].gate && voice[k].note >= base && voice[k].note < base + 27u)
-                lit |= 1u << (voice[k].note - base);
+        lit = eng_lit(base);
         for (k = 0; k < 27u; k++)
             fm1_led_key(KEY_LED(k), lit >> k & 1u);
         fm1_led_key(BTN_OCT_DOWN, set.oct < 0);
         fm1_led_key(BTN_OCT_UP, set.oct > 0);
-#if BENCH
         fm1_led_key(BTN_PLAY, (int)hold);
         fm1_led_key(BTN_FX, (int)same);
-#endif
 
-        if (lit != lit_drawn) { lit_drawn = lit; draw_keys(lit); }   /* redraw only what changed */
-        if (fm1_ms - t_cost >= 250u) {          /* the ISR cost, 4 times a second, when it changed */
+        if (lit != lit_drawn) { lit_drawn = lit; draw_keys(lit); }
+        if (fm1_ms - t_cost >= 250u) {
             uint32_t l = cpu_last, m = cpu_max;
             t_cost = fm1_ms;
-#if BENCH
             if (l != last_drawn || m != max_drawn || bench_shed_blocks - shed_base != shed_drawn) {
                 shed_drawn = bench_shed_blocks - shed_base;
                 draw_bench_cost(l, m, bench_shed, shed_drawn);
-#else
-            if (l != last_drawn || m != max_drawn) {
-                draw_cpu(l, m);
-#endif
                 last_drawn = l;
                 max_drawn = m;
             }
         }
-#if !BENCH
-        if (last_note != note_drawn) { note_drawn = last_note; draw_note(); }
-        if (set.oct != oct_drawn) { oct_drawn = set.oct; draw_status(set.oct); }
-#endif
+        if (dirty && quiet() && fm1_ms - t_change > 2000u) {
+            settings_save(&set, sizeof set);
+            dirty = 0;
+        }
+    }
+}
+
+#else   /* ---- the v1 synth */
+
+/* what survives a power-off: validated after the load (version byte, ranges), 102 of the 256 bytes */
+typedef struct {
+    uint8_t ver;                                /* SET_VER (panel.h): another version = the defaults */
+    int8_t oct;                                 /* -2..2 */
+    uint8_t look;                               /* HOME look UI_H_*: 0 waterfall, 1 spectrum (default), 2 minimal */
+    uint8_t slot;                               /* the patch last loaded, 0..7 */
+    uint8_t uslot;                              /* the factory slot the saved user patch replaces, 0xFF none */
+    uint8_t pad[3];
+    int16_t uval[P_COUNT];                      /* SAVE stub (T17 does real slots): patch values of that user patch */
+} app_set_t;
+typedef char app_set_fits[sizeof(app_set_t) <= 256u ? 1 : -1];
+
+#include "panel.h"
+
+static void app_main(void)
+{
+    app_set_t set;
+    uint32_t prev = 0, started = 0, k, t_change = 0, dirty = 0, t_cpu = 0, cpu = 0, cpu_mx = 0;
+    uint8_t held[27] = {0};                     /* the note each key plays */
+
+    memset(&set, 0, sizeof set);
+    if (settings_load(&set, sizeof set)) set.ver = 0;       /* nothing (or another size): the defaults */
+    pn_validate(&set);
+    pn_init(&set);
+
+    for (;;) {
+        uint32_t keys, down, up, rel, b, hb, lit, base, edit_held, m, save_shown;
+        uint8_t st, d1, d2;
+        platform_poll();
+
+        hb = fm1_in.buttons;                    /* held now */
+        edit_held = hb >> BTN_EDIT & 1u;
+        b = fm1_input_edges(&rel);              /* pressed since the last pass */
+        if (b & (1u << BTN_OCT_DOWN) && set.oct > -2) { set.oct--; dirty = 1; t_change = fm1_ms; }
+        if (b & (1u << BTN_OCT_UP) && set.oct < 2) { set.oct++; dirty = 1; t_change = fm1_ms; }
+        {
+            uint8_t look = set.look;
+            uint32_t d0 = dirty;
+            pn_buttons(b, hb, &set, &dirty);
+            if (look != set.look || dirty != d0) t_change = fm1_ms;
+        }
+
+        keys = fm1_in.notes;                    /* bit k: key k (0 = F3 .. 26 = G5) */
+        down = keys & ~prev;
+        up = prev & ~keys;
+        prev = keys;
+        base = (uint32_t)(KEY0 + 12 * set.oct);
+        for (k = 0; k < 27u; k++) {             /* (a key stops the note it started: the octave may change meanwhile) */
+            if (down >> k & 1u) {
+                int chip = k == 1u ? 0 : k == 3u ? 1 : k == 5u ? 2 : k == 8u ? 3 : -1;   /* the OP1..OP4 black keys */
+                if (edit_held && chip >= 0) { pn.page = UI_P_EDIT; pn.sub = (uint8_t)chip; pn.touched = 4; }
+                else { started |= 1u << k; held[k] = (uint8_t)(base + k); play(held[k], 100); midi_send(0x90, held[k], 100); }
+            }
+            if (up >> k & 1u && started >> k & 1u) { started &= ~(1u << k); stop(held[k]); midi_send(0x80, held[k], 0); }
+        }
+
+        pn_encoders();
+        if (pn.browse_pend && fm1_ms - pn.t_browse >= 400u) {   /* the patch name turned, then 400 ms of quiet */
+            pn_load(pn.browse, &set);
+            if (set.slot != pn.slot) { set.slot = pn.slot; dirty = 1; t_change = fm1_ms; }
+        }
+        save_shown = pn_save_poll(&set, &dirty);
+        (void)save_shown;
+
+        while (midi_get(&st, &d1, &d2))         /* USB-MIDI in, any channel */
+            eng_midi(st, d1, d2);
+
+        if (fm1_ms - t_cpu >= 250u) {           /* the ISR cost, 4 times a second */
+            uint32_t t = cpu_max > 4000000u ? 4000000u : cpu_max;
+            t_cpu = fm1_ms;
+            cpu = (eng_cpu_permille() + 5u) / 10u;
+            cpu_mx = (t * 1000u / AUDIO_BUDGET_TICKS + 5u) / 10u;
+        }
+        pn_view_fill(cpu, cpu_mx, eng_voices_busy(), fm1_ms < pn.t_flash);
+        ui_draw(&pn_view, &pn_shadow);          /* redraws only what changed */
+
+        lit = eng_lit(base);                    /* LEDs: what sounds, on the keys of this octave */
+        for (k = 0; k < 27u; k++) {
+            uint32_t on = lit >> k & 1u;
+            if (edit_held && (k == 1u || k == 3u || k == 5u || k == 8u))     /* the oscillator chips */
+                on = pn.sub == (k == 1u ? 0u : k == 3u ? 1u : k == 5u ? 2u : 3u);
+            fm1_led_key(KEY_LED(k), (int)on);
+        }
+        m = ui_button_leds(&pn_view, fm1_ms >> 8 & 1u);
+        if (fm1_ms < pn.t_flash) m |= 1u << BTN_SAVE;
+        if (set.oct < 0) m |= 1u << BTN_OCT_DOWN;
+        if (set.oct > 0) m |= 1u << BTN_OCT_UP;
+        for (k = 0; k < 14u; k++) fm1_led_key(k, (int)(m >> k & 1u));
 
         if (dirty && quiet() && fm1_ms - t_change > 2000u) {   /* 2 s after the change, when silent (an erase stalls the sound) */
             settings_save(&set, sizeof set);
@@ -144,3 +219,4 @@ static void app_main(void)
         }
     }
 }
+#endif

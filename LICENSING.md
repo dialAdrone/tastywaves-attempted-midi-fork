@@ -15,7 +15,8 @@ complete source under the same licence too.
 
 | What | Licence | Where |
 | --- | --- | --- |
-| Terminus font 8x16 (ter-u16n), rendered into `firmware/gen/felucca_font.h` | SIL OFL 1.1 | `assets/fonts/Terminus-LICENSE.txt` |
+| Spleen font 8x16 and 16x32 (Frederic Cambus), rendered into `firmware/gen/felucca_font.h` by `tools/gen_font.py` | BSD 2-Clause | `assets/fonts/Spleen-LICENSE.txt` (BDF sources beside it) |
+| Terminus font 8x16 (ter-u16n): the font Dinghy / Felucca shipped, no longer in the build | SIL OFL 1.1 | `assets/fonts/Terminus-LICENSE.txt` |
 | JieLi AC79 SDK: `uboot.boot`, `cfg_tool.bin`, `eq_cfg_hw.bin` are read from your SDK checkout at build time and placed in the package; no SDK files are in this tree | Apache-2.0 | <https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK> |
 
 ## The logo

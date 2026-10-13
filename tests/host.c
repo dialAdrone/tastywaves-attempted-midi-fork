@@ -9,7 +9,7 @@
  *   build/host/vavewave OUT script.txt [FPS]    (your own script; with FPS: OUT-NNNNN.ppm, a frame every 1/FPS s:
  *                                             a film of your firmware, e.g. ffmpeg -r 30 -i OUT-%05d.ppm ...)
  *
- * Script lines (ms first): keys MASK | btn ID | enc ID DELTA | midi ST D1 D2 | end. enc ID is 0..6 (ENC_SELECT ..
+ * Script lines (ms first): keys MASK | btn ID | bdown ID | bup ID | enc ID DELTA | midi ST D1 D2 | end. enc ID is 0..6 (ENC_SELECT ..
  * ENC_PRESETS), DELTA signed detents, + = clockwise; fm1_enc_take() returns what has accumulated, then 0, as on the
  * device. LED changes are logged as "LED id on/off". Change SCRIPT0 below to try your own app. */
 #include <stdint.h>
@@ -117,8 +117,8 @@ static void app_main(void);
 
 /* the script: at t ms, keys down (bit k = key k, 0 = F3), a button edge, a MIDI message. A script file (the second
  * argument) replaces it, a line each: "T keys MASK" (hex or decimal), "T btn ID", "T enc ID DELTA", "T midi ST D1 D2",
- * "T end" */
-typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; int enc; int32_t delta; } host_ev_t;
+ * "T bdown ID" / "T bup ID" (a button pressed and held / released: fm1_in.buttons), "T shot NAME" (screen -> OUT-NAME.ppm at that time; any shot line replaces the default 1 s / 3 s screens), "T end" */
+typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; int enc; int32_t delta; char shot[24]; uint8_t hold; } host_ev_t;
 static const host_ev_t SCRIPT0[] = {
     {200, 1u << 7, -1, 0, 0, 0},                                /* C4 */
     {700, 1u << 7 | 1u << 11 | 1u << 14, -1, 0, 0, 0},          /* + E4 G4: a chord */
@@ -130,7 +130,7 @@ static const host_ev_t SCRIPT0[] = {
     {3400, 0, -1, 0, 0, 0},
 };
 static const host_ev_t *script = SCRIPT0;
-static uint32_t script_n = sizeof SCRIPT0 / sizeof SCRIPT0[0], end_ms = 6500, frame_fps;
+static uint32_t script_n = sizeof SCRIPT0 / sizeof SCRIPT0[0], end_ms = 6500, frame_fps, shots_named;
 static const uint32_t SHOT[] = {1000, 3000};
 
 static void read_script(const char *path)
@@ -141,12 +141,20 @@ static void read_script(const char *path)
     uint32_t n = 0;
     if (!f) { perror(path); exit(1); }
     while (fgets(line, sizeof line, f) && n < 4096u) {
-        host_ev_t e = {0, 0, -1, 0, 0, 0, 0, 0};
+        host_ev_t e = {0, 0, -1, 0, 0, 0, 0, 0, {0}, 0};
         unsigned a = 0, b = 0, c = 0;
         if (line[0] == '#' || sscanf(line, "%u %15s", &e.t, what) != 2) continue;
         if (!strcmp(what, "end")) { end_ms = e.t; continue; }
+        if (!strcmp(what, "shot")) {
+            if (sscanf(line, "%*u %*s %23s", e.shot) != 1) continue;
+            shots_named = 1;
+            ev[n++] = e;
+            continue;
+        }
         if (!strcmp(what, "keys")) { sscanf(line, "%*u %*s %i", (int *)&e.keys); }
         else if (!strcmp(what, "btn")) { sscanf(line, "%*u %*s %d", &e.btn); }
+        else if (!strcmp(what, "bdown")) { sscanf(line, "%*u %*s %d", &e.btn); e.hold = 1; }   /* pressed and held */
+        else if (!strcmp(what, "bup")) { sscanf(line, "%*u %*s %d", &e.btn); e.hold = 2; }     /* released */
         else if (!strcmp(what, "midi")) { sscanf(line, "%*u %*s %i %u %u", (int *)&a, &b, &c); e.st = (uint8_t)a; e.d1 = (uint8_t)b; e.d2 = (uint8_t)c; }
         else if (!strcmp(what, "enc")) {
             int id = -1, d = 0;
@@ -209,11 +217,22 @@ static void platform_poll(void)                 /* one call = one millisecond */
     static int32_t blk[2u * HALF_FRAMES];
     fm1_ms++;
     while (step < script_n && script[step].t <= fm1_ms) {
-        if (script[step].st) {
+        if (script[step].shot[0]) {
+            char name[512];
+            snprintf(name, sizeof name, "%s-%s.ppm", host_out, script[step].shot);
+            write_ppm_as(name);
+            printf("%6u ms  screen -> %s\n", fm1_ms, name);
+        } else if (script[step].st) {
             mq[mq_w % 64u][0] = script[step].st; mq[mq_w % 64u][1] = script[step].d1; mq[mq_w % 64u][2] = script[step].d2;
             mq_w++;
-        } else if (script[step].btn >= 0)
-            host_edges |= 1u << script[step].btn;
+        } else if (script[step].btn >= 0) {
+            uint32_t bit = 1u << script[step].btn;
+            if (script[step].hold == 2) fm1_in.buttons &= ~bit;     /* bup: no press edge */
+            else {
+                host_edges |= bit;                                   /* btn: a press edge only; bdown: and held */
+                if (script[step].hold == 1) fm1_in.buttons |= bit;
+            }
+        }
         else if (script[step].delta)
             host_enc[script[step].enc] += script[step].delta;
         else {
@@ -241,7 +260,7 @@ static void platform_poll(void)                 /* one call = one millisecond */
             snprintf(name, sizeof name, "%s-%05u.ppm", host_out, frame++);
             write_ppm_as(name);
         }
-    } else if (shot < sizeof SHOT / sizeof SHOT[0] && fm1_ms == SHOT[shot])
+    } else if (!shots_named && shot < sizeof SHOT / sizeof SHOT[0] && fm1_ms == SHOT[shot])
         write_ppm(SHOT[shot++]);
     if (fm1_ms >= end_ms) {
         write_wav();

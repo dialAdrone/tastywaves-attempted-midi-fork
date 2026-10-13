@@ -1,0 +1,181 @@
+# VAVEWave v1 engine: alias / pitch sweep of osc 1 (T16). Run: tests/run_engine.sh (host WAV + tests/engine_check.py).
+# osc 2 off, filter open (cutoff 127, reso 0, key track 0), amp env: attack 0, sustain 127; one note at a time, vel 127.
+# '#! check' lines are read by tests/engine_check.py (tests/host.c ignores comments).
+10 midi 0xB0 23 0
+11 midi 0xB0 74 127
+12 midi 0xB0 71 0
+13 midi 0xB0 83 0
+14 midi 0xB0 76 127
+15 midi 0xB0 73 0
+16 midi 0xB0 72 30
+17 midi 0xB0 7 127
+18 midi 0xB0 70 0
+19 midi 0xB0 20 0
+20 midi 0xB0 15 0
+# 8-tap sinc, SAWSQ frame 0, the playable range and beyond (levels 0..6)
+100 midi 0x90 41 127
+1400 midi 0x80 41 0
+#! check sinc41 350 1350 alias note=41
+#! check psinc41 350 1350 pitch note=41
+1700 midi 0x90 48 127
+3000 midi 0x80 48 0
+#! check sinc48 1950 2950 alias note=48
+#! check psinc48 1950 2950 pitch note=48
+3300 midi 0x90 55 127
+4600 midi 0x80 55 0
+#! check sinc55 3550 4550 alias note=55
+#! check psinc55 3550 4550 pitch note=55
+4900 midi 0x90 60 127
+6200 midi 0x80 60 0
+#! check sinc60 5150 6150 alias note=60
+#! check psinc60 5150 6150 pitch note=60
+6500 midi 0x90 64 127
+7800 midi 0x80 64 0
+#! check sinc64 6750 7750 alias note=64
+#! check psinc64 6750 7750 pitch note=64
+8100 midi 0x90 69 127
+9400 midi 0x80 69 0
+#! check sinc69 8350 9350 alias note=69
+#! check psinc69 8350 9350 pitch note=69
+9700 midi 0x90 76 127
+11000 midi 0x80 76 0
+#! check sinc76 9950 10950 alias note=76
+#! check psinc76 9950 10950 pitch note=76
+11300 midi 0x90 81 127
+12600 midi 0x80 81 0
+#! check sinc81 11550 12550 alias note=81
+#! check psinc81 11550 12550 pitch note=81
+12900 midi 0x90 88 127
+14200 midi 0x80 88 0
+#! check sinc88 13150 14150 alias note=88
+#! check psinc88 13150 14150 pitch note=88
+14500 midi 0x90 93 127
+15800 midi 0x80 93 0
+#! check sinc93 14750 15750 alias note=93
+#! check psinc93 14750 15750 pitch note=93
+16100 midi 0x90 96 127
+17400 midi 0x80 96 0
+#! check sinc96 16350 17350 alias note=96
+#! check psinc96 16350 17350 pitch note=96
+17700 midi 0x90 100 127
+19000 midi 0x80 100 0
+#! check sinc100 17950 18950 alias note=100
+#! check psinc100 17950 18950 pitch note=100
+# above MIDI 100: level 5 / 6 (fundamental only above fs/4): reported, pass mark 40 dBc
+19300 midi 0x90 105 127
+20600 midi 0x80 105 0
+#! check sinc105 19550 20550 alias note=105 min=40
+#! check psinc105 19550 20550 pitch note=105
+20900 midi 0x90 110 127
+22200 midi 0x80 110 0
+#! check sinc110 21150 22150 alias note=110 min=40
+#! check psinc110 21150 22150 pitch note=110
+22500 midi 0x90 116 127
+23800 midi 0x80 116 0
+#! check sinc116 22750 23750 alias note=116 min=40
+#! check psinc116 22750 23750 pitch note=116
+24100 midi 0x90 120 127
+25400 midi 0x80 120 0
+#! check sinc120 24350 25350 alias note=120 min=40
+#! check psinc120 24350 25350 pitch note=120
+25700 midi 0x90 124 127
+27000 midi 0x80 124 0
+#! check sinc124 25950 26950 alias note=124 min=40
+#! check psinc124 25950 26950 pitch note=124
+27300 midi 0x90 127 127
+28600 midi 0x80 127 0
+#! check sinc127 27550 28550 alias note=127 min=40
+#! check psinc127 27550 28550 pitch note=127
+# eco mode (Catmull-Rom): expected ~20-30 dBc (docs/research/wavetable-spectrum.md), pass mark 15
+28900 midi 0xB0 15 127
+28951 midi 0x90 48 127
+30251 midi 0x80 48 0
+#! check eco48 29201 30201 alias note=48 min=15
+#! check peco48 29201 30201 pitch note=48
+30551 midi 0x90 69 127
+31851 midi 0x80 69 0
+#! check eco69 30801 31801 alias note=69 min=15
+#! check peco69 30801 31801 pitch note=69
+32151 midi 0x90 88 127
+33451 midi 0x80 88 0
+#! check eco88 32401 33401 alias note=88 min=15
+#! check peco88 32401 33401 pitch note=88
+33751 midi 0x90 100 127
+35051 midi 0x80 100 0
+#! check eco100 34001 35001 alias note=100 min=15
+#! check peco100 34001 35001 pitch note=100
+35351 midi 0xB0 15 0
+# BEND +40 (CC 12 = 104): the mip level follows the steeper slope
+35352 midi 0xB0 12 104
+35403 midi 0x90 48 127
+36703 midi 0x80 48 0
+#! check warp48 35653 36653 alias note=48
+#! check pwarp48 35653 36653 pitch note=48
+37003 midi 0x90 69 127
+38303 midi 0x80 69 0
+#! check warp69 37253 38253 alias note=69
+#! check pwarp69 37253 38253 pitch note=69
+38603 midi 0x90 88 127
+39903 midi 0x80 88 0
+#! check warp88 38853 39853 alias note=88
+#! check pwarp88 38853 39853 pitch note=88
+40203 midi 0x90 100 127
+41503 midi 0x80 100 0
+#! check warp100 40453 41453 alias note=100
+#! check pwarp100 40453 41453 pitch note=100
+# BEND -64 (CC 12 = 0), the steepest map
+41803 midi 0xB0 12 0
+41854 midi 0x90 60 127
+43154 midi 0x80 60 0
+#! check warpm60 42104 43104 alias note=60
+#! check pwarpm60 42104 43104 pitch note=60
+43454 midi 0x90 96 127
+44754 midi 0x80 96 0
+#! check warpm96 43704 44704 alias note=96
+#! check pwarpm96 43704 44704 pitch note=96
+45054 midi 0xB0 12 64
+# morph between frames 10 and 11 of HARM (table 2), the hardest table in the T15 test
+45055 midi 0xB0 20 22
+45056 midi 0xB0 70 42
+45107 midi 0x90 60 127
+46407 midi 0x80 60 0
+#! check harm60 45357 46357 alias note=60
+#! check pharm60 45357 46357 pitch note=60
+46707 midi 0x90 84 127
+48007 midi 0x80 84 0
+#! check harm84 46957 47957 alias note=84
+#! check pharm84 46957 47957 pitch note=84
+48307 midi 0x90 96 127
+49607 midi 0x80 96 0
+#! check harm96 48557 49557 alias note=96
+#! check pharm96 48557 49557 pitch note=96
+# NOISE (table 8), frames 0 and 31: the worst table of the T15 test (19.6 dBc with linear interpolation)
+50000 midi 0xB0 20 86
+50001 midi 0xB0 70 0
+50050 midi 0x90 46 127
+51350 midi 0x80 46 0
+#! check noise0_46 50300 51300 alias note=46
+51650 midi 0x90 64 127
+52950 midi 0x80 64 0
+#! check noise0_64 51900 52900 alias note=64
+53250 midi 0x90 80 127
+54550 midi 0x80 80 0
+#! check noise0_80 53500 54500 alias note=80
+54850 midi 0x90 97 127
+56150 midi 0x80 97 0
+#! check noise0_97 55100 56100 alias note=97
+56450 midi 0xB0 20 86
+56451 midi 0xB0 70 127
+56500 midi 0x90 46 127
+57800 midi 0x80 46 0
+#! check noise31_46 56750 57750 alias note=46
+58100 midi 0x90 64 127
+59400 midi 0x80 64 0
+#! check noise31_64 58350 59350 alias note=64
+59700 midi 0x90 80 127
+61000 midi 0x80 80 0
+#! check noise31_80 59950 60950 alias note=80
+61300 midi 0x90 97 127
+62600 midi 0x80 97 0
+#! check noise31_97 61550 62550 alias note=97
+63100 end

@@ -1,0 +1,53 @@
+# The real panel (tests/run_panel.sh): vavewave.c + panel.h + engine on the fake FM-1 -> build/host/panel-NAME.png.
+# Buttons: 0 OCT- 1 OCT+ 2 FX 3 SEL 4 ENV 5 LFO 6 EDIT 7 GLO 8 HOME 9 SAVE; encoders: 0 SELECT 1 ALGORITHM 2-5 KNOB1-4 6 PRESETS.
+# A 5-note chord held from 100 ms (keys 1 3 6 11 16 ...)
+100 keys 0x0001084A
+# HOME, look 2 (spectrum) is the default; patch 1
+500 shot home2_spectrum
+600 btn 8
+900 shot home1_waterfall
+1000 btn 8
+1300 shot home3_minimal
+1400 btn 8
+# EDIT, osc 1: BEND on, position moved
+1500 btn 6
+1550 shot edit_flat
+1600 enc 5 8
+1700 enc 0 6
+2000 shot edit_bend
+# EDIT osc 2 chip
+2100 btn 6
+2400 shot edit_osc2
+# ENV amp, then filter
+2500 btn 4
+2600 enc 3 -4
+2900 shot env_amp
+3000 btn 4
+3100 enc 2 3
+3400 shot env_filter
+# FX (filter), second set, LFO, SEL, GLO
+3500 btn 2
+3600 enc 2 -3
+3900 shot fx_filter
+4000 btn 2
+4300 shot fx_filter2
+4400 btn 5
+4500 enc 3 3
+4800 shot lfo
+4900 btn 3
+5200 shot sel
+5300 btn 7
+5400 enc 3 6
+5700 shot glo
+# patches: PRESETS to 4 (FOLD LEAD), name changes at once, the sound 400 ms later
+5800 btn 8
+5900 enc 6 3
+6000 shot home_browse
+6700 shot home_patch4
+# SAVE: the flash of "SAVED" (waits for the keys to be up: the flash erase stops the sound)
+6800 enc 2 -5
+6900 keys 0
+7000 btn 9
+7300 shot saved
+8500 shot after_save
+10000 end

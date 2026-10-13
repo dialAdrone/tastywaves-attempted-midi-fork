@@ -15,6 +15,7 @@ int main(void)
     static const host_ev_t ev[] = {
         {10, 0, -1, 0, 0, 0, 2, 3},   {20, 0, -1, 0, 0, 0, 2, -1}, {30, 0, -1, 0, 0, 0, 6, 5},
         {40, 1u << 7, -1, 0, 0, 0, 0, 0}, {50, 1u << 7 | 1u << 2, -1, 0, 0, 0, 0, 0},
+        {60, 0, 6, 0, 0, 0, 0, 0, {0}, 1}, {70, 0, 6, 0, 0, 0, 0, 0, {0}, 2}, {80, 0, 5, 0, 0, 0, 0, 0, {0}, 0},
     };
     uint32_t i;
     script = ev; script_n = sizeof ev / sizeof ev[0]; end_ms = 100000;
@@ -31,6 +32,16 @@ int main(void)
     assert(fm1_input_note_edges() == 1u << 7 && fm1_input_note_edges() == 0);
     for (i = 45; i < 55; i++) platform_poll();
     assert(fm1_input_note_edges() == 1u << 2 && fm1_in.notes == (1u << 7 | 1u << 2));
+    for (i = 55; i < 65; i++) platform_poll();
+    assert(fm1_in.buttons == 1u << 6);            /* bdown: held, and a press edge */
+    {
+        uint32_t rel, e = fm1_input_edges(&rel);
+        assert(e == 1u << 6 && fm1_input_edges(&rel) == 0);
+    }
+    for (i = 65; i < 75; i++) platform_poll();
+    assert(fm1_in.buttons == 0 && fm1_input_edges(&i) == 0);   /* bup: released, no edge */
+    for (i = 75; i < 85; i++) platform_poll();
+    assert(fm1_in.buttons == 0 && fm1_input_edges(&i) == 1u << 5);   /* btn: an edge only */
     fm1_led_key(3, 1); fm1_led_key(3, 1); fm1_led_key(3, 0);   /* logs on, off, once each */
     puts("host selftest ok");
     return 0;

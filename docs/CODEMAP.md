@@ -9,7 +9,8 @@ headers). Static functions everywhere, no linking between .c files. Target: JieL
 
 | file | lines | what | touch? |
 | --- | --- | --- | --- |
-| `firmware/src/vavewave.c` | 193 | THE APP: 4-voice sine, panel, screen, MIDI, settings | **yes** |
+| `firmware/src/vavewave.c` | ~220 | THE APP: main loop (keys, buttons, encoders, MIDI, LEDs, settings, draw); BENCH 1 = the CPU bench loop | **yes** |
+| `firmware/src/panel.h` | ~410 | the front panel: pages / knob table `PG`, factory patches `PRESET`, SAVE stub, view filling, EDIT BEND preview | **yes** |
 | `firmware/src/platform.c` | 344 | boot, ISRs (timer5, alnk0), `platform_poll`, settings, MIDI, OTA glue, crash screen | rarely |
 | `firmware/src/gfx.c` | 183 | canvas (`cv_*`), `draw_text_box`, fonts (data in `firmware/gen/felucca_font.h`) | no |
 | `firmware/src/lcd.c` | 130 | ST7789 SPI DMA driver | no |
@@ -21,6 +22,10 @@ headers). Static functions everywhere, no linking between .c files. Target: JieL
 | `firmware/loader/*` | | the RAM update loader packed into the .fwsc | no |
 | `tools/build.py` | 311 | compile, link, post-build checks, package. `PRODUCT` = identity | release only |
 | `tools/fm1_install.py` | 528 | USB-MIDI SysEx installer (`--info`, asks before writing) | no |
+| `firmware/src/ui_screens.h` | the screens (T18, `docs/UI-DESIGN.md`): drawn from a plain `ui_view_t`, redraw only what differs from `ui_shadow_t` | yes |
+| `tests/ui_demo.c`, `tests/run_ui.sh` | the phase-1 demo (fake values) -> `build/host/ui-*.png` | |
+| `tests/run_panel.sh`, `tests/scripts/panel_ui.txt` | the real app on the fake FM-1 -> `build/host/panel-*.png` (HOME looks, EDIT with BEND, ENV, FX, LFO, SEL, GLO, SAVE) | |
+| `tools/gen_font.py`, `tests/font_sheet.{c,py}` | BDF / TTF -> `felucca_font.h`; font comparison sheets (not applied) | |
 | `tests/host.c` + `run_host.sh` | | fake FM-1 on the computer: PPM screens + WAV | extend for new inputs |
 
 ## Runtime structure
@@ -36,7 +41,7 @@ main loop (app_main)     -> platform_poll(); read fm1_in / fm1_input_edges / fm1
 Audio ISR output: Q15 ±32767, `out` pre-zeroed, you **add**. Budget 5.8 ms/block, aim < 2.9 ms.
 Main↔ISR sharing: `volatile` 32-bit, one writer each (vavewave.c: voice `inc`/`gate` written by main, `amp`/`ph` by ISR).
 
-## vavewave.c anatomy
+## vavewave.c anatomy (the original sine build; the engine is engine.h, the panel panel.h)
 
 - `voice[NV=4]`: `inc` (phase step), `gate` (target level Q15), `amp` (ISR-owned glide), `ph`, `age`, `note`.
 - `sine(ph)`: parabola approximation (~0.1%), integer only.
@@ -47,6 +52,18 @@ Main↔ISR sharing: `volatile` 32-bit, one writer each (vavewave.c: voice `inc`/
 - Screen: note name (FONT_L), 16-white-key keyboard canvas (240x56 at y=140), octave text; redrawn only on change.
 - Settings: `struct {int8_t oct;}` loaded at start, saved 2 s after last change when `quiet()`.
 - MIDI in: any channel; keys also `midi_send` note on/off.
+
+## Panel / UI (T18, `docs/UI-DESIGN.md`)
+
+- `app_main` (non-BENCH): `settings_load` -> `pn_validate` -> `pn_init`; each pass: `platform_poll`, buttons
+  (`pn_buttons`), keys (EDIT held + black keys 1 3 5 8 = OP1..OP4 pick the oscillator chip instead of playing),
+  `pn_encoders`, 400 ms preset load, `pn_save_poll`, MIDI in, CPU sample (4 Hz, `cpu_last` -> live %, `cpu_max` -> GLO
+  page), `pn_view_fill` -> `ui_draw` (shadow compare), LEDs, 2 s autosave when quiet.
+- `PG[page][set][knob]` (panel.h) is the whole control map: label, `P_*` id, format, step. Add a parameter there.
+- Gestures: page button again = next set, HOME again = next look (2 -> 1 -> 3, kept), EDIT held + HOME = reset CPU max,
+  SAVE = write the settings sector (stub: one user-patch overlay on the factory slot; T17 does real slots).
+- Settings (`app_set_t`, vavewave.c, 102 B): ver, oct, look, slot, uslot, uval[P_COUNT]; `pn_validate` range-checks.
+- BEND preview: `pn_edit_wave` uses `eng_warp_preview` (pure, const tables) from the main loop.
 
 ## Hardware facts (FM-1)
 
@@ -62,8 +79,9 @@ Main↔ISR sharing: `volatile` 32-bit, one writer each (vavewave.c: voice `inc`/
 
 ## Host mode (tests/host.c) — what it can and cannot do
 
-- Script lines (T in ms): `T keys MASK`, `T btn ID`, `T enc ID DELTA` (ID 0..6 = ENC_SELECT..ENC_PRESETS, signed
-  detents, + = clockwise; `fm1_enc_take` returns the sum since the last call, then 0), `T midi ST D1 D2`, `T end`.
+- Script lines (T in ms): `T keys MASK`, `T btn ID` (press edge only), `T bdown ID` / `T bup ID` (pressed and held: `fm1_in.buttons`; bdown also gives the edge, bup none), `T enc ID DELTA` (ID 0..6 = ENC_SELECT..ENC_PRESETS, signed
+  detents, + = clockwise; `fm1_enc_take` returns the sum since the last call, then 0), `T midi ST D1 D2`, `T shot NAME` (writes `OUT-NAME.ppm` at that time; any shot line replaces the default 1 s / 3 s
+  screens), `T end`.
   Output: `-<ms>.ppm→png`, `.wav`, stdout MIDI-out / settings-saved / `LED id on|off` (on change) log. 3rd arg FPS →
   frame sequence. Example: `tests/scripts/enc_demo.txt`; `fm1_input_note_edges` reports scripted key presses.
 - Self-check of the fake: `cc -Wall -Wno-unused-function -DDINGHY_HOST -Ifirmware/src -Ifirmware/gen -o build/host/selftest
