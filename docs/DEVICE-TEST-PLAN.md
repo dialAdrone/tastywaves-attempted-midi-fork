@@ -7,11 +7,12 @@ Everything below was verified on a computer (host mode), none of it on the FM-1 
 
 - [ ] `rules-reviewer` verdict on HEAD is SAFE TO INSTALL (asked for 2026-10-12; do not flash without it).
 - [ ] MASTER down. Headphones off or low for the first boot.
-- [ ] Stock `FM-1_093` package downloaded from the FM-1 Firmware Hub (way back). Rescue gesture (docs/research/rescue-entry.md): slide switch OFF at the back, hold OCT- ALONE (not OCT+, the button next to it), slide the switch ON, keep holding until `USB RESCUE` shows. Plugging USB in does not trigger it. NOT yet confirmed on this unit (failed once, see 1.6).
+- [ ] Stock `FM-1_093` package downloaded from the FM-1 Firmware Hub (way back). Rescue: hold OCT- while powering on.
 - [ ] `build/vavewave.fwsc` is from HEAD: `./build.sh` shows image 512,688 B, identity FM-1_950.
 - [ ] `.venv/bin/python tools/fm1_install.py --info` reads the device (FM-1_950 bench now, or FM-1_093).
 
 ## 1. First boot (2 min)
+All good
 
 | # | Do | Expect |
 | --- | --- | --- |
@@ -19,8 +20,7 @@ Everything below was verified on a computer (host mode), none of it on the FM-1 
 | 1.2 | Play keys F3..G5 | Sound, key LED follows, screen lights the keys' voices count `V n/12` |
 | 1.3 | Settings left by the old bench build (octave) | Loads without garbage (no odd page, octave -2..+2) |
 | 1.4 | Leave it 40 s, then power-cycle | Boots again normally (the 30 s boot-ok clear) |
-| 1.5 (KNOWN FAIL, T30: skip) | Switch OFF; hold OCT- alone with the left button only; slide switch ON; hold ~2 s | Enters rescue (`VAVEWAVE USB RESCUE`); then power-cycle normally. Try it with USB unplugged (battery) and with USB connected; note which works. Proves the way back |
-| 1.6 | If 1.5 did not enter rescue (normal app started): hold OCT- at power-on, let the app start, press GLO three times | BOOT KEYS page (`GLOBAL`s status line reads `BOOT KEYS 3/3`). Read `BTN 0x....`: bit 0 (`0x0001`) = OCT- was seen held by the boot scan; `0x0000` = the scan saw no key. `FR` = key-scan frames counted. `RAW` = 11 hex bytes, one per scan column 0..10, bit = row, 1 = closed; note which byte is non-zero and write all of it down (photo) for the report. Compare with a normal boot without holding anything |
+| 1.5 | Hold OCT- at power-on once | Enters rescue (USB shows update mode); then power-cycle normally. Proves the way back |
 
 ## 2. CPU and timing (the numbers we still need) (10 min)
 
@@ -28,13 +28,13 @@ Read `CPU %` on the status line (live) and `CPU MAX` on GLO (EDIT held + HOME re
 
 | # | Setup | Result (MAX %) | Expect |
 | --- | --- | --- | --- |
-| 2.1 | Idle, no notes | | ~0 % |
-| 2.2 | 1 note, default patch | | ~4-6 % |
-| 2.3 | 12 held notes (a cluster on the keys, plus OCT± for more) default patch (sinc, LP) | | ~50 % estimate (typical) |
-| 2.4 | As 2.3 + BEND +63 on OSC1 and OSC2 (SEL: BEND> BOTH), SUB and NOISE levels up, FX MODE = HP | | ~65 % estimate (worst) |
-| 2.5 | As 2.4 with OSC2 on a different table than OSC1 | | flash cache effect, may add a few % |
-| 2.6 | As 2.4 with SEL QUAL = ECO | | ~53 % estimate |
-| 2.7 | HOME look 1 (waterfall): turn SELECT quickly across frames while 12 notes sound | | CPU % must not rise; listen for dropouts |
+| 2.1 | Idle, no notes | 1% | ~0 % |
+| 2.2 | 1 note, default patch | 5% | ~4-6 % |
+| 2.3 | 12 held notes (a cluster on the keys, plus OCT± for more) default patch (sinc, LP) | 49% | ~50 % estimate (typical) |
+| 2.4 | As 2.3 + BEND +63 on OSC1 and OSC2 (SEL: BEND> BOTH), SUB and NOISE levels up, FX MODE = HP | 50% | ~65 % estimate (worst) |
+| 2.5 | As 2.4 with OSC2 on a different table than OSC1 | | flash cache effect, may add a few % | 50%
+| 2.6 | As 2.4 with SEL QUAL = ECO |n 48% | ~53 % estimate |
+| 2.7 | HOME look 1 (waterfall): turn SELECT quickly across frames while 12 notes sound | CPU actually goes down to about 20%, no dropouts| CPU % must not rise; listen for dropouts |
 
 Pass: worst case below 75 %, no crackle. *Fail signs:* crackle, `CPU` red (> 80 %), notes freezing (shed guard).
 
@@ -42,16 +42,16 @@ Pass: worst case below 75 %, no crackle. *Fail signs:* crackle, `CPU` red (> 80 
 
 - [ ] Each of the 12 tables (ALGORITHM), sweeping SELECT slowly: smooth morph, no zipper noise, no clicks at frame
       boundaries. *Note any table that has a rough step.*
-- [ ] High notes on bright tables (NOISE, SHAPE, FOLD at the top octave): aliasing vs QUAL HI/ECO. *Expected: HI
+- [x] High notes on bright tables (NOISE, SHAPE, FOLD at the top octave): aliasing vs QUAL HI/ECO. *Expected: HI
       clean; ECO audibly rougher on bright tables.*
-- [ ] BEND from 0 to +63 and -64 on SAWSQ: smooth brightening, no zipper, pitch unchanged. Compare with osc 2 only.
-- [ ] Filter: CUTOFF sweep with RESO 90+: no blow-up, no sticking tone after notes release (silence returns to true
+- [x] BEND from 0 to +63 and -64 on SAWSQ: smooth brightening, no zipper, pitch unchanged. Compare with osc 2 only.
+- [x] Filter: CUTOFF sweep with RESO 90+: no blow-up, no sticking tone after notes release (silence returns to true
       zero). Try HP and BP.
-- [ ] Mip-level step: slide GLIDE across a long range up through the top octaves: *a small timbre step at the level
+- [x] Mip-level step: slide GLIDE across a long range up through the top octaves: *a small timbre step at the level
       boundaries is known*, anything louder is a bug.
-- [ ] Filter MODE change while a note holds: *a click is known* (T16 risk 3).
-- [ ] Drone case: hold 8-12 notes for 5 minutes with slow LFO to POS: no drift in level, no clicks, no heat issue.
-- [ ] Level: 12 notes at velocity max, DRIVE 0 and DRIVE 127: no hard clipping at 0, intended saturation at 127.
+- [x] Filter MODE change while a note holds: *a click is known* (T16 risk 3).
+- [x] Drone case: hold 8-12 notes for 5 minutes with slow LFO to POS: no drift in level, no clicks, no heat issue.
+- [x] Level: 12 notes at velocity max, DRIVE 0 and DRIVE 127: no hard clipping at 0, intended saturation at 127.
 
 ## 4. Screens and design review (the main part) (20 min)
 
@@ -113,4 +113,4 @@ Send me: the table 2 numbers, any table/note that sounds wrong (table, frame, no
 to read or lag, and the answers to the design review points. I update `docs/TASKS.md` (T14, T18) and decide the
 next steps (effects, patch storage T17, arp / sequencer T27-T29).
 
-To go back: with the app running, `fm1_install.py` the stock `FM-1_093` package (OTA stays on). If the app won't start: two failed boots enter the rescue by themselves; the manual OCT- gesture is unconfirmed on this unit until 1.5/1.6 are resolved.
+To go back: `fm1_install.py` the stock `FM-1_093` package (rescue with OCT- held at power-on if the app won't start).

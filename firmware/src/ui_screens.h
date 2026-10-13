@@ -317,11 +317,13 @@ static void ui_dots(uint32_t y, uint32_t used, uint32_t max)
 static void ui_linea(uint32_t y, const char *left, const ui_view_t *v)
 {
     char r[24], *d = r;
-    d = ui_cat(d, "V");
+    d = ui_cat(d, "V");                       /* fixed field widths: the text must not move as digits change */
+    if (v->voices < 10u) d = ui_cat(d, " ");
     d = ui_num(d, v->voices);
     d = ui_cat(d, "/");
     d = ui_num(d, v->voices_max);
-    d = ui_cat(d, "  CPU ");
+    d = ui_cat(d, " CPU ");
+    if (v->cpu < 10u) d = ui_cat(d, " ");
     d = ui_num(d, v->cpu);
     ui_cat(d, "%");
     cv_begin(240, 16, C_BLACK);
