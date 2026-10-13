@@ -19,7 +19,7 @@ Everything below was verified on a computer (host mode), none of it on the FM-1 
 | 1.2 | Play keys F3..G5 | Sound, key LED follows, screen lights the keys' voices count `V n/12` |
 | 1.3 | Settings left by the old bench build (octave) | Loads without garbage (no odd page, octave -2..+2) |
 | 1.4 | Leave it 40 s, then power-cycle | Boots again normally (the 30 s boot-ok clear) |
-| 1.5 | Switch OFF; hold OCT- alone with the left button only; slide switch ON; hold ~2 s | Enters rescue (`VAVEWAVE USB RESCUE`); then power-cycle normally. Try it with USB unplugged (battery) and with USB connected; note which works. Proves the way back |
+| 1.5 (KNOWN FAIL, T30: skip) | Switch OFF; hold OCT- alone with the left button only; slide switch ON; hold ~2 s | Enters rescue (`VAVEWAVE USB RESCUE`); then power-cycle normally. Try it with USB unplugged (battery) and with USB connected; note which works. Proves the way back |
 | 1.6 | If 1.5 did not enter rescue (normal app started): hold OCT- at power-on, let the app start, press GLO three times | BOOT KEYS page (`GLOBAL`s status line reads `BOOT KEYS 3/3`). Read `BTN 0x....`: bit 0 (`0x0001`) = OCT- was seen held by the boot scan; `0x0000` = the scan saw no key. `FR` = key-scan frames counted. `RAW` = 11 hex bytes, one per scan column 0..10, bit = row, 1 = closed; note which byte is non-zero and write all of it down (photo) for the report. Compare with a normal boot without holding anything |
 
 ## 2. CPU and timing (the numbers we still need) (10 min)

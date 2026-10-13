@@ -64,6 +64,14 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - [ ] **T29** ARP and SEQ screens + LEDs (dark in v1 until this lands), step grid on the 27 keys, tempo readout.
       Depends on T18, T27, T17 (storage).
 
+- [ ] **T30** (deferred by user 2026-10-13, option C) Manual USB rescue (OCT- alone at power-on) does not enter on the
+      user's unit: BOOT KEYS readout (BTN 0x0000, FR 82, RAW all 0) was identical with nothing held, OCT- held, and F3
+      held, while the held key sounded right after boot, so the early polled scan in `recovery_key()` (before
+      `lcd_init()`) sees no keys at all. Gesture was correct (rear switch, OCT- alone). Hypotheses (unverified): pin
+      function/IO mapping not set before lcd_init; polled-scan timing. Proposal: A = second polled scan after
+      `lcd_init()` shown on BOOT KEYS; B = A + act on it (check `recovery_main()` double `lcd_init()` safety). Touches
+      the rescue path: needs user agreement, `rules-reviewer` sign-off and a device test. Optionally report upstream
+      (sloop-fm1) after confirmation. See docs/research/rescue-entry.md.
 
 ## Log
 
@@ -81,3 +89,4 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - 2026-10-12 Baseline committed a789e55. 8 held keys at SINC 8-TAP: MAX 28.3 %, SHED 0 (the 4-voice limit seen earlier was the SEL setting). T16 engine v1 and T18 phase 1 (UI mock-ups) done by agents, uncommitted. Engine: BEND is now a smooth sine warp (CZ two-segment warp aliased at 23-49 dBc). Estimated worst case ~65 % of block with all features on (12 voices, sinc, BEND, sub, noise, HP); needs on-device check with the bench readout before FX are added. Effects (chorus/flange/phaser/reverb) not started: hook only (fx_chain[4]).
 - 2026-10-12 User asked for an arpeggiator and a modulation step sequencer, opened with the ARP and SEQ buttons (exist on the panel: ids 10 and 11). T27-T29 added; to follow T17 (patch storage) and a device check of the engine.
 - 2026-10-12 T18 phase 2: panel wired to the engine (build 512,688 B image, RAM 18.7 KB; host/ui/engine/panel tests green). Not on the device yet. Font sheet at build/host/fonts/, shipped font unchanged.
+- 2026-10-13 Manual OCT- rescue does not work on the unit (boot scan sees no keys, see T30). Decision: leave it, T30 queued. Safety nets remaining: OTA from the running app, auto rescue after 2 failed boots. Baseline 3 committed a7b02b9; user running docs/DEVICE-TEST-PLAN.md.
