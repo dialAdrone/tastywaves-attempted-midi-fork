@@ -23,7 +23,7 @@
 #define UI_Y_LINEA 182u
 #define UI_Y_PATCH 202u
 
-enum { UI_P_HOME, UI_P_EDIT, UI_P_FX, UI_P_ENV, UI_P_LFO, UI_P_SEL, UI_P_GLO, UI_P_N };
+enum { UI_P_HOME, UI_P_EDIT, UI_P_FX, UI_P_ENV, UI_P_LFO, UI_P_SEL, UI_P_GLO, UI_P_HELP, UI_P_N };
 enum { UI_H_WATERFALL, UI_H_SPECTRUM, UI_H_MINIMAL, UI_H_N };
 
 typedef struct {
@@ -464,6 +464,59 @@ static void ui_list(uint32_t y, const ui_view_t *v)
     cv_blit(0, y);
 }
 
+
+/* ---- HELP (hold HOME): two text pages, one 240 x 16 canvas a line. A line is "LABEL  what it does": the text up
+ * to the first double space is drawn lilac, the rest white; a line without one is gray (the footer). */
+static const char *const UI_HELP[2][14] = {
+    {"HELP 1/2  BUTTONS",
+     "HOME  3 looks (press again)",
+     "EDIT  OSC1 OSC2 SUB NOISE",
+     "FX    FILTER 1, 2",
+     "ENV   AMP, FILTER",
+     "LFO   LFO 1, 2",
+     "SEL   VOICE MODE, QUALITY",
+     "GLO   VOLUME, GLIDE, MIDI",
+     "SAVE  STORE THE PATCH",
+     "OCT- OCT+  OCTAVE DOWN, UP",
+     "ARP SEQ PLAY REC  NOT YET",
+     "EDIT+HOME  RESET CPU MAX",
+     "EDIT+F# G# A# C#  PICK OSC",
+     "HOME: NEXT PAGE, THEN EXIT"},
+    {"HELP 2/2  KNOBS",
+     "ALGORITHM  WAVETABLE",
+     "SELECT     POSITION IN TABLE",
+     "PRESETS    8 FACTORY PATCHES",
+     "HOME  CUT RESO ATK REL",
+     "EDIT  POS DETUNE LEVEL BEND",
+     "FX    CUT RESO FENV KEYTRK",
+     "FX 2  MODE FVEL E>POS E>BEND",
+     "ENV   ATK DEC SUS REL",
+     "LFO   SHAPE RATE >POS >PITCH",
+     "LFO 2  SHAPE RATE >CUT >AMP",
+     "SEL   MODE BEND> QUAL CURVE",
+     "GLO   VOLUME DRIVE GLIDE PB",
+     "GLO 2  MW>POS MW>VIB AT VEL"}};
+
+static void ui_help(uint32_t page)
+{
+    uint32_t i, n, m;
+    char lab[32];
+    for (i = 0; i < 14u; i++) {
+        const char *t = UI_HELP[page & 1u][i];
+        for (n = 0; t[n] && !(t[n] == ' ' && t[n + 1u] == ' '); n++) {}
+        cv_begin(240, 16, C_BLACK);
+        if (!t[n]) {
+            cv_text(4, 0, &FONT_S, t, UI_GRAY);
+        } else {
+            for (m = 0; m < n && m < 31u; m++) lab[m] = t[m];
+            lab[m] = 0;
+            cv_text(4, 0, &FONT_S, lab, UI_ACC);
+            cv_text(4 + (int32_t)n * 8, 0, &FONT_S, t + n, UI_TXT);
+        }
+        cv_blit(0, 2 + i * 16u);
+    }
+}
+
 /* ---- the whole screen: redraws only what differs from the shadow; the first call (or a page / look change)
  * clears the screen once (115 KB) and draws everything. Typical later cost: a knob turn = 1 column (6 KB); a
  * position move = the frame view (waterfall 61 KB, spectrum look 17 + 6 + 8 KB) only when the nearest frame
@@ -480,6 +533,11 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         platform_poll();                        /* 115 KB over SPI took tens of ms: USB and the watchdog */
         s->valid = 1;
         s->tname[0] = 0xFF;                     /* never equal */
+    }
+    if (v->page == UI_P_HELP) {                 /* text only: no knob columns, status line or patch name */
+        if (full || s->sub != v->sub) ui_help(v->sub);
+        s->page = v->page; s->variant = v->variant; s->sub = v->sub;
+        return;
     }
     for (i = 0; i < 4u; i++) {
         uint32_t ch = full || s->klabel[i] != v->klabel[i] || s->kfrac[i] != v->kfrac[i] || !ui_eq(s->kval[i], v->kval[i])

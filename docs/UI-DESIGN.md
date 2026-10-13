@@ -161,3 +161,11 @@ and `font-sheet-screens.png`. The font is NOT replaced: pick from the sheet.
   for a live marker.
 - Osc 2 coarse tune (SEMI2) and the pitch / MW amounts have no knob yet (MIDI CC only): they fit a second EDIT set.
 - A saved user patch is not marked in the name; real slots, rename and copy are T17.
+
+## HELP screens (2026-10-13)
+
+Hold HOME for about 0.7 s (from any page) to open two text pages: 1/2 what each button does, 2/2 what the knobs
+control on each page. HOME steps to the next help page and then leaves; any page button goes straight to that page.
+Because a hold must not cycle the HOME look first, the look now changes when HOME is released after a short press
+(from the HOME page); from another page HOME still goes home at once. Source: `UI_HELP` in `ui_screens.h`, entry in
+`pn_buttons` (`panel.h`). Test: `tests/scripts/panel_ui.txt` (shots help1, help2, after_help).

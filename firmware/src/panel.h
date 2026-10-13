@@ -64,7 +64,7 @@ typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3};
+static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2};   /* HELP: two text pages (PG[HELP] stays empty) */
 static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
@@ -103,8 +103,8 @@ static const char *const TXT[TX_N][5] = {
 static struct {
     uint8_t page, look, sub, touched;
     uint8_t slot, browse, browse_pend;          /* patch loaded; patch shown in the name line; load pending */
-    uint8_t save_req;
-    uint32_t t_browse, t_flash, t_save;
+    uint8_t save_req, home_arm;                 /* HOME pressed and not yet decided: short press or hold */
+    uint32_t t_browse, t_flash, t_save, t_home;
     int16_t base[P_COUNT];                      /* the patch as loaded / saved: "modified" = differs */
     int16_t wave[256];                          /* EDIT: the frame as the engine reads it */
     uint32_t wave_key;
@@ -269,11 +269,32 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
     if (b & 1u << BTN_GLO) pn_page(UI_P_GLO);
     if (b & 1u << BTN_HOME) {
         if (held >> BTN_EDIT & 1u) cpu_reset_req++;                 /* the max starts over */
-        else if (pn.page == UI_P_HOME) {
-            pn.look = LOOK_NEXT[pn.look % UI_H_N];
-            st->look = pn.look;
-            *dirty = 1;
-        } else { pn.page = UI_P_HOME; pn.sub = 0; pn.touched = 4; }
+        else if (pn.page == UI_P_HELP) {                            /* next help page, then out */
+            if (pn.sub + 1u < NSUB[UI_P_HELP]) pn.sub++;
+            else { pn.page = UI_P_HOME; pn.sub = 0; pn.touched = 4; }
+        } else if (pn.page == UI_P_HOME) {                          /* decided on release: a hold is HELP */
+            pn.home_arm = 1;
+            pn.t_home = fm1_ms;
+        } else {
+            pn.page = UI_P_HOME; pn.sub = 0; pn.touched = 4;
+            pn.home_arm = 2;                                        /* only a hold counts */
+            pn.t_home = fm1_ms;
+        }
+    }
+    if (pn.home_arm) {
+        if (!(held >> BTN_HOME & 1u)) {                             /* released: a short press */
+            if (pn.home_arm == 1u) {
+                pn.look = LOOK_NEXT[pn.look % UI_H_N];
+                st->look = pn.look;
+                *dirty = 1;
+            }
+            pn.home_arm = 0;
+        } else if (fm1_ms - pn.t_home >= 700u) {                    /* held: the help screens */
+            pn.home_arm = 0;
+            pn.page = UI_P_HELP;
+            pn.sub = 0;
+            pn.touched = 4;
+        }
     }
     if (b & 1u << BTN_SAVE) pn.save_req = 1;
 }

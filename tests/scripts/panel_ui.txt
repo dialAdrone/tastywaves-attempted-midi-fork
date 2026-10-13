@@ -54,4 +54,12 @@
 7000 btn 9
 7300 shot saved
 8500 shot after_save
+# HELP: HOME held 700 ms, page 2 with a press, out with another
+8600 bdown 8
+9400 shot help1
+9450 bup 8
+9500 btn 8
+9600 shot help2
+9700 btn 8
+9800 shot after_help
 10000 end
