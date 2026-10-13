@@ -39,10 +39,14 @@
 5300 btn 7
 5400 enc 3 6
 5700 shot glo
+# GLO pressed again twice: set 2, then set 3 BOOT KEYS (the boot scan; fake values in host mode)
+5750 btn 7
+5800 btn 7
+5900 shot glo_bootkeys
 # patches: PRESETS to 4 (FOLD LEAD), name changes at once, the sound 400 ms later
-5800 btn 8
-5900 enc 6 3
-6000 shot home_browse
+6000 btn 8
+6050 enc 6 3
+6100 shot home_browse
 6700 shot home_patch4
 # SAVE: the flash of "SAVED" (waits for the keys to be up: the flash erase stops the sound)
 6800 enc 2 -5

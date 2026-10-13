@@ -64,7 +64,7 @@ typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 2};
+static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3};
 static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
@@ -91,7 +91,8 @@ static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_GLO] = {{K("VOLUME", P_VOLUME, F_PCT, 1, 0), K("DRIVE", P_DRIVE, F_PCT, 1, 0), K("GLIDE", P_GLIDE, F_PCT, 1, 0),
                    K("PB RNG", P_BEND_RANGE, F_INT, 1, 0)},
                   {K("MW>POS", P_MW_POS, F_PCT, 1, 0), K("MW>VIB", P_MW_VIB, F_PCT, 1, 0), K("AT>CUT", P_AT_CUT, F_PCT, 1, 0),
-                   K("VEL>AMP", P_VEL_AMP, F_PCT, 1, 0)}},
+                   K("VEL>AMP", P_VEL_AMP, F_PCT, 1, 0)},
+                  {KN, KN, KN, KN}},            /* set 3: BOOT KEYS (no knobs; ui_boot_pic) */
 };
 
 static const char *const TXT[TX_N][5] = {
@@ -364,6 +365,20 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         v->wave = pn.wave;
         v->wave_key = pn.wave_key;
     }
+    {   /* GLO set 3: BOOT KEYS, the scan app_main copied at start */
+        static const char HX[] = "0123456789ABCDEF";
+        char *d = v->boot[0];
+        uint32_t n;
+        if (pn.page == UI_P_GLO && pn.sub == 2u) {
+            d = ui_cat(d, "BTN 0x");
+            for (n = 0; n < 4u; n++) *d++ = HX[boot_btn >> (12u - 4u * n) & 15u];
+            d = ui_cat(d, " FR ");
+            ui_num(d, (int32_t)(boot_frames > 99999u ? 99999u : boot_frames));
+            d = ui_cat(v->boot[1], "RAW ");
+            for (n = 0; n < 11u; n++) { *d++ = HX[boot_raw[n] >> 4]; *d++ = HX[boot_raw[n] & 15u]; }
+            *d = 0;
+        }
+    }
     if (pn.page == UI_P_FX || pn.page == UI_P_LFO || pn.page == UI_P_SEL || pn.page == UI_P_GLO) {
         uint32_t s, n = NSUB[pn.page];
         v->nsets = (uint8_t)n;
@@ -392,18 +407,24 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
 /* ---- SAVE (v1 stub; real slots are T17): the working patch is kept in the settings sector as an overlay on the
  * factory patch it was edited from (app_set_t.uval / uslot: 94 B + 8 B of the 256 B). One user patch at a time: a
  * SAVE on another slot replaces it. The write waits for quiet() (an erase stops the sound) and at most one a second;
- * nothing to save (patch equals what was loaded / saved) only shows the confirmation. Returns 1 when SAVED is shown. */
+ * nothing to save (patch equals what was loaded / saved) only shows the confirmation. Returns 1 when SAVED is shown; a failed
+ * settings_save shows nothing, keeps the patch modified and drops the request (no retry loop). */
 static int pn_save_poll(app_set_t *st, uint32_t *dirty)
 {
     uint32_t i;
     if (!pn.save_req) return 0;
     if (pn_modified()) {
         if (!quiet() || fm1_ms - pn.t_save < 1000u) return 0;      /* try again in a later pass; the LED keeps blinking */
-        for (i = 0; i < P_COUNT; i++) st->uval[i] = (int16_t)patch.p[i];
-        st->uslot = pn.slot;
-        st->slot = pn.slot;
-        settings_save(st, sizeof *st);
+        app_set_t t = *st;                      /* the overlay goes into a copy: a failed write changes nothing */
+        for (i = 0; i < P_COUNT; i++) t.uval[i] = (int16_t)patch.p[i];
+        t.uslot = pn.slot;
+        t.slot = pn.slot;
         pn.t_save = fm1_ms;
+        if (settings_save(&t, sizeof t)) {      /* failed (0 = saved): no SAVED, the patch stays modified; press SAVE again */
+            pn.save_req = 0;
+            return 0;
+        }
+        *st = t;
         *dirty = 0;
         pn_snapshot();
     }

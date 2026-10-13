@@ -52,6 +52,7 @@ typedef struct {
     uint8_t lfo_shape, drive;                   /* LFO picture (0 sine 1 tri 2 saw 3 square 4 S&H), GLO picture 0..127 */
     char ptxt[8];                               /* SEL picture: the voice mode, big */
     char list[8][16];                           /* FX / LFO / SEL / GLO: 4 rows x 2 columns of "LABEL VALUE" (14 chars) */
+    char boot[2][32];                           /* GLO set 3 (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
 } ui_view_t;
 
 typedef struct {
@@ -352,7 +353,7 @@ static void ui_left_text(char *out, const ui_view_t *v)       /* the left part o
     case UI_P_FX: ui_cat(d, v->sub ? "FILTER 2/2" : "FILTER 1/2"); break;
     case UI_P_LFO: ui_cat(d, v->sub ? "LFO 2/2" : "LFO 1/2"); break;
     case UI_P_SEL: ui_cat(d, "VOICE"); break;
-    case UI_P_GLO: ui_cat(d, v->sub ? "GLOBAL 2/2" : "GLOBAL 1/2"); break;
+    case UI_P_GLO: ui_cat(d, v->sub == 2u ? "BOOT KEYS 3/3" : v->sub ? "GLOBAL 2/3" : "GLOBAL 1/3"); break;
     default:
         if (v->variant != UI_H_MINIMAL) { d = ui_cat(d, v->tname); d = ui_cat(d, " "); }
         d = ui_cat(d, "FRM ");
@@ -438,6 +439,16 @@ static void ui_drive_pic(uint32_t y, const ui_view_t *v)
     cv_blit(0, y);
 }
 
+static void ui_boot_pic(uint32_t y, const ui_view_t *v)       /* GLO set 3: what the boot key scan saw */
+{
+    cv_begin(240, 56, C_BLACK);
+    cv_text(4, 0, &FONT_S, "BOOT KEYS (SCAN AT POWER-ON)", UI_GRAY);
+    cv_text(4, 14, &FONT_S, v->boot[0], UI_TXT);
+    cv_text(4, 28, &FONT_S, v->boot[1], UI_TXT);
+    cv_text(4, 42, &FONT_S, "RAW = COLUMN 0..10, BIT = ROW", UI_DIM);
+    cv_blit(0, y);
+}
+
 static void ui_list(uint32_t y, const ui_view_t *v)
 {
     uint32_t i;
@@ -464,6 +475,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
 
     if (full) {
         lcd_fill(0, 0, 240, 240, C_BLACK);
+        platform_poll();                        /* 115 KB over SPI took tens of ms: USB and the watchdog */
         s->valid = 1;
         s->tname[0] = 0xFF;                     /* never equal */
     }
@@ -517,7 +529,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
     } else if (v->page != UI_P_HOME) {          /* FX, LFO, SEL, GLO */
         uint32_t pk = v->page == UI_P_FX ? (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16
                     : v->page == UI_P_LFO ? v->lfo_shape : v->page == UI_P_SEL ? v->voices | (uint32_t)v->voices_max << 8
-                    : (uint32_t)v->drive | (uint32_t)v->cpu_max << 8;
+                    : v->sub == 2u ? 0x40000000u : (uint32_t)v->drive | (uint32_t)v->cpu_max << 8;
         uint32_t lch = full || s->set != v->set;
         for (i = 0; i < 8u && !lch; i++) lch = !ui_eq(s->list[i], v->list[i]);
         if (full || s->pic_key != pk || (v->page == UI_P_SEL && !ui_eq(s->ptxt, v->ptxt))) {
@@ -528,7 +540,10 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
                 draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1);
                 ui_dots(100, v->voices, v->voices_max);
                 break;
-            default: ui_drive_pic(UI_Y_MID, v); break;
+            default:
+                if (v->sub == 2u) ui_boot_pic(UI_Y_MID, v);
+                else ui_drive_pic(UI_Y_MID, v);
+                break;
             }
             s->pic_key = pk;
             ui_copy(s->ptxt, v->ptxt, 8);

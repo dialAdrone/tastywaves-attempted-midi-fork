@@ -7,6 +7,7 @@
  *
  *   keys       play, 12 voices; the notes go out over USB-MIDI too (EDIT held: OP1..OP4 black keys pick the oscillator)
  *   OCT- OCT+  the octave (kept in flash)
+ *   GLO x3     third set: BOOT KEYS, the key scan at power-on (docs/UI-DESIGN.md)
  *   HOME EDIT FX ENV LFO SEL GLO   the page; the same button again: next set / HOME look (2 -> 1 -> 3, kept in flash)
  *   KNOB1-4    the page's four values; ALGORITHM = table; SELECT = position; PRESETS = patch (loads after 400 ms)
  *   SAVE       the patch into the settings sector (a stub for T17: one user patch overlay; see panel.h)
@@ -136,6 +137,10 @@ typedef struct {
 } app_set_t;
 typedef char app_set_fits[sizeof(app_set_t) <= 256u ? 1 : -1];
 
+/* what the key scan saw at boot (the recovery_key() scan, copied first thing in app_main): shown on GLO page 3 */
+static uint32_t boot_btn, boot_frames;
+static uint8_t boot_raw[11];
+
 #include "panel.h"
 
 static void app_main(void)
@@ -144,6 +149,9 @@ static void app_main(void)
     uint32_t prev = 0, started = 0, k, t_change = 0, dirty = 0, t_cpu = 0, cpu = 0, cpu_mx = 0;
     uint8_t held[27] = {0};                     /* the note each key plays */
 
+    boot_btn = fm1_in.buttons;                  /* before anything else */
+    boot_frames = fm1_in.frames;
+    for (k = 0; k < 11u; k++) boot_raw[k] = fm1_in.raw[k];
     memset(&set, 0, sizeof set);
     if (settings_load(&set, sizeof set)) set.ver = 0;       /* nothing (or another size): the defaults */
     pn_validate(&set);

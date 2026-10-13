@@ -40,7 +40,7 @@ static uint32_t fm1_ticks(void)
 }
 
 static volatile uint32_t fm1_ms;
-static struct { uint32_t notes, buttons; } fm1_in;
+static struct { uint32_t notes, buttons, frames; uint8_t raw[11]; } fm1_in;   /* frames / raw: what the boot scan saw (fake here) */
 static uint32_t host_edges, host_note_edges;
 static int32_t host_enc[7];
 static uint64_t host_led;
@@ -273,6 +273,12 @@ int main(int argc, char **argv)
     if (argc > 1) host_out = argv[1];
     if (argc > 2) read_script(argv[2]);
     if (argc > 3) frame_fps = (uint32_t)atoi(argv[3]);
+    {   /* host has no boot scan: fake values for the BOOT KEYS page (GLO, third set): OCT- held, 80 frames */
+        uint32_t i;
+        fm1_in.buttons = 0x0001u;
+        fm1_in.frames = 80;
+        for (i = 0; i < 11u; i++) fm1_in.raw[i] = (uint8_t)(0xA0u + i);
+    }
     app_main();
     return 0;
 }

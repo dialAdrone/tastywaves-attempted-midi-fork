@@ -84,6 +84,8 @@ Main↔ISR sharing: `volatile` 32-bit, one writer each (vavewave.c: voice `inc`/
   screens), `T end`.
   Output: `-<ms>.ppm→png`, `.wav`, stdout MIDI-out / settings-saved / `LED id on|off` (on change) log. 3rd arg FPS →
   frame sequence. Example: `tests/scripts/enc_demo.txt`; `fm1_input_note_edges` reports scripted key presses.
+- Boot scan: host has no real one; `main()` fakes `fm1_in.buttons = 0x0001`, `frames = 80`, `raw[i] = 0xA0 + i` for the
+  BOOT KEYS page (GLO, third set).
 - Self-check of the fake: `cc -Wall -Wno-unused-function -DDINGHY_HOST -Ifirmware/src -Ifirmware/gen -o build/host/selftest
   tests/host_selftest.c && build/host/selftest` (asserts enc accumulation/reset, note edges).
 - **Gaps** (extend host.c when a feature needs them): no ADC/MASTER, no flash persistence between runs,

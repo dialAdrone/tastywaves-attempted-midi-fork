@@ -311,7 +311,8 @@ static int32_t env_step(uint8_t *st, int32_t lvl, int32_t a, int32_t d, int32_t 
 {
     switch (*st) {
     case ENV_A:
-        lvl += ENV_STEP[a];
+        if (lvl > Q30 - ENV_STEP[a]) lvl = Q30;     /* lvl + step must not reach 2^31 */
+        else lvl += ENV_STEP[a];
         if (lvl >= Q30) { lvl = Q30; *st = ENV_D; }
         break;
     case ENV_D:

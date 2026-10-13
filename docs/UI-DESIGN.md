@@ -65,6 +65,11 @@ a page always opens on its first set.
 | SEL (voices) | - | MODE POLY/MONO/LEGATO | BEND> BOTH/OSC1/OSC2 | QUAL HI/ECO | CURVE LIN/EXP | the mode big, 12 voice squares, list |
 | GLO | 1 | VOLUME | DRIVE | GLIDE | PB RNG | drive transfer curve, CPU max, list |
 | GLO | 2 | MW>POS | MW>VIB | AT>CUT | VEL>AMP | same |
+| GLO | 3 (BOOT KEYS) | - | - | - | - | diagnostic: what the key scan saw at power-on (`BTN 0x0001 FR 80`, `RAW` = 11 column bytes in hex), list |
+
+BOOT KEYS: `app_main` copies `fm1_in.buttons`, `fm1_in.frames` and `fm1_in.raw[0..10]` into `boot_btn`, `boot_frames`,
+`boot_raw` first thing (the values the `recovery_key()` scan left; host mode shows fake ones). BTN is the debounced
+button mask (bit 0 = OCT-), RAW is one byte per scan column, bit = row, 1 = closed. Reached by GLO pressed three times.
 
 FX has no effects in v1 (the chain is empty), so the FX button hosts the filter page; the name changes when effects
 exist. FX / LFO / SEL / GLO show the page's eight values as a 4 x 2 list under the picture (the shown set bright, the
