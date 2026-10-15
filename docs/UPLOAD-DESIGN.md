@@ -106,7 +106,9 @@ build NAME out.vwt input.wav           no device: the exact bytes the firmware w
 
 - **Format detection:** Serum reads the frame length from the WAV `clm ` chunk **[verify with a real file]**;
   WaveEdit is 64 frames x 256 samples; Ableton and Surge exports are WAVs of 2048-sample frames; `--frame N`
-  overrides. Mono; 16, 24 and 32-bit float. Files that do not look like cycles (a long recording) get a warning.
+  overrides. Without a chunk or a format the usual 2048 (or 256 for exactly 16384 samples) is assumed and printed as
+  ASSUMED: statistics cannot tell a cycle from a piece of one. Mono or stereo (mixed), 8/16/24/32-bit PCM, float 32/64.
+  Implemented as `build` and `inspect` (T21, no device commands yet); `tests/run_wavetable_tool.sh` covers it.
 - **Conversion:** per frame, FFT truncation or zero padding to 256 samples (exact for periodic frames, discards
   harmonics above 64; with the 32-frame limit, 64/128/256-frame tables are picked evenly or interpolated), per-table
   normalisation, the **same mip generator** as the factory tables (`gen_wavetables.py`), so a user table has the same
@@ -153,15 +155,15 @@ working (T30 option A, then B) or R5 rehearsed once by you with the stock packag
   playing a user table with an upload to another slot afterwards; U11 firmware update over the top (R2): do the user
   tables survive? **[verify: does `loader.c` erase `0x93000..`? its range allows it]**
 
-## 9. Decisions I need from you
+## 9. Decisions (user, 2026-10-15)
 
-- **A.** User table names: 8 characters stored, 5 shown in the status line. OK?
-- **B.** Replace policy: `put` to a filled slot overwrites it in place (the old table is gone at BEGIN), or keep one
-  spare slot so a failed upload never costs the old table (one fewer slot)? Recommend: in place, with the tool's
-  `get` as a backup you run first.
-- **C.** 8 slots in v1. OK?
-- **D.** R4/R5: do T30 option A first, or are you happy to rehearse R5 (stock package + vendor tool) once?
-- **E.** Stage 1 may erase and program one 4 KB sector at `0xDF000` on your unit. OK?
+- **A.** 8 characters stored, 5 shown in the status line: yes.
+- **B.** Replace in place (old table gone at BEGIN; `get` is the backup): yes.
+- **C.** 8 slots in v1: yes.
+- **D.** Way back: the user has Baud Girl from the Hub and the M-VAVE firmware installer saved locally (R5 package in
+  hand). T30 option A is therefore not a gate for stage 1; it stays queued.
+- **E.** Stage 1 may erase and program the one sector at `0xDF000`: yes (still needs `rules-reviewer` and the user
+  flashing).
 
 ## 10. Task split (replaces T19-T21 text in TASKS.md)
 
