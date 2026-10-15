@@ -73,6 +73,16 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
       the rescue path: needs user agreement, `rules-reviewer` sign-off and a device test. Optionally report upstream
       (sloop-fm1) after confirmation. See docs/research/rescue-entry.md.
 
+- [ ] **T31** (2026-10-14, device test 6.2 failed) SAVE while notes sound saves immediately on the unit; expected: waits for
+      silence (`pn_save_poll` gates the write on `quiet()`). Not reproduced on the host: with 5 held keys SAVE waits and
+      writes 2.26 s after the keys go up. The only immediate path in code is "patch not modified" (SAVED flash, no write).
+      Need from the user: was the SAVE LED blinking (an edit pending) before the press, and did SAVED show with keys
+      held? If yes: add a debug readout of `quiet()` / `eng_tap.busy` on BOOT KEYS.
+- [ ] **T32** (2026-10-14, device test 7.1 failed) From HOME, SELECT "freezes on about one rotation when turned fast".
+      Unclear whether the value hits the end stop (accel d*|d|*32 crosses 0..4095 in ~1 turn), the screen stalls on the
+      frame redraw, or the whole panel stops. Need from the user: which HOME look, what exactly stops, whether it
+      recovers by itself.
+
 ## Log
 
 - 2026-10-11 Queue created from the initial review. Order: T1 → T3 first, then Gate 1, then Gate 2.
@@ -90,3 +100,4 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - 2026-10-12 User asked for an arpeggiator and a modulation step sequencer, opened with the ARP and SEQ buttons (exist on the panel: ids 10 and 11). T27-T29 added; to follow T17 (patch storage) and a device check of the engine.
 - 2026-10-12 T18 phase 2: panel wired to the engine (build 512,688 B image, RAM 18.7 KB; host/ui/engine/panel tests green). Not on the device yet. Font sheet at build/host/fonts/, shipped font unchanged.
 - 2026-10-13 Manual OCT- rescue does not work on the unit (boot scan sees no keys, see T30). Decision: leave it, T30 queued. Safety nets remaining: OTA from the running app, auto rescue after 2 failed boots. Baseline 3 committed a7b02b9; user running docs/DEVICE-TEST-PLAN.md.
+- 2026-10-14 Device test plan sections 1-7 run by the user on build 6897517+: CPU MAX (default patch, SINC): idle 1 %, 1 note 5 %, 12 notes 49 %, worst case (BEND both, SUB, NOISE, HP) 50 %, OSC2 on another table 50 %, ECO 48 %, waterfall look with 12 notes ~20 % and no dropouts. Estimates were 50 / 65 / 53 %: real worst case is 15 points lower and ECO saves only 2 points. Sound quality, screens, MIDI (CC 120/123 not tested), persistence passed. Failed: 6.2 (T31), 7.1 (T32). HELP screens (hold HOME 0.7 s, commit 0d4770e) added at the user's request; 0.7 s confirmed.

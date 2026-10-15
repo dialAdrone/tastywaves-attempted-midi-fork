@@ -83,28 +83,30 @@ Review points for the design (what we most want your opinion on):
 
 ## 5. MIDI (5 min)
 
-- [ ] Keys also send USB-MIDI notes (check with a DAW / MIDI monitor).
-- [ ] Incoming notes play, velocity matters (VEL>AMP on GLO 2).
-- [ ] Mod wheel (CC 1) -> MW>POS / MW>VIB; pitch bend with PB RNG; channel aftertouch -> AT>CUT.
-- [ ] CC 120 all sound off silences everything; CC 123 all notes off.
-- [ ] Note flood from a DAW (a fast 16th arp at 180 BPM, 12 notes): no stuck notes (`ev_dropped` counter is
+- [x] Keys also send USB-MIDI notes (check with a DAW / MIDI monitor).
+- [x] Incoming notes play, velocity matters (VEL>AMP on GLO 2).
+- [x] Mod wheel (CC 1) -> MW>POS / MW>VIB; pitch bend with PB RNG; channel aftertouch -> AT>CUT.
+- [ ] NOT TESTED CC 120 all sound off silences everything; CC 123 all notes off.
+- [x] Note flood from a DAW (a fast 16th arp at 180 BPM, 12 notes): no stuck notes (`ev_dropped` counter is
       not shown yet; a stuck note after a flood means the 64-entry event ring overflowed).
 
 ## 6. Save and persistence (5 min)
 
-- [ ] Edit a patch (the lilac tick appears at the patch line, SAVE LED blinks), press SAVE while silent: `SAVED`
+- [x] Edit a patch (the lilac tick appears at the patch line, SAVE LED blinks), press SAVE while silent: `SAVED`
       shows, LED goes solid.
 - [ ] Press SAVE while notes sound: the write waits for silence (no audio glitch from the flash erase), then saves.
-- [ ] Power-cycle: patch, octave and HOME look come back.
-- [ ] Press SAVE repeatedly: at most one write per second (no stall).
+  - TEST FAILED SAVES IMMEDIATELY 
+- [x] Power-cycle: patch, octave and HOME look come back.
+- [x] Press SAVE repeatedly: at most one write per second (no stall).
 - [ ] *Known stub:* one user patch overlay only (T17 will add real slots).
 
 ## 7. Robustness (10 min)
 
 - [ ] Turn encoders very fast, mash page buttons, hold EDIT while turning knobs: no crash, no lock-up.
-- [ ] Change preset while 12 notes ring: voices release without a crash (mono presets release all).
-- [ ] USB cable pulled and re-plugged while playing: audio keeps running; MIDI recovers.
-- [ ] 15-minute soak with a drone: no crash screen, no drift. If the red crash screen appears: note vector, PC and
+  - From HOME, SELECT Freezes on about one rotation when turned fast 
+- [x] Change preset while 12 notes ring: voices release without a crash (mono presets release all).
+- [x] USB cable pulled and re-plugged while playing: audio keeps running; MIDI recovers.
+- [x] 15-minute soak with a drone: no crash screen, no drift. If the red crash screen appears: note vector, PC and
       return address (docs: skill `fm1-crash-triage`) and tell me.
 
 ## 8. Report back
