@@ -73,15 +73,15 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
       the rescue path: needs user agreement, `rules-reviewer` sign-off and a device test. Optionally report upstream
       (sloop-fm1) after confirmation. See docs/research/rescue-entry.md.
 
-- [ ] **T31** (2026-10-14, device test 6.2 failed) SAVE while notes sound saves immediately on the unit; expected: waits for
-      silence (`pn_save_poll` gates the write on `quiet()`). Not reproduced on the host: with 5 held keys SAVE waits and
-      writes 2.26 s after the keys go up. The only immediate path in code is "patch not modified" (SAVED flash, no write).
-      Need from the user: was the SAVE LED blinking (an edit pending) before the press, and did SAVED show with keys
-      held? If yes: add a debug readout of `quiet()` / `eng_tap.busy` on BOOT KEYS.
-- [ ] **T32** (2026-10-14, device test 7.1 failed) From HOME, SELECT "freezes on about one rotation when turned fast".
-      Unclear whether the value hits the end stop (accel d*|d|*32 crosses 0..4095 in ~1 turn), the screen stalls on the
-      frame redraw, or the whole panel stops. Need from the user: which HOME look, what exactly stops, whether it
-      recovers by itself.
+- [x] **T31** (2026-10-14) SAVE "saves immediately" while notes sound: not a bug. The user pressed SAVE with no edit
+      pending (nothing to write, SAVED flashes at once by design). With an edit pending the write waits for silence
+      (host: 2.3 s after the keys go up). Open: held SAVE shifts the pitch of a sounding note (see T33).
+- [~] **T32** (2026-10-14, device test 7.1) Waterfall HOME look: the white frame indicator stalled during fast SELECT
+      turns = redraw time of the full pass. Fix (0d4770e+1): while the frame keeps changing only the 8 x 9 px arrow moves; traces and the
+      white frame redraw 120 ms after the last change (new table at once). Needs a device check.
+- [ ] **T33** (2026-10-14) Holding SAVE while a note sounds shifts the note's pitch (back on release?). Not explained by
+      the code (SAVE only sets `save_req`, lights its LED and flashes SAVED). Need: does it happen with other buttons,
+      up or down, how much; suspect LED / matrix / timer interaction.
 
 ## Log
 

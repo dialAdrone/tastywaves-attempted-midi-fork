@@ -46,6 +46,7 @@ typedef struct {
     /* the real app (panel.h); all zero in the mock-up */
     const int16_t *wave;                        /* EDIT: 256 samples to draw instead of the frame (morph + BEND) or NULL */
     uint32_t wave_key;                          /* changes when `wave` does (the shadow compares it) */
+    uint32_t ms;                                /* the clock (ms): the waterfall redraws once the position rests; 0 in the mock-up */
     uint8_t cpu_max, flash;                     /* worst CPU % since reset; flash: 1 = "SAVED" instead of the patch name */
     uint8_t nsets, set;                         /* FX / LFO / GLO: knob sets on the page, the one shown */
     uint8_t flt_cut, flt_res, flt_mode;         /* FX picture: cutoff, resonance 0..127, mode 0 LP 1 BP 2 HP */
@@ -63,6 +64,8 @@ typedef struct {
     uint8_t kfrac[4], env[2][4], harm[16];
     uint8_t flash, nsets, set;
     uint32_t wave_key, pic_key;
+    uint32_t t_chg;                             /* waterfall: ms of the last frame change */
+    uint8_t wf_arrow, wf_frame;                 /* waterfall: frame of the arrow on screen, of the white trace */
     char list[8][16], ptxt[8];
 } ui_shadow_t;
 
@@ -244,6 +247,19 @@ static void ui_waterfall(const ui_view_t *v)
         cv_blit(0, UI_Y_MID + (uint32_t)top);
         platform_poll();                        /* keep USB and the watchdog fed between the strips */
     }
+}
+
+/* the arrow alone (8 x 9 px, left of the frame's first point): the cheap indicator while the position moves */
+static void ui_wf_arrow(uint32_t f, int draw)
+{
+    int32_t b = UI_WF_BASE - (int32_t)f * 3;
+    cv_begin(8, 9, C_BLACK);
+    if (draw) {
+        cv_line(1, 1, 1, 7, C_WHITE);
+        cv_line(1, 1, 5, 4, C_WHITE);
+        cv_line(1, 7, 5, 4, C_WHITE);
+    }
+    cv_blit(f * 2u, UI_Y_MID + (uint32_t)(b - 4));
 }
 
 /* ---- ENV: one ADSR curve in a 240 x 63 canvas. Segment widths follow the values (6..50 px), sustain is a fixed
@@ -555,7 +571,21 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
 
     frame_new = full || s->table != v->table || s->frame != v->frame || s->tname[0] != v->tname[0];
     if (v->page == UI_P_HOME && v->variant == UI_H_WATERFALL) {
-        if (frame_new) ui_waterfall(v);
+        /* a full pass is tens of ms: while the frame keeps changing only the arrow moves (0.5 KB); the traces and
+         * the white frame follow 120 ms after the last change. A new table redraws at once. */
+        if (frame_new && (full || s->table != v->table || s->tname[0] != v->tname[0])) {
+            ui_waterfall(v);
+            s->wf_arrow = s->wf_frame = v->frame;
+            s->t_chg = v->ms;
+        } else if (s->wf_arrow != v->frame) {
+            ui_wf_arrow(s->wf_arrow, 0);
+            ui_wf_arrow(v->frame, 1);
+            s->wf_arrow = v->frame;
+            s->t_chg = v->ms;
+        } else if (s->wf_frame != v->frame && (v->ms == 0 || v->ms - s->t_chg >= 120u)) {
+            ui_waterfall(v);
+            s->wf_frame = v->frame;
+        }
     } else if (v->page == UI_P_HOME && v->variant == UI_H_SPECTRUM) {
         if (frame_new) {
             ui_wave(UI_Y_MID, 56, v->frames + (uint32_t)v->frame * v->stride, UI_ACC);

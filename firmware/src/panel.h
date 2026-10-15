@@ -347,6 +347,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
     v->cpu_max = (uint8_t)(cpu_max > 255u ? 255u : cpu_max);
     v->modified = (uint8_t)(!pn.browse_pend && pn_modified());
     v->flash = (uint8_t)flash;
+    v->ms = fm1_ms;
     v->nframes = 32;
     v->stride = (uint16_t)WTG_FRAME_LEN;
 
