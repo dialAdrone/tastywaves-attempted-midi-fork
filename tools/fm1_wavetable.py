@@ -1,8 +1,13 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """fm1_wavetable.py: turn wavetable WAV files (Serum, WaveEdit, Ableton, Surge exports) into a VAVEWave user table.
 
-    build  NAME OUT.vwt INPUT.wav [--frame N] [--format auto|serum|waveedit|ableton|surge] [--gain-only]
-    inspect INPUT.wav             what the file looks like and how it would be split (no output file)
+    build  NAME OUT.vwt INPUT... [--frame N] [--format auto|serum|waveedit|ableton|surge] [--pick WHICH]
+    inspect INPUT...              what each file looks like and how it would be split (no output file)
+
+INPUT is a WAV file or a folder of WAV files (taken in natural name order, 'a2' before 'a10'). Several inputs are
+joined in order: a file of single cycles from the Serum "Frames" collection becomes one frame, a wavetable file
+several. --pick chooses source frames before the table is made: even (default), first, last, odd, A:B (a slice,
+0-based, end excluded) or a comma list like 0,4,8,12.
 
 The output is exactly what the firmware stores in one user slot (docs/UPLOAD-DESIGN.md sections 3 and 7): a 64-byte
 header (magic VWT1, version, fmt 0, frames 32, levels 6, name[8], data bytes, data CRC32, header CRC32, 0xFF pad)
@@ -126,11 +131,38 @@ def frame_spectrum(fr):
     return c
 
 
+def select(n, how):
+    """Source frame indices kept by --pick (before the 32-frame mapping)."""
+    if how in (None, '', 'even'):
+        return list(range(n))
+    if how == 'first':
+        return list(range(min(n, gw.FRAMES)))
+    if how == 'last':
+        return list(range(max(0, n - gw.FRAMES), n))
+    if how == 'odd':
+        return list(range(1, n, 2)) or [0]
+    try:
+        if ':' in how:
+            lo, hi = how.split(':', 1)
+            idx = list(range(int(lo or 0), int(hi) if hi else n))
+        else:
+            idx = [int(t) for t in how.split(',')]
+    except ValueError:
+        raise WavError(f'--pick {how!r}: use even, first, last, odd, A:B or a comma list')
+    idx = [i for i in idx if 0 <= i < n]
+    if not idx:
+        raise WavError(f'--pick {how!r} selects none of the {n} frames')
+    return idx
+
+
 def pick_32(spectra):
-    """32 spectra from any count: evenly picked when there are more, linearly interpolated when fewer."""
+    """32 spectra from any count: 32 or more are picked at evenly spaced frames (a set of distinct waves is not
+    blended), fewer are linearly interpolated (a crossfade between neighbours)."""
     n = len(spectra)
     if n == 1:
         return [spectra[0]] * gw.FRAMES
+    if n >= gw.FRAMES:
+        return [spectra[int(round(i * (n - 1) / (gw.FRAMES - 1)))] for i in range(gw.FRAMES)]
     out = []
     for i in range(gw.FRAMES):
         p = i * (n - 1) / (gw.FRAMES - 1)
@@ -141,16 +173,21 @@ def pick_32(spectra):
     return out
 
 
-def convert(x, frame):
+def spectra_of(x, frame):
     n = len(x) // frame
     if n < 1:
         raise WavError('file shorter than one frame')
-    frames = [frame_spectrum(x[i * frame:(i + 1) * frame]) for i in range(n)]
-    sp = pick_32(frames)
+    return [frame_spectrum(x[i * frame:(i + 1) * frame]) for i in range(n)]
+
+
+def convert(sources, how=None):
+    """int16 table data, source frame count, kept count, gain from a list of per-frame spectra."""
+    keep = [sources[i] for i in select(len(sources), how)]
+    sp = pick_32(keep)
     if all(np.max(np.abs(c)) < 1e-9 for c in sp):
-        raise WavError('the file is silent (or has no energy in harmonics 1..64)')
+        raise WavError('the input is silent (or has no energy in harmonics 1..64)')
     gain = gw.table_gain(sp)
-    return gw.quantise(sp, gain), n, gain
+    return gw.quantise(sp, gain), len(keep), gain
 
 
 # ---- the slot image ----
@@ -184,6 +221,26 @@ def parse_image(img):
 
 
 # ---- commands ----
+def natural_key(p):
+    return [int(t) if t.isdigit() else t.lower() for t in re.split(r'(\d+)', str(p))]
+
+
+def expand(inputs):
+    """Files as given; a folder becomes its .wav files in natural order."""
+    out = []
+    for i in inputs:
+        p = Path(i)
+        if p.is_dir():
+            fs = sorted((f for f in p.iterdir() if f.suffix.lower() == '.wav' and not f.name.startswith('.')),
+                        key=natural_key)
+            if not fs:
+                raise WavError(f'{p}: no .wav files')
+            out += fs
+        else:
+            out.append(p)
+    return out
+
+
 def describe(path, fmt, frame):
     x, rate, info = read_wav(path)
     if frame:
@@ -195,26 +252,37 @@ def describe(path, fmt, frame):
 
 
 def cmd_inspect(a):
-    x, rate, info, L, why, n = describe(a.input, a.format, a.frame)
-    print(f'{a.input}: {len(x)} samples, {info["channels"]} ch, {info["bits"]}-bit, {rate} Hz')
-    print(f'frame length {L} ({why}); {n} frame(s) of the file -> 32')
-    if len(x) % L:
-        print(f'note: {len(x) % L} trailing samples ignored')
-    if info.get('clm'):
-        print(f'clm chunk: {info["clm"].strip()!r}')
-    peak = float(np.max(np.abs(x))) if len(x) else 0.0
-    print(f'peak {peak:.3f}; harmonics kept 1..{min(gw.HMAX, L // 2)} of {L // 2}')
-    if L > 4096 or n > 256:
-        print('warning: unusually large; is this a cycle table or a recording?')
+    for path in expand(a.input):
+        x, rate, info, L, why, n = describe(path, a.format, a.frame)
+        print(f'{path}: {len(x)} samples, {info["channels"]} ch, {info["bits"]}-bit, {rate} Hz')
+        print(f'  frame length {L} ({why}); {n} frame(s)')
+        if len(x) % L:
+            print(f'  note: {len(x) % L} trailing samples ignored')
+        if info.get('clm'):
+            print(f'  clm chunk: {info["clm"].strip()!r}')
+        peak = float(np.max(np.abs(x))) if len(x) else 0.0
+        print(f'  peak {peak:.3f}; harmonics kept 1..{min(gw.HMAX, L // 2)} of {L // 2}')
+        if L > 4096 or n > 256:
+            print('  warning: unusually large; is this a cycle table or a recording?')
     return 0
 
 
 def cmd_build(a):
-    x, rate, info, L, why, n = describe(a.input, a.format, a.frame)
-    data, nsrc, gain = convert(x, L)
+    files = expand(a.input)
+    sources, lens = [], set()
+    for path in files:
+        x, rate, info, L, why, n = describe(path, a.format, a.frame)
+        sources += spectra_of(x, L)
+        lens.add(L)
+        print(f'{path.name}: frame {L} ({why}), {n} frame(s)')
+    if len(lens) > 1:
+        print(f'note: frame lengths differ ({sorted(lens)}); each file was read at its own length')
+    total = len(sources)
+    data, kept, gain = convert(sources, a.pick)
     img = slot_image(a.name, data)
     Path(a.out).write_bytes(img)
-    print(f'{a.input}: frame {L} ({why}), {nsrc} frame(s) -> 32, gain {gain:.3f}')
+    how = f'{total} frame(s)' + (f', --pick {a.pick} keeps {kept}' if kept != total else '')
+    print(f'{len(files)} file(s): {how} -> 32, gain {gain:.3f}')
     print(f'{a.out}: {len(img)} bytes, name {clean_name(a.name)!r}, data crc32 {zlib.crc32(img[HEADER_LEN:]):08x}')
     return 0
 
@@ -227,7 +295,8 @@ def main(argv=None):
         if name == 'build':
             p.add_argument('name')
             p.add_argument('out')
-        p.add_argument('input')
+            p.add_argument('--pick', help='even (default), first, last, odd, A:B or a comma list of source frames')
+        p.add_argument('input', nargs='+', help='WAV files and / or folders of WAV files, joined in order')
         p.add_argument('--frame', type=int, help='samples per frame (overrides detection)')
         p.add_argument('--format', choices=FORMATS, default='auto')
     a = ap.parse_args(argv)

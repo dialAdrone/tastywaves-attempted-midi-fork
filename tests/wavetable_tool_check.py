@@ -76,7 +76,8 @@ def morph(n, frames):
 
 def build(td, name, wav, **kw):
     out = Path(td) / (name + '.vwt')
-    argv = ['build', name, str(out), str(wav)]
+    wavs = wav if isinstance(wav, (list, tuple)) else [wav]
+    argv = ['build', name, str(out)] + [str(w) for w in wavs]
     for k, v in kw.items():
         argv += [f'--{k}', str(v)]
     rc = wt.main(argv)
@@ -146,6 +147,40 @@ with tempfile.TemporaryDirectory() as td:
     rc, out = build(td, 'ONE', td / 'one.wav', frame=2048)
     im = wt.parse_image(out.read_bytes())
     check(rc == 0 and np.array_equal(level0(im['data'], 0), level0(im['data'], 31)), 'one frame: all 32 frames equal')
+
+    # --pick on a 64-frame set: first / last / odd / slice / list, and the default takes whole frames (no blends)
+    rc, out = build(td, 'FIRST', td / 'we.wav', pick='first')
+    f_first = wt.parse_image(out.read_bytes())['data']
+    rc2, out2 = build(td, 'LAST', td / 'we.wav', pick='last')
+    f_last = wt.parse_image(out2.read_bytes())['data']
+    x_we, _, _ = wt.read_wav(td / 'we.wav')
+    src = [wt.frame_spectrum(x_we[i * 256:(i + 1) * 256]) for i in range(64)]
+    ref_first = np.array([np.fft.irfft(np.r_[0, -1j * c * 128, np.zeros(1)][:129], 256) for c in src[:1]])[0]
+    check(rc == 0 and rc2 == 0 and not np.array_equal(f_first, f_last), 'pick: first and last differ')
+    check(np.corrcoef(level0(f_first, 0), ref_first)[0, 1] > 0.9999, 'pick first: table frame 0 is source frame 0')
+    check(np.corrcoef(level0(f_first, 31), np.fft.irfft(np.r_[0, -1j * src[31] * 128, np.zeros(1)][:129], 256))[0, 1] > 0.9999,
+          'pick first: table frame 31 is source frame 31 (no blending)')
+    rc, out = build(td, 'ODD', td / 'we.wav', pick='1,2,3')
+    im = wt.parse_image(out.read_bytes())
+    check(rc == 0 and im['frames'] == 32, 'pick: a comma list of 3 frames interpolates to 32')
+    for bad in ('99', 'x', '5:5'):
+        rc, _ = build(td, 'X', td / 'we.wav', pick=bad)
+        check(rc == 1, f'pick: {bad!r} is refused')
+
+    # several files / a folder: joined in natural name order (a2 before a10), one frame per single-cycle file
+    sc = td / 'cycles'
+    sc.mkdir()
+    for i, k in enumerate((10, 2, 1, 3)):                       # names a10, a2, a1, a3 -> natural order a1 a2 a3 a10
+        c = cycle(2048, [(1, 1.0)] + [(h, 0.5) for h in range(2, 2 + k)])
+        write_wav(sc / f'a{k}.wav', c / np.max(np.abs(c)) * 0.8, bits=16)
+    rc, out = build(td, 'CYC', sc, frame=2048)
+    im = wt.parse_image(out.read_bytes())
+    # four frames in order a1 a2 a3 a10 -> harmonic 3 amplitude grows with the number of added harmonics: frame 0
+    # (a1: harmonics 1,2) has none, frame 31 (a10) the most
+    h3 = [abs(np.fft.rfft(level0(im['data'], f))[3]) for f in range(32)]
+    check(rc == 0 and h3[0] < 1e-3 * h3[31] and h3[31] > 0, 'folder: files joined in natural order a1 a2 a3 a10')
+    rc, out = build(td, 'TWO', [td / 'serum.wav', td / 'we.wav'])
+    check(rc == 0, 'two files with different frame lengths join (2048 and 256)')
 
     # failures are errors, not crashes
     (td / 'junk.wav').write_bytes(b'not a wav at all')
