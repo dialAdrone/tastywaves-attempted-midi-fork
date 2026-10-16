@@ -170,6 +170,9 @@ static int settings_save(const void *p, uint32_t n)   /* p in RAM, n <= 256 */
     return fl_write(SETTINGS_AT, (const uint8_t *)h, sizeof h);   /* the header last: a cut save stays invalid */
 }
 
+/* ---- user wavetable slots: stage 0 is read-only (docs/UPLOAD-DESIGN.md) */
+#include "wtlink.h"
+
 /* ---- MIDI over USB: 4-byte USB-MIDI packets, cable 0 */
 static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)   /* 1: a message (status, data 1, data 2) */
 {
@@ -258,6 +261,7 @@ static void platform_poll(void)
     int32_t a;
     fm1_wdt_feed();
     usb_retry(fm1_ms);
+    wt_service();                               /* VW link frames only; the updater's are left for ota_service */
     ota_service();
     if (usb.ota_req) {
         usb.ota_req = 0;

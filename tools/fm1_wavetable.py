@@ -3,6 +3,8 @@
 
     build  NAME OUT.vwt INPUT...  (WAV or Surge .wt) [--frame N] [--format auto|serum|waveedit|ableton|surge] [--pick WHICH]
     inspect INPUT...              what each file looks like and how it would be split (no output file)
+    info [--port NAME]            the connected FM-1: firmware, and which of the 8 user slots hold a table
+    get SLOT OUT.vwt [--port NAME]  copy a slot off the FM-1 into a file (backup; checked against its CRC)
 
 INPUT is a WAV or Surge .wt file or a folder of them (natural name order, 'a2' before 'a10'). Several inputs are
 joined in order: a file of single cycles from the Serum "Frames" collection becomes one frame, a wavetable file
@@ -12,8 +14,8 @@ several. --pick chooses source frames before the table is made: even (default), 
 The output is exactly what the firmware stores in one user slot (docs/UPLOAD-DESIGN.md sections 3 and 7): a 64-byte
 header (magic VWT1, version, fmt 0, frames 32, levels 6, name[8], data bytes, data CRC32, header CRC32, 0xFF pad)
 followed by 32 frames x 510 int16 (6 mip levels each) little endian = 32,640 bytes, made by the same band-limiter and
-quantiser as the factory tables (tools/gen_wavetables.py). Sending it to the device (put / get / info / erase) comes
-with the firmware receive path (T20); this tool has no device commands yet.
+quantiser as the factory tables (tools/gen_wavetables.py). `info` and `get` only read (firmware stage 0, VW link, see
+docs/UPLOAD-DESIGN.md section 4); `put` and `erase` come with the write stages of the firmware.
 
 Input rules: mono or stereo (mixed to mono), PCM 8/16/24/32 or float 32/64 WAV, any sample rate (a frame is one
 cycle, the rate does not matter). The frame length comes from the format: Serum writes it in a `clm ` chunk
@@ -25,6 +27,7 @@ import argparse
 import re
 import struct
 import sys
+import time
 import zlib
 from pathlib import Path
 
@@ -316,10 +319,146 @@ def cmd_build(a):
     print(f'{a.out}: {len(img)} bytes, name {clean_name(a.name)!r}, data crc32 {zlib.crc32(img[HEADER_LEN:]):08x}')
     return 0
 
+# ---- the FM-1 over USB-MIDI ("VW link" v1, docs/UPLOAD-DESIGN.md section 4) ----
+import fm1_install as fi  # noqa: E402  (pack7, the MIDI backend and the port search of the installer)
 
-def main(argv=None):
+SLOTS, SLOT_SIZE, DATA_AT = 8, 0x9000, 0x1000
+CMD_HELLO, CMD_DIR, CMD_READ = 1, 2, 8
+RC_TEXT = {1: 'bad arguments', 2: 'range or alignment', 3: 'erase failed', 4: 'program failed', 5: 'verify failed',
+           6: 'no BEGIN or timeout', 7: 'refused (this firmware stage cannot do that)', 8: 'CRC mismatch',
+           9: 'no flash'}
+
+
+class LinkError(Exception):
+    pass
+
+
+def vw_frame(cmd, seq, payload=b''):
+    body = bytes([0x7D, 0x56, 0x57, cmd, seq]) + len(payload).to_bytes(2, 'little') + bytes(payload)
+    body += bytes([~sum(body[3:]) & 0xFF])
+    return b'\xF0' + fi.pack7(body) + b'\xF7'
+
+
+def vw_parse(pkt):
+    """reply frame -> (cmd, rc, seq, payload), or None if it is not a well-formed VW reply"""
+    if len(pkt) < 2 or pkt[0] != 0xF0 or pkt[-1] != 0xF7:
+        return None
+    d = fi.unpack7(pkt[1:-1])
+    if len(d) < 9 or d[:3] != b'\x7D\x56\x57' or int.from_bytes(d[6:8], 'little') + 9 != len(d):
+        return None
+    if (~sum(d[3:-1])) & 0xFF != d[-1]:
+        return None
+    return d[3], d[4], d[5], d[8:-1]
+
+
+class VwLink:
+    def __init__(self, link, tries=4, timeout=1.5):
+        self.link, self.tries, self.timeout, self.seq = link, tries, timeout, 0
+
+    def request(self, cmd, payload=b''):
+        """send, wait for the matching reply (the same request is repeated if none comes); -> payload, raises LinkError"""
+        self.seq = self.seq % 255 + 1
+        pkt = vw_frame(cmd, self.seq, payload)
+        for _ in range(self.tries):
+            self.link.drain()
+            if not self.link.send(pkt):
+                raise LinkError('could not send to the FM-1 (unplugged?)')
+            end = time.monotonic() + self.timeout
+            while (left := end - time.monotonic()) > 0:
+                r = vw_parse(self.link.read(left) or b'')
+                if r and r[0] == cmd and r[2] == self.seq:
+                    if r[1]:
+                        raise LinkError(f'FM-1 answered: {RC_TEXT.get(r[1], "error %d" % r[1])}')
+                    return r[3]
+        raise LinkError('no answer from the FM-1 (is the firmware new enough? VAVEWave with the VW link is needed)')
+
+    def hello(self):
+        d = self.request(CMD_HELLO)
+        if len(d) != 16:
+            raise LinkError('unexpected HELLO reply')
+        return {'proto': d[0], 'stage': d[1], 'slots': d[2], 'hdr': d[3], 'slot_size': int.from_bytes(d[4:8], 'little'),
+                'id': d[8:16].rstrip(b'\0').decode('latin-1')}
+
+    def directory(self, start=0, count=SLOTS):
+        d = self.request(CMD_DIR, bytes([start, count]))
+        if len(d) != 16 * count:
+            raise LinkError('unexpected DIR reply')
+        out = []
+        for i in range(count):
+            e = d[16 * i:16 * i + 16]
+            out.append({'slot': e[0], 'valid': bool(e[1]), 'frames': e[2], 'levels': e[3],
+                        'name': e[4:12].rstrip(b'\0').decode('latin-1'), 'crc': int.from_bytes(e[12:16], 'little')})
+        return out
+
+    def read(self, slot, off, n):
+        out = b''
+        while n:
+            k = min(n, 256)
+            d = self.request(CMD_READ, bytes([slot]) + off.to_bytes(2, 'little') + k.to_bytes(2, 'little'))
+            if len(d) != k:
+                raise LinkError('short READ reply')
+            out, off, n = out + d, off + k, n - k
+        return out
+
+
+def connect(a, backend=None):
+    """-> (VwLink, device name); the FM-1 is found with the installer's port search"""
+    if backend is None:
+        try:
+            backend = fi.MidoBackend()
+        except ImportError:
+            raise LinkError('needs mido and python-rtmidi (pip install mido python-rtmidi)')
+    up = fi.Updater(backend, a.port)
+    dev = up.find()
+    if not dev:
+        raise LinkError('no FM-1 found (plugged in? another program using its MIDI port?)')
+    if dev.id.loader:
+        raise LinkError(f'the FM-1 is in update mode ({dev.id.text}); finish the update first (fm1_install.py)')
+    return VwLink(dev.link), dev
+
+
+def cmd_info(a, backend=None):
+    vw, dev = connect(a, backend)
+    try:
+        h = vw.hello()
+        print(f'{h["id"]}  port {dev.name}  VW link v{h["proto"]}, firmware stage {h["stage"]} '
+              f'({"read only" if h["stage"] == 0 else "can write"}), {h["slots"]} slots')
+        for e in vw.directory(0, h['slots']):
+            if e['valid']:
+                print(f'  slot {e["slot"]}: {e["name"]!r}  {e["frames"]} frames, {e["levels"]} levels, data crc32 {e["crc"]:08x}')
+            else:
+                print(f'  slot {e["slot"]}: empty')
+    finally:
+        dev.link.close()
+    return 0
+
+
+def cmd_get(a, backend=None):
+    if not 0 <= a.slot < SLOTS:
+        raise LinkError(f'slot must be 0..{SLOTS - 1}')
+    vw, dev = connect(a, backend)
+    try:
+        e = vw.directory(a.slot, 1)[0]
+        if not e['valid']:
+            raise LinkError(f'slot {a.slot} is empty (nothing to copy)')
+        img = vw.read(a.slot, 0, HEADER_LEN) + vw.read(a.slot, DATA_AT, DATA_BYTES)
+        parse_image(img)                             # header and data CRC: a bad copy is never written out
+    finally:
+        dev.link.close()
+    Path(a.out).write_bytes(img)
+    print(f'slot {a.slot} {e["name"]!r}: {len(img)} bytes -> {a.out}, data crc32 {e["crc"]:08x} (checked)')
+    return 0
+
+
+def main(argv=None, backend=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
+    for name in ('info', 'get'):
+        p = sub.add_parser(name)
+        if name == 'get':
+            p.add_argument('slot', type=int)
+            p.add_argument('out')
+        p.add_argument('--port', metavar='NAME', help='MIDI port to use (part of its name)')
     for name in ('inspect', 'build'):
         p = sub.add_parser(name)
         if name == 'build':
@@ -331,8 +470,10 @@ def main(argv=None):
         p.add_argument('--format', choices=FORMATS, default='auto')
     a = ap.parse_args(argv)
     try:
+        if a.cmd in ('info', 'get'):
+            return {'info': cmd_info, 'get': cmd_get}[a.cmd](a, backend)
         return {'inspect': cmd_inspect, 'build': cmd_build}[a.cmd](a)
-    except (WavError, OSError) as e:
+    except (WavError, LinkError, OSError) as e:
         print(f'error: {e}', file=sys.stderr)
         return 1
 

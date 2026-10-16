@@ -46,8 +46,12 @@ Free flash per research: `0x97000..0xDFFFF` (73 sectors, 292 KB). The app image 
 ## 4. Wire protocol ("VW link" v1, SysEx on the USB-MIDI port)
 
 ```
-F0  pack7( 7D 'V' 'W' cmd seq len_lo len_hi payload[len] sum )  F7        sum = ~(cmd .. payload) & 0xFF
-reply: same header and cmd, rc, seq, len, payload, sum
+request  F0  pack7( 7D 56 57 cmd seq len_lo len_hi payload[len] sum )         F7
+reply    F0  pack7( 7D 56 57 cmd rc seq len_lo len_hi payload[len] sum )      F7
+sum = ~(sum of every byte from cmd up to the one before sum) & 0xFF; a request with a bad sum or length gets no reply
+HELLO reply payload (16 B): proto 1, stage, slots, header length, u32 slot bytes, identity[8]
+DIR request: start, count. Reply: 16 B per slot: slot, valid, frames, levels, name[8], u32 data CRC
+READ request (5 B): slot, u16 offset, u16 length (<= 256), offset + length within the slot (0x9000); data sector at +0x1000
 ```
 
 `pack7` is the platform's bit-stream packer (`ota.c`, twin in `tools/fm1_install.py`), id pair `56 57` keeps it apart
@@ -79,7 +83,8 @@ rc: 0 ok, 1 bad args, 2 range/alignment, 3 erase failed, 4 program failed, 5 ver
 3. **One writer function**, `wt_user_write(slot, off, src, n)`, is the only code that programs user flash. Later
    on-device bounce uses the same function (one path to audit).
 4. **Engine contract:** user tables are read through the plain XIP window (needs `fl_plain_window_init()` at boot,
-   not called today **[verify]**). The engine keeps a RAM directory {base, frames, valid}; BEGIN sets valid = 0
+   not called today; it changes SFC registers, so it is **moved to stage 4**, when the engine first reads a slot.
+   Stage 0 to 3 read flash only through `st_read` (the RAM driver, as settings do), in pieces of 64 B). The engine keeps a RAM directory {base, frames, valid}; BEGIN sets valid = 0
    *before* flash is touched, an invalid or missing table plays table 0 (never silence, never a crash). A patch that
    refers to user table k stores k; a patch that loads while k is empty falls back to table 0.
 5. **Boot:** header scan under the watchdog; every field bounds-checked before use (frames, bytes, name).
@@ -141,7 +146,7 @@ working (T30 option A, then B) or R5 rehearsed once by you with the stock packag
 
 | stage | firmware change | what we learn | write range |
 | --- | --- | --- | --- |
-| 0 | `fl_plain_window_init()`, read-only HELLO/DIR/READ, boot scan of empty slots | plain XIP reads work, boot unaffected | unchanged |
+| 0 | read-only HELLO/DIR/READ, header scan on the first main-loop pass (`firmware/src/wtlink.h`) | the link works, boot unaffected | unchanged |
 | 1 | writer enabled for **only the spare sector `0xDF000`**, a self-test command (erase, program, read back, verify) with timing | erase time of this flash part, program/verify path, IRQ-off effect on USB, behaviour of a power cut mid-erase | `0xDF000..0xDFFFF` |
 | 2 | slot 0 only (9 sectors), full protocol, tool `put` | whole upload on one slot, cable pull test, reload | slot 0 |
 | 3 | slots 0..7 | all slots, playing a user table, patch referencing it | slots 0..7 |
