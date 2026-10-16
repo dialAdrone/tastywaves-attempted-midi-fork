@@ -72,8 +72,8 @@ with tempfile.TemporaryDirectory() as t:
     link = FakeLink([f'2:{td / "a.vwt"}'])
     vw = fast(link)
     h = vw.hello()
-    check(h['proto'] == 1 and h['stage'] == 0 and h['slots'] == 8 and h['slot_size'] == 0x9000 and h['id'] == 'FM-1_950',
-          'HELLO: protocol, stage 0, 8 slots, identity')
+    check(h['proto'] == 1 and h['stage'] == 1 and h['slots'] == 8 and h['slot_size'] == 0x9000 and h['id'] == 'FM-1_950',
+          'HELLO: protocol, stage 1, 8 slots, identity')
     d = vw.directory()
     check([e['valid'] for e in d] == [False, False, True, False, False, False, False, False], 'DIR: only slot 2 holds a table')
     check(d[2]['name'] == 'PROLOGFA' and d[2]['frames'] == 32 and d[2]['levels'] == 6, 'DIR: name, frames, levels')
@@ -86,9 +86,9 @@ with tempfile.TemporaryDirectory() as t:
         check('bad arguments' in str(e), 'READ slot 8 is refused with a clear message')
     try:
         vw.request(3, b'')
-        check(False, 'a write command is refused at stage 0')
+        check(False, 'a slot write command is refused at stage 1')
     except wt.LinkError as e:
-        check('refused' in str(e), 'BEGIN is refused at stage 0')
+        check('refused' in str(e), 'BEGIN is refused at stage 1')
     link.close()
 
     # a lost reply is asked again
@@ -129,6 +129,14 @@ with tempfile.TemporaryDirectory() as t:
         check(rc == 1 and not (td / 'none.vwt').exists(), 'get: an empty slot is an error and writes nothing')
         link = FakeLink([f'2:{td / "a.vwt"}'])
         check(wt.main(['info'], Backend(link)) == 0, 'info runs')
+        link = FakeLink([])
+        check(wt.main(['selftest', '--yes'], Backend(link)) == 0, 'selftest: passes on a healthy flash')
+        link = FakeLink([])
+        import io, contextlib
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            wt.cmd_selftest(type('A', (), {'yes': False, 'port': None})(), Backend(link), ask=lambda p: 'n')
+        check('cancelled' in buf.getvalue(), 'selftest: asks first, "n" cancels without sending the command')
         link = FakeLink([f'2:{td / "a.vwt"}'])
         check(wt.main(['get', '9', str(td / 'x.vwt')], Backend(link)) == 1, 'get: slot 9 is an error')
         link.close()

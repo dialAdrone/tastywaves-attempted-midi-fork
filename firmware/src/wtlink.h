@@ -1,10 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* User wavetable slots, "VW link" v1 (docs/UPLOAD-DESIGN.md). STAGE 0: read-only.
+/* User wavetable slots, "VW link" v1 (docs/UPLOAD-DESIGN.md). STAGE 1: read-only plus a self-test of one spare sector.
  *
- * What this file does at stage 0: finds out which of the 8 slots hold a valid header (a RAM directory, made once on
- * the first main-loop pass) and answers HELLO, DIR and READ from the computer. It never erases or programs flash
- * (there is no call to fl_erase4k / fl_write in this file; FL_RANGE_OK is untouched), and the engine does not use
- * the slots yet. Commands that would write (BEGIN, DATA, COMMIT, ABORT, ERASE) are answered "refused" (rc 7).
+ * What this file does: finds out which of the 8 slots hold a valid header (a RAM directory, made once on the first
+ * main-loop pass) and answers HELLO, DIR and READ from the computer. The engine does not use the slots yet.
+ * Commands that would write a slot (BEGIN, DATA, COMMIT, ABORT, ERASE) are answered "refused" (rc 7).
+ * Stage 1 adds SELFTEST (cmd 10): wt_flash_erase / wt_flash_prog, the ONLY calls to the flash writer in this file, are
+ * limited to the spare sector WT_TEST_AT (0xDF000..0xDFFFF) by their own check and again by FL_RANGE_OK (platform.c).
+ * Later stages widen the window in wt_flash_ok() to the slot region and nowhere else.
  *
  * Wire (SysEx on the USB-MIDI port, 7D = the non-commercial manufacturer id):
  *   request  F0 pack7( 7D 56 57 cmd seq len_lo len_hi payload[len] sum ) F7
@@ -19,10 +21,10 @@
 #define WT_SLOT_SIZE 0x9000u                     /* 1 header sector + 8 data sectors */
 #define WT_HDR_LEN 64u
 #define WT_FRAME_BYTES 1020u                     /* fmt 0: one frame = 510 samples (6 mip levels) x 2 bytes */
-#define WT_STAGE 0u                              /* 0 read-only, 1 test sector, 2.. writer (docs/UPLOAD-DESIGN.md 8.2) */
+#define WT_STAGE 1u                              /* 0 read-only, 1 test sector, 2.. writer (docs/UPLOAD-DESIGN.md 8.2) */
 
 enum { WT_CMD_HELLO = 1, WT_CMD_DIR = 2, WT_CMD_BEGIN = 3, WT_CMD_DATA = 4, WT_CMD_COMMIT = 5, WT_CMD_ABORT = 6,
-       WT_CMD_ERASE = 7, WT_CMD_READ = 8, WT_CMD_AUDITION = 9 };
+       WT_CMD_ERASE = 7, WT_CMD_READ = 8, WT_CMD_AUDITION = 9, WT_CMD_SELFTEST = 10 };
 enum { WT_OK = 0, WT_E_ARGS = 1, WT_E_RANGE = 2, WT_E_BUSY = 7, WT_E_NOFLASH = 9 };
 
 typedef struct {
@@ -94,6 +96,87 @@ static void wt_scan(void)
             wt_parse(h, &wt_dir[k]);
         fm1_wdt_feed();
     }
+}
+
+static int quiet(void);                          /* the app: nothing sounds (engine.h) */
+
+/* ---- the one flash writer. Stage 1 window: the spare sector only. */
+#define WT_TEST_LEN 0x1000u
+static int wt_flash_ok(uint32_t off, uint32_t n)
+{
+    return off >= WT_TEST_AT && off <= WT_TEST_AT + WT_TEST_LEN && n <= WT_TEST_AT + WT_TEST_LEN - off;
+}
+static int wt_flash_erase(uint32_t off, uint32_t *us)       /* one 4 KiB sector, 0 = ok; *us = how long it took */
+{
+    uint32_t took = 0;
+    int rc;
+    *us = 0;
+    if (!flash_ok || (off & 0xFFFu) || !wt_flash_ok(off, 0x1000u))
+        return -8;
+    rc = fl_erase4k(off, &took);                /* took: how long the part was busy, from the driver */
+    *us = took;
+    return rc;
+}
+static int wt_flash_prog(uint32_t off, const uint8_t *src_ram, uint32_t n)   /* one page of at most 256 B */
+{
+    if (!flash_ok || n == 0u || n > 256u || !wt_flash_ok(off, n))
+        return -8;
+    return fl_write(off, src_ram, n);
+}
+
+/* SELFTEST: erase the spare sector, check it reads 0xFF, program 16 pages of a pattern, read back and compare,
+ * erase again and check. result: 0 pass, 3 erase failed, 4 program failed, 5 verify failed, 7 refused (keys down,
+ * sound, no flash). Times in microseconds. */
+static uint8_t wt_page[256];
+static uint32_t wt_mismatch(uint32_t off, uint32_t n, int pattern)   /* bytes of [off, off + n) that differ from 0xFF or the pattern */
+{
+    uint8_t b[64];
+    uint32_t i, k, bad = 0;
+    for (k = 0; k < n; k += 64u) {
+        if (wt_read(off + k, b, 64u))
+            return n;
+        for (i = 0; i < 64u; i++) {
+            uint32_t at = k + i;
+            uint8_t want = pattern ? (uint8_t)(at * 7u + (at >> 8) * 31u + 0x5Au) : 0xFFu;
+            bad += b[i] != want;
+        }
+        fm1_wdt_feed();
+    }
+    return bad;
+}
+static uint32_t wt_selftest(uint8_t *o)         /* -> payload length (18) */
+{
+    uint32_t e1 = 0, e2 = 0, prog = 0, bad = 0, p, i, t0;
+    int rc, detail = 0, result = 0;
+    if (!flash_ok || !quiet() || fm1_in.notes) {
+        o[0] = 7; o[1] = 0;
+        for (i = 2; i < 18u; i++) o[i] = 0;
+        return 18;
+    }
+    if ((rc = wt_flash_erase(WT_TEST_AT, &e1)) != 0) { result = 3; detail = rc; }
+    else if ((bad = wt_mismatch(WT_TEST_AT, WT_TEST_LEN, 0)) != 0) result = 3;
+    else {
+        t0 = fm1_ticks();
+        for (p = 0; p < 16u && !result; p++) {
+            for (i = 0; i < 256u; i++)
+                wt_page[i] = (uint8_t)((p * 256u + i) * 7u + p * 31u + 0x5Au);
+            if ((rc = wt_flash_prog(WT_TEST_AT + p * 256u, wt_page, 256u)) != 0) { result = 4; detail = rc; }
+            fm1_wdt_feed();
+        }
+        prog = (fm1_ticks() - t0) / FM1_TICKS_PER_US;
+        if (!result && (bad = wt_mismatch(WT_TEST_AT, WT_TEST_LEN, 1)) != 0) result = 5;
+        if (!result) {
+            if ((rc = wt_flash_erase(WT_TEST_AT, &e2)) != 0) { result = 3; detail = rc; }
+            else if ((bad = wt_mismatch(WT_TEST_AT, WT_TEST_LEN, 0)) != 0) result = 3;
+        }
+    }
+    o[0] = (uint8_t)result;
+    o[1] = (uint8_t)detail;
+    ota_wr32(o + 2, e1);
+    ota_wr32(o + 6, prog);
+    ota_wr32(o + 10, e2);
+    ota_wr32(o + 14, bad);
+    return 18;
 }
 
 static uint8_t wt_msg[9 + 256 + 1], wt_wire[2 + (9 + 256 + 1) * 8 / 7 + 2];
@@ -173,8 +256,15 @@ static void wt_handle(const uint8_t *r)         /* r: a checked request, r[3] cm
             return;
         }
         wt_reply(cmd, WT_OK, seq, out, cnt);
+    } else if (cmd == WT_CMD_SELFTEST) {         /* no payload; the reply comes after about 0.2 s */
+        if (len != 0u) {
+            wt_reply(cmd, WT_E_ARGS, seq, out, 0);
+            return;
+        }
+        n = wt_selftest(out);
+        wt_reply(cmd, WT_OK, seq, out, n);
     } else if ((cmd >= WT_CMD_BEGIN && cmd <= WT_CMD_ERASE) || cmd == WT_CMD_AUDITION) {
-        wt_reply(cmd, WT_E_BUSY, seq, out, 0);   /* stage 0: read-only firmware */
+        wt_reply(cmd, WT_E_BUSY, seq, out, 0);   /* no slot writes before stage 2 */
     } else {
         wt_reply(cmd, WT_E_ARGS, seq, out, 0);
     }

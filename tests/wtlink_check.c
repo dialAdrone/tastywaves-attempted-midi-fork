@@ -39,6 +39,36 @@ static int ota_fread(uint32_t off, void *p, uint32_t n) { return st_read(off, p,
 static void ota_show(uint32_t s, int32_t c) { (void)s; (void)c; }
 static void ota_commit(const uint8_t *p) { (void)p; }
 #include "../firmware/src/ota.c"
+/* the flash writer, as a NOR part: erase sets 0xFF, program only clears bits. Every call is logged; wt_oob counts any
+ * outside 0xDF000..0xDFFFF (platform.c FL_RANGE_OK allows exactly that much for this file). fault injects failures. */
+#define WT_TEST_AT 0x000DF000u
+#define FM1_TICKS_PER_US 24u
+static struct { uint32_t notes; } fm1_in;
+static int quiet_now = 1, fault;
+static int quiet(void) { return quiet_now; }
+static uint32_t ticks;
+static uint32_t fm1_ticks(void) { ticks += 24u * 50u; return ticks; }
+static uint32_t wt_oob, wt_erases, wt_progs;
+static int fl_erase4k(uint32_t off, uint32_t *took)
+{
+    if (off < 0xDF000u || off + 0x1000u > 0xE0000u || (off & 0xFFFu)) wt_oob++;
+    wt_erases++;
+    if (fault == 1) return -3;
+    memset(flash + off, 0xFF, 0x1000);
+    if (fault == 4) flash[off + 77] = 0xFE;                       /* a bit that will not erase */
+    *took = 41000u;
+    return 0;
+}
+static int fl_write(uint32_t off, const uint8_t *s, uint32_t n)
+{
+    uint32_t i;
+    if (off < 0xDF000u || off + n > 0xE0000u) wt_oob++;
+    if (fault == 2 && off == 0xDF000u + 3u * 256u) return -3;
+    wt_progs++;
+    for (i = 0; i < n; i++) flash[off + i] &= s[i];
+    if (fault == 3 && off == 0xDF000u + 5u * 256u) flash[off + 9] ^= 0x10;   /* a bit that did not take */
+    return 0;
+}
 #include "../firmware/src/wtlink.h"
 
 static void send(const uint8_t *msg, uint32_t n)       /* decoded message -> pending SysEx frame */
@@ -195,6 +225,41 @@ static int check_main(void)
       m[5] = 3; m[7] = 0xFE; send(m, 8); wt_service(); CHECK(in_taken && out_n == 0);       /* length does not match */
       send(m, 5); wt_service(); CHECK(in_taken && out_n == 0); }
 
+    /* SELFTEST (stage 1) */
+    {
+        uint8_t o[32]; uint32_t t;
+        #define RUN() do { out_n = 0; request(WT_CMD_SELFTEST, 60, 0, 0); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 18); memcpy(o, rep + 8, 18); } while (0)
+        RUN();
+        CHECK(o[0] == 0 && o[1] == 0 && ota_rd32(o + 2) == 41000u && ota_rd32(o + 14) == 0);
+        CHECK(wt_erases == 2 && wt_progs == 16 && wt_oob == 0);
+        for (t = 0; t < 0x1000; t++) if (flash[0xDF000 + t] != 0xFF) break;
+        CHECK(t == 0x1000);                                           /* left erased */
+        CHECK(ota_rd32(o + 6) > 0 && ota_rd32(o + 10) == 41000u);
+        for (fault = 1; fault <= 4; fault++) {
+            wt_erases = wt_progs = 0; RUN();
+            CHECK(o[0] == (fault == 1 ? 3 : fault == 2 ? 4 : fault == 3 ? 5 : 3));
+            CHECK(fault != 4 ? 1 : ota_rd32(o + 14) == 1);
+            CHECK(fault == 1 ? o[1] == (uint8_t)-3 && wt_progs == 0 : 1);   /* no program after a failed erase */
+            CHECK(fault == 2 ? o[1] == (uint8_t)-3 && wt_progs == 3 : 1);   /* stops at the failed page */
+            CHECK(wt_oob == 0);
+        }
+        fault = 0;
+        quiet_now = 0; wt_erases = 0; RUN(); CHECK(o[0] == 7 && wt_erases == 0); quiet_now = 1;      /* sound: refused */
+        fm1_in.notes = 4; RUN(); CHECK(o[0] == 7 && wt_erases == 0); fm1_in.notes = 0;               /* key down: refused */
+        flash_ok = 0; RUN(); CHECK(o[0] == 7 && wt_erases == 0); flash_ok = 1;
+        out_n = 0; request(WT_CMD_SELFTEST, 61, a, 2); wt_service(); CHECK(reply(&rc, &seq) && rc == WT_E_ARGS);
+        /* the writer itself: only the spare sector, aligned, inside */
+        wt_erases = wt_progs = 0;
+        CHECK(wt_flash_erase(0xFC000u, &t) == -8 && wt_flash_erase(0xE0000u, &t) == -8 && wt_flash_erase(0xDE000u, &t) == -8);
+        CHECK(wt_flash_erase(0xDF800u, &t) == -8 && wt_flash_erase(0x97000u, &t) == -8 && wt_flash_erase(0xFFFFF000u, &t) == -8);
+        CHECK(wt_flash_prog(0xDFF80u, wt_page, 256) == -8 && wt_flash_prog(0xDF000u, wt_page, 0) == -8);
+        CHECK(wt_flash_prog(0xE0000u, wt_page, 16) == -8 && wt_flash_prog(0xDEFF0u, wt_page, 32) == -8);
+        CHECK(wt_flash_prog(0xFFFFFFF0u, wt_page, 32) == -8 && wt_flash_prog(0xDF000u, wt_page, 257) == -8);
+        CHECK(wt_erases == 0 && wt_progs == 0 && wt_oob == 0);
+        CHECK(wt_flash_prog(0xDFF00u, wt_page, 256) == 0 && wt_flash_erase(0xDF000u, &t) == 0);
+        wt_erases = wt_progs = 0;
+    }
+
     /* no flash: DIR / READ say so */
     flash_ok = 0;
     a[0] = 0; a[1] = 1; out_n = 0; request(WT_CMD_DIR, 50, a, 2); wt_service();
@@ -217,7 +282,7 @@ static int check_main(void)
             for (j = 0; j < WT_SLOTS; j++) CHECK(!wt_dir[j].valid);
         }
     }
-    CHECK(flash_writes == 0);
+    CHECK(flash_writes == 0 && wt_oob == 0);
     printf("wtlink: %d checks, %d FAIL\n", n_ok, n_fail);
     return n_fail != 0;
 }

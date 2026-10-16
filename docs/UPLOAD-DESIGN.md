@@ -69,6 +69,7 @@ platform), the tool retries a timed-out request unchanged (4 tries, 1.5 s).
 | 7 ERASE | slot | erases the header sector only |
 | 8 READ | slot, offset, <= 256 | returns the stored bytes (backup / audit) |
 | 9 AUDITION | slot, osc | selects the table in oscillator 1 or 2 (optional) |
+| 10 SELFTEST | | stage 1 only: refused unless keys up and quiet; erase `0xDF000`, check 0xFF, program 16 pages of a pattern, read back, erase, check. Reply (always rc 0): result (0 pass, 3 erase, 4 program, 5 verify, 7 refused), driver code, erase time, program time, second erase time, wrong bytes (u32 each, microseconds) |
 
 rc: 0 ok, 1 bad args, 2 range/alignment, 3 erase failed, 4 program failed, 5 verify failed, 6 no BEGIN/timeout,
 7 busy/refused, 8 CRC mismatch, 9 no flash. Frame limit: 640 B on the wire (`sx_frame`).

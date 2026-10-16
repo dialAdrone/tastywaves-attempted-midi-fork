@@ -66,9 +66,11 @@ static volatile uint32_t fm1_ms;                /* milliseconds since power-on (
 #define FELUCCA_UART 0
 #include "usb.c"
 
-/* ---- flash: read anywhere; erase / program only the update's staging area and the settings sector */
+/* ---- flash: read anywhere; erase / program only the update's staging area, the settings sector and the self-test sector */
 #define SETTINGS_AT 0x000FC000u                 /* one 4 KiB sector of Felucca's globals area */
-#define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, SETTINGS_AT, SETTINGS_AT + 0x1000u))
+#define WT_TEST_AT 0x000DF000u                  /* the spare sector for the VW link self-test (wtlink.h, stage 1) */
+#define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, SETTINGS_AT, SETTINGS_AT + 0x1000u) || \
+                             FL_IN(off, n, WT_TEST_AT, WT_TEST_AT + 0x1000u))
 #include "fm1_flash.h"
 static uint8_t flash_ok;
 static int st_read(uint32_t off, void *dst, uint32_t n)
@@ -170,7 +172,7 @@ static int settings_save(const void *p, uint32_t n)   /* p in RAM, n <= 256 */
     return fl_write(SETTINGS_AT, (const uint8_t *)h, sizeof h);   /* the header last: a cut save stays invalid */
 }
 
-/* ---- user wavetable slots: stage 0 is read-only (docs/UPLOAD-DESIGN.md) */
+/* ---- user wavetable slots: stage 1: read-only plus a self-test of one spare sector (docs/UPLOAD-DESIGN.md) */
 #include "wtlink.h"
 
 /* ---- MIDI over USB: 4-byte USB-MIDI packets, cable 0 */

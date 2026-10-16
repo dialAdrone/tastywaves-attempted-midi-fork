@@ -5,6 +5,8 @@
     inspect INPUT...              what each file looks like and how it would be split (no output file)
     info [--port NAME]            the connected FM-1: firmware, and which of the 8 user slots hold a table
     get SLOT OUT.vwt [--port NAME]  copy a slot off the FM-1 into a file (backup; checked against its CRC)
+    selftest [--yes] [--port NAME]  erase, program and read back ONE spare flash sector (0xDF000) and time it; no table
+                                  or setting is touched (firmware stage 1; needs keys up and no sound)
 
 INPUT is a WAV or Surge .wt file or a folder of them (natural name order, 'a2' before 'a10'). Several inputs are
 joined in order: a file of single cycles from the Serum "Frames" collection becomes one frame, a wavetable file
@@ -14,8 +16,8 @@ several. --pick chooses source frames before the table is made: even (default), 
 The output is exactly what the firmware stores in one user slot (docs/UPLOAD-DESIGN.md sections 3 and 7): a 64-byte
 header (magic VWT1, version, fmt 0, frames 32, levels 6, name[8], data bytes, data CRC32, header CRC32, 0xFF pad)
 followed by 32 frames x 510 int16 (6 mip levels each) little endian = 32,640 bytes, made by the same band-limiter and
-quantiser as the factory tables (tools/gen_wavetables.py). `info` and `get` only read (firmware stage 0, VW link, see
-docs/UPLOAD-DESIGN.md section 4); `put` and `erase` come with the write stages of the firmware.
+quantiser as the factory tables (tools/gen_wavetables.py). `info` and `get` only read (VW link, see docs/UPLOAD-DESIGN.md section 4); `selftest` writes one spare
+sector; `put` and `erase` come with the slot write stages of the firmware.
 
 Input rules: mono or stereo (mixed to mono), PCM 8/16/24/32 or float 32/64 WAV, any sample rate (a frame is one
 cycle, the rate does not matter). The frame length comes from the format: Serum writes it in a `clm ` chunk
@@ -323,10 +325,13 @@ def cmd_build(a):
 import fm1_install as fi  # noqa: E402  (pack7, the MIDI backend and the port search of the installer)
 
 SLOTS, SLOT_SIZE, DATA_AT = 8, 0x9000, 0x1000
-CMD_HELLO, CMD_DIR, CMD_READ = 1, 2, 8
+CMD_HELLO, CMD_DIR, CMD_READ, CMD_SELFTEST = 1, 2, 8, 10
 RC_TEXT = {1: 'bad arguments', 2: 'range or alignment', 3: 'erase failed', 4: 'program failed', 5: 'verify failed',
            6: 'no BEGIN or timeout', 7: 'refused (this firmware stage cannot do that)', 8: 'CRC mismatch',
            9: 'no flash'}
+
+
+STAGES = {0: 'read only', 1: 'read only + spare-sector self-test'}
 
 
 class LinkError(Exception):
@@ -355,15 +360,15 @@ class VwLink:
     def __init__(self, link, tries=4, timeout=1.5):
         self.link, self.tries, self.timeout, self.seq = link, tries, timeout, 0
 
-    def request(self, cmd, payload=b''):
+    def request(self, cmd, payload=b'', timeout=None, tries=None):
         """send, wait for the matching reply (the same request is repeated if none comes); -> payload, raises LinkError"""
         self.seq = self.seq % 255 + 1
         pkt = vw_frame(cmd, self.seq, payload)
-        for _ in range(self.tries):
+        for _ in range(tries or self.tries):
             self.link.drain()
             if not self.link.send(pkt):
                 raise LinkError('could not send to the FM-1 (unplugged?)')
-            end = time.monotonic() + self.timeout
+            end = time.monotonic() + (timeout or self.timeout)
             while (left := end - time.monotonic()) > 0:
                 r = vw_parse(self.link.read(left) or b'')
                 if r and r[0] == cmd and r[2] == self.seq:
@@ -422,7 +427,7 @@ def cmd_info(a, backend=None):
     try:
         h = vw.hello()
         print(f'{h["id"]}  port {dev.name}  VW link v{h["proto"]}, firmware stage {h["stage"]} '
-              f'({"read only" if h["stage"] == 0 else "can write"}), {h["slots"]} slots')
+              f'({STAGES.get(h["stage"], "?")}), {h["slots"]} slots')
         for e in vw.directory(0, h['slots']):
             if e['valid']:
                 print(f'  slot {e["slot"]}: {e["name"]!r}  {e["frames"]} frames, {e["levels"]} levels, data crc32 {e["crc"]:08x}')
@@ -431,6 +436,33 @@ def cmd_info(a, backend=None):
     finally:
         dev.link.close()
     return 0
+
+
+SELFTEST_RESULT = {0: 'PASS', 3: 'FAIL: erase', 4: 'FAIL: program', 5: 'FAIL: read-back did not match',
+                   7: 'REFUSED: release all keys, let sound die away, and try again'}
+
+
+def cmd_selftest(a, backend=None, ask=input):
+    vw, dev = connect(a, backend)
+    try:
+        h = vw.hello()
+        if h['stage'] < 1:
+            raise LinkError('this firmware has no self-test (stage 0)')
+        if not a.yes and ask('Erases, programs and reads back one spare flash sector (0xDF000..0xDFFFF) of the FM-1; '
+                             'no table, patch or setting is touched. Keys up and no sound. Continue? [y/N] ').strip().lower() not in ('y', 'yes'):
+            print('cancelled')
+            return 1
+        d = vw.request(CMD_SELFTEST, timeout=5.0, tries=1)      # never repeated: a lost reply must not rerun it
+    finally:
+        dev.link.close()
+    if len(d) != 18:
+        raise LinkError('unexpected SELFTEST reply')
+    res, detail = d[0], d[1] - 256 if d[1] > 127 else d[1]
+    e1, prog, e2, bad = (int.from_bytes(d[i:i + 4], 'little') for i in (2, 6, 10, 14))
+    print(f'self-test: {SELFTEST_RESULT.get(res, "result %d" % res)}' + (f' (driver code {detail})' if detail else ''))
+    print(f'  sector erase {e1 / 1000:.1f} ms, then {e2 / 1000:.1f} ms; programming 16 pages of 256 B {prog / 1000:.1f} ms '
+          f'({prog / 16000:.2f} ms per page); bytes wrong after the last check: {bad}')
+    return 0 if res == 0 else 1
 
 
 def cmd_get(a, backend=None):
@@ -453,8 +485,10 @@ def cmd_get(a, backend=None):
 def main(argv=None, backend=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
-    for name in ('info', 'get'):
+    for name in ('info', 'get', 'selftest'):
         p = sub.add_parser(name)
+        if name == 'selftest':
+            p.add_argument('--yes', action='store_true', help='do not ask')
         if name == 'get':
             p.add_argument('slot', type=int)
             p.add_argument('out')
@@ -470,8 +504,8 @@ def main(argv=None, backend=None):
         p.add_argument('--format', choices=FORMATS, default='auto')
     a = ap.parse_args(argv)
     try:
-        if a.cmd in ('info', 'get'):
-            return {'info': cmd_info, 'get': cmd_get}[a.cmd](a, backend)
+        if a.cmd in ('info', 'get', 'selftest'):
+            return {'info': cmd_info, 'get': cmd_get, 'selftest': cmd_selftest}[a.cmd](a, backend)
         return {'inspect': cmd_inspect, 'build': cmd_build}[a.cmd](a)
     except (WavError, LinkError, OSError) as e:
         print(f'error: {e}', file=sys.stderr)
