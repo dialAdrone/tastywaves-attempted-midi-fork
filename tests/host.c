@@ -40,6 +40,7 @@ static uint32_t fm1_ticks(void)
 }
 
 static volatile uint32_t fm1_ms;
+static uint32_t wt_ui_poll(void) { return 0; }   /* the upload screen (wtlink.h) exists only on the device */
 static struct { uint32_t notes, buttons, frames; uint8_t raw[11]; } fm1_in;   /* frames / raw: what the boot scan saw (fake here) */
 static uint32_t host_edges, host_note_edges;
 static int32_t host_enc[7];

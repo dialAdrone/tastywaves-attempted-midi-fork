@@ -5,6 +5,8 @@
     inspect INPUT...              what each file looks like and how it would be split (no output file)
     info [--port NAME]            the connected FM-1: firmware, and which of the 8 user slots hold a table
     get SLOT OUT.vwt [--port NAME]  copy a slot off the FM-1 into a file (backup; checked against its CRC)
+    put SLOT FILE.vwt [--yes] [--port NAME]  write a table file into a slot (asks first; read back and checked)
+    erase SLOT [--yes] [--port NAME]  empty a slot (its header only; `put` over it replaces it in place)
     selftest [--yes] [--port NAME]  erase, program and read back ONE spare flash sector (0xDF000) and time it; no table
                                   or setting is touched (firmware stage 1; needs keys up and no sound)
 
@@ -17,7 +19,8 @@ The output is exactly what the firmware stores in one user slot (docs/UPLOAD-DES
 header (magic VWT1, version, fmt 0, frames 32, levels 6, name[8], data bytes, data CRC32, header CRC32, 0xFF pad)
 followed by 32 frames x 510 int16 (6 mip levels each) little endian = 32,640 bytes, made by the same band-limiter and
 quantiser as the factory tables (tools/gen_wavetables.py). `info` and `get` only read (VW link, see docs/UPLOAD-DESIGN.md section 4); `selftest` writes one spare
-sector; `put` and `erase` come with the slot write stages of the firmware.
+sector; `put` and `erase` write a slot (firmware stage 2: slot 0 only, stage 3: slots 0..7). Back a slot up first with
+`get` if you may want it again: `put` replaces in place.
 
 Input rules: mono or stereo (mixed to mono), PCM 8/16/24/32 or float 32/64 WAV, any sample rate (a frame is one
 cycle, the rate does not matter). The frame length comes from the format: Serum writes it in a `clm ` chunk
@@ -325,13 +328,13 @@ def cmd_build(a):
 import fm1_install as fi  # noqa: E402  (pack7, the MIDI backend and the port search of the installer)
 
 SLOTS, SLOT_SIZE, DATA_AT = 8, 0x9000, 0x1000
-CMD_HELLO, CMD_DIR, CMD_READ, CMD_SELFTEST = 1, 2, 8, 10
+CMD_HELLO, CMD_DIR, CMD_BEGIN, CMD_DATA, CMD_COMMIT, CMD_ABORT, CMD_ERASE, CMD_READ, CMD_SELFTEST = 1, 2, 3, 4, 5, 6, 7, 8, 10
 RC_TEXT = {1: 'bad arguments', 2: 'range or alignment', 3: 'erase failed', 4: 'program failed', 5: 'verify failed',
            6: 'no BEGIN or timeout', 7: 'refused (this firmware stage cannot do that)', 8: 'CRC mismatch',
            9: 'no flash'}
 
 
-STAGES = {0: 'read only', 1: 'read only + spare-sector self-test'}
+STAGES = {0: 'read only', 1: 'read only + spare-sector self-test', 2: 'can write slot 0', 3: 'can write slots 0..7'}
 
 
 class LinkError(Exception):
@@ -438,6 +441,89 @@ def cmd_info(a, backend=None):
     return 0
 
 
+def _abort(vw):
+    try:
+        vw.request(CMD_ABORT, tries=1)
+    except LinkError:
+        pass
+
+
+def cmd_put(a, backend=None, ask=input):
+    if not 0 <= a.slot < SLOTS:
+        raise LinkError(f'slot must be 0..{SLOTS - 1}')
+    try:
+        img = Path(a.file).read_bytes()
+        t = parse_image(img)
+    except ValueError as e:
+        raise LinkError(f'{a.file}: not a valid table file ({e}); make one with `build`')
+    vw, dev = connect(a, backend)
+    try:
+        h = vw.hello()
+        if h['stage'] < 2:
+            raise LinkError('this firmware cannot write slots yet (stage < 2)')
+        cur = vw.directory(a.slot, 1)[0]
+        what = (f'REPLACES {cur["name"]!r} (crc {cur["crc"]:08x}; save it first with `get {a.slot} FILE` if you may want it)'
+                if cur['valid'] else 'goes into the empty slot')
+        if not a.yes and ask(f'{t["name"]!r} (crc {t["crc"]:08x}) {what} in slot {a.slot}. Keys up, no sound. Do not unplug '
+                             f'the FM-1 while it runs (about 3 s). Continue? [y/N] ').strip().lower() not in ('y', 'yes'):
+            print('cancelled')
+            return 1
+        nm = clean_name(t['name']).encode('ascii').ljust(8, b'\0')
+        data = img[HEADER_LEN:]
+        vw.request(CMD_BEGIN, bytes([a.slot, 0, t['frames'], t['levels']]) + len(data).to_bytes(4, 'little')
+                   + t['crc'].to_bytes(4, 'little') + nm)
+        try:
+            n = (len(data) + 255) // 256
+            for i in range(n):
+                vw.request(CMD_DATA, bytes([a.slot]) + i.to_bytes(2, 'little') + data[i * 256:i * 256 + 256])
+                if i % 32 == 31:
+                    print(f'  {100 * (i + 1) // n}%')
+            try:
+                vw.request(CMD_COMMIT, bytes([a.slot]), timeout=10.0, tries=1)
+            except LinkError:                       # the reply may have been lost after a good commit: look
+                e = vw.directory(a.slot, 1)[0]
+                if not (e['valid'] and e['crc'] == t['crc']):
+                    raise
+        except BaseException:
+            _abort(vw)
+            raise
+        e = vw.directory(a.slot, 1)[0]
+        if not (e['valid'] and e['crc'] == t['crc']):
+            raise LinkError('the slot does not hold the table after COMMIT')
+        back = vw.read(a.slot, 0, HEADER_LEN) + vw.read(a.slot, DATA_AT, DATA_BYTES)
+        if back != img:
+            raise LinkError('read-back differs from the file (the slot was written but does not match: `put` again)')
+    finally:
+        dev.link.close()
+    print(f'slot {a.slot}: {t["name"]!r} written, read back and checked (data crc32 {t["crc"]:08x})')
+    return 0
+
+
+def cmd_erase(a, backend=None, ask=input):
+    if not 0 <= a.slot < SLOTS:
+        raise LinkError(f'slot must be 0..{SLOTS - 1}')
+    vw, dev = connect(a, backend)
+    try:
+        h = vw.hello()
+        if h['stage'] < 2:
+            raise LinkError('this firmware cannot write slots yet (stage < 2)')
+        cur = vw.directory(a.slot, 1)[0]
+        if not cur['valid']:
+            print(f'slot {a.slot} is already empty')
+            return 0
+        if not a.yes and ask(f'Empty slot {a.slot} ({cur["name"]!r}, crc {cur["crc"]:08x})? Save it first with `get` if you '
+                             f'may want it. [y/N] ').strip().lower() not in ('y', 'yes'):
+            print('cancelled')
+            return 1
+        vw.request(CMD_ERASE, bytes([a.slot]))
+        if vw.directory(a.slot, 1)[0]['valid']:
+            raise LinkError('the slot still reads as valid')
+    finally:
+        dev.link.close()
+    print(f'slot {a.slot} emptied')
+    return 0
+
+
 SELFTEST_RESULT = {0: 'PASS', 3: 'FAIL: erase', 4: 'FAIL: program', 5: 'FAIL: read-back did not match',
                    7: 'REFUSED: release all keys, let sound die away, and try again'}
 
@@ -485,10 +571,15 @@ def cmd_get(a, backend=None):
 def main(argv=None, backend=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
-    for name in ('info', 'get', 'selftest'):
+    for name in ('info', 'get', 'selftest', 'put', 'erase'):
         p = sub.add_parser(name)
-        if name == 'selftest':
+        if name in ('selftest', 'put', 'erase'):
             p.add_argument('--yes', action='store_true', help='do not ask')
+        if name == 'put':
+            p.add_argument('slot', type=int)
+            p.add_argument('file')
+        if name == 'erase':
+            p.add_argument('slot', type=int)
         if name == 'get':
             p.add_argument('slot', type=int)
             p.add_argument('out')
@@ -504,8 +595,8 @@ def main(argv=None, backend=None):
         p.add_argument('--format', choices=FORMATS, default='auto')
     a = ap.parse_args(argv)
     try:
-        if a.cmd in ('info', 'get', 'selftest'):
-            return {'info': cmd_info, 'get': cmd_get, 'selftest': cmd_selftest}[a.cmd](a, backend)
+        if a.cmd in ('info', 'get', 'selftest', 'put', 'erase'):
+            return {'info': cmd_info, 'get': cmd_get, 'selftest': cmd_selftest, 'put': cmd_put, 'erase': cmd_erase}[a.cmd](a, backend)
         return {'inspect': cmd_inspect, 'build': cmd_build}[a.cmd](a)
     except (WavError, LinkError, OSError) as e:
         print(f'error: {e}', file=sys.stderr)

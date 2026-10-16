@@ -162,6 +162,19 @@ static void app_main(void)
         uint8_t st, d1, d2;
         platform_poll();
 
+        {
+            uint32_t w = wt_ui_poll();          /* a table upload (wtlink.h) owns the screen */
+            if (w == 1u) {                      /* keys, knobs, buttons and MIDI are ignored until it ends */
+                uint8_t s0, d0, d1x;
+                (void)fm1_input_edges(&rel);
+                for (k = 0; k < 7u; k++) (void)fm1_enc_take(k);
+                while (midi_get(&s0, &d0, &d1x)) ;
+                prev = fm1_in.notes;
+                continue;
+            }
+            if (w == 2u) memset(&pn_shadow, 0, sizeof pn_shadow);     /* the next ui_draw repaints everything */
+        }
+
         hb = fm1_in.buttons;                    /* held now */
         edit_held = hb >> BTN_EDIT & 1u;
         b = fm1_input_edges(&rel);              /* pressed since the last pass */

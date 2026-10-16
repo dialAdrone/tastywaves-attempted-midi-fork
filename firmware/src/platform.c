@@ -66,11 +66,14 @@ static volatile uint32_t fm1_ms;                /* milliseconds since power-on (
 #define FELUCCA_UART 0
 #include "usb.c"
 
-/* ---- flash: read anywhere; erase / program only the update's staging area, the settings sector and the self-test sector */
+/* ---- flash: read anywhere; erase / program only the update's staging area, the settings sector, the self-test sector
+ * and the user slots the VW link may write (wtlink.h) */
 #define SETTINGS_AT 0x000FC000u                 /* one 4 KiB sector of Felucca's globals area */
 #define WT_TEST_AT 0x000DF000u                  /* the spare sector for the VW link self-test (wtlink.h, stage 1) */
+#define WT_W_LO 0x00097000u                     /* user slots the VW link may write: stage 2 = slot 0 only (9 sectors); */
+#define WT_W_HI 0x000A0000u                     /* stage 3 widens this to 0xDF000 (8 slots), nothing beyond */
 #define FL_RANGE_OK(off, n) (FL_IN(off, n, FL_OTA_LO, FL_OTA_HI) || FL_IN(off, n, SETTINGS_AT, SETTINGS_AT + 0x1000u) || \
-                             FL_IN(off, n, WT_TEST_AT, WT_TEST_AT + 0x1000u))
+                             FL_IN(off, n, WT_TEST_AT, WT_TEST_AT + 0x1000u) || FL_IN(off, n, WT_W_LO, WT_W_HI))
 #include "fm1_flash.h"
 static uint8_t flash_ok;
 static int st_read(uint32_t off, void *dst, uint32_t n)

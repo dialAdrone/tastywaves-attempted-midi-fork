@@ -1,12 +1,16 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* User wavetable slots, "VW link" v1 (docs/UPLOAD-DESIGN.md). STAGE 1: read-only plus a self-test of one spare sector.
+/* User wavetable slots, "VW link" v1 (docs/UPLOAD-DESIGN.md). STAGE 2: uploads into slot 0 (BEGIN / DATA / COMMIT / ABORT / ERASE), SELFTEST of one spare sector.
  *
  * What this file does: finds out which of the 8 slots hold a valid header (a RAM directory, made once on the first
  * main-loop pass) and answers HELLO, DIR and READ from the computer. The engine does not use the slots yet.
- * Commands that would write a slot (BEGIN, DATA, COMMIT, ABORT, ERASE) are answered "refused" (rc 7).
- * Stage 1 adds SELFTEST (cmd 10): wt_flash_erase / wt_flash_prog, the ONLY calls to the flash writer in this file, are
- * limited to the spare sector WT_TEST_AT (0xDF000..0xDFFFF) by their own check and again by FL_RANGE_OK (platform.c).
- * Later stages widen the window in wt_flash_ok() to the slot region and nowhere else.
+ * Stage 1 added SELFTEST (cmd 10). Stage 2 adds the upload: BEGIN erases the slot's header sector (the slot reads as
+ * empty from then on), DATA writes 256 B chunks in order (a sector is erased when its first chunk arrives, every chunk
+ * is read back and compared), COMMIT checks the CRC32 of everything stored and writes the header LAST. A power cut,
+ * cable pull, timeout (15 s without a request) or any error therefore leaves an empty slot, never a half table.
+ * wt_flash_erase / wt_flash_prog are the ONLY calls to the flash writer in this file. They are limited to the spare
+ * sector WT_TEST_AT and the writable slots (slot 0 at stage 2: WT_W_LO..WT_W_HI) by their own check and again by
+ * FL_RANGE_OK (platform.c). A later stage widens the window to the slot region and nowhere else.
+ * The app's loop calls wt_ui_poll(): while an upload runs it owns the screen and the app ignores keys, knobs, MIDI.
  *
  * Wire (SysEx on the USB-MIDI port, 7D = the non-commercial manufacturer id):
  *   request  F0 pack7( 7D 56 57 cmd seq len_lo len_hi payload[len] sum ) F7
@@ -21,7 +25,7 @@
 #define WT_SLOT_SIZE 0x9000u                     /* 1 header sector + 8 data sectors */
 #define WT_HDR_LEN 64u
 #define WT_FRAME_BYTES 1020u                     /* fmt 0: one frame = 510 samples (6 mip levels) x 2 bytes */
-#define WT_STAGE 1u                              /* 0 read-only, 1 test sector, 2.. writer (docs/UPLOAD-DESIGN.md 8.2) */
+#define WT_STAGE 2u                              /* 0 read-only, 1 test sector, 2.. writer (docs/UPLOAD-DESIGN.md 8.2) */
 
 enum { WT_CMD_HELLO = 1, WT_CMD_DIR = 2, WT_CMD_BEGIN = 3, WT_CMD_DATA = 4, WT_CMD_COMMIT = 5, WT_CMD_ABORT = 6,
        WT_CMD_ERASE = 7, WT_CMD_READ = 8, WT_CMD_AUDITION = 9, WT_CMD_SELFTEST = 10 };
@@ -100,11 +104,14 @@ static void wt_scan(void)
 
 static int quiet(void);                          /* the app: nothing sounds (engine.h) */
 
-/* ---- the one flash writer. Stage 1 window: the spare sector only. */
+/* ---- the one flash writer. Window: the spare sector and the writable slots (WT_WRITABLE slots from slot 0). */
 #define WT_TEST_LEN 0x1000u
+#define WT_WRITABLE 1u                           /* slots 0 .. WT_WRITABLE - 1 may be written (stage 2: slot 0) */
+typedef char wt_window_matches[(WT_W_HI - WT_W_LO == WT_WRITABLE * WT_SLOT_SIZE && WT_W_LO == WT_BASE) ? 1 : -1];
 static int wt_flash_ok(uint32_t off, uint32_t n)
 {
-    return off >= WT_TEST_AT && off <= WT_TEST_AT + WT_TEST_LEN && n <= WT_TEST_AT + WT_TEST_LEN - off;
+    return (off >= WT_TEST_AT && off <= WT_TEST_AT + WT_TEST_LEN && n <= WT_TEST_AT + WT_TEST_LEN - off) ||
+           (off >= WT_W_LO && off <= WT_W_HI && n <= WT_W_HI - off);
 }
 static int wt_flash_erase(uint32_t off, uint32_t *us)       /* one 4 KiB sector, 0 = ok; *us = how long it took */
 {
@@ -177,6 +184,240 @@ static uint32_t wt_selftest(uint8_t *o)         /* -> payload length (18) */
     ota_wr32(o + 10, e2);
     ota_wr32(o + 14, bad);
     return 18;
+}
+
+/* ---- stage 2: the upload session (one at a time) ---- */
+#define WT_SESSION_MS 15000u                     /* no request for this long: the upload is dropped, the slot stays empty */
+#define WT_SHOW_MS 1500u
+enum { WT_R_NONE = 0, WT_R_OK = 1, WT_R_ABORT = 10 };   /* wt.result otherwise: the rc (3 erase, 4 program, 5 verify, 6 timeout, 8 CRC) */
+static struct {
+    uint8_t busy, slot, frames, result, shown_pct, redraw;
+    uint32_t bytes, crc, next, t_last, show_until, t_draw;
+    char name[9];
+} wt;
+
+static uint32_t wt_crc_upd(uint32_t c, const uint8_t *p, uint32_t n)   /* c starts at 0xFFFFFFFF; the CRC is ~c (as crc32()) */
+{
+    uint32_t k;
+    while (n--) {
+        c ^= *p++;
+        for (k = 0; k < 8u; k++)
+            c = c & 1u ? (c >> 1) ^ 0xEDB88320u : c >> 1;
+    }
+    return c;
+}
+static uint32_t wt_chunks(void) { return (wt.bytes + 255u) / 256u; }
+static void wt_end(uint32_t result)             /* the upload is over, ok or not: the screen shows it for 1.5 s */
+{
+    wt.busy = 0;
+    wt.result = (uint8_t)result;
+    wt.show_until = fm1_ms + WT_SHOW_MS;
+    wt.redraw = 1;
+}
+static int wt_same(uint32_t off, const uint8_t *ref, uint32_t n)   /* flash == ref (RAM)? 1 yes */
+{
+    uint8_t b[64];
+    uint32_t i, k;
+    for (k = 0; k < n; k += 64u) {
+        uint32_t m = n - k > 64u ? 64u : n - k;
+        if (wt_read(off + k, b, m))
+            return 0;
+        for (i = 0; i < m; i++)
+            if (b[i] != ref[k + i])
+                return 0;
+    }
+    return 1;
+}
+static uint32_t wt_may_write(uint32_t slot)     /* a slot the writer may touch right now */
+{
+    return slot < WT_WRITABLE && flash_ok && quiet() && !fm1_in.notes;
+}
+
+/* BEGIN: slot, fmt, frames, levels, u32 bytes, u32 crc32, name[8]. The header sector is erased first: the slot is empty. */
+static uint32_t wt_begin(const uint8_t *a, uint32_t len)
+{
+    uint32_t i, us, bytes;
+    if (len != 20u || a[0] >= WT_SLOTS)
+        return WT_E_ARGS;
+    if (a[1] != 0u || a[2] < 1u || a[2] > 32u || a[3] != 6u)
+        return WT_E_ARGS;
+    bytes = ota_rd32(a + 4);
+    if (bytes != (uint32_t)a[2] * WT_FRAME_BYTES)
+        return WT_E_ARGS;
+    if (!wt_may_write(a[0]))
+        return WT_E_BUSY;
+    wt.busy = 0;                                 /* a BEGIN over a running upload starts again */
+    wt_dir[a[0]].valid = 0;
+    if (wt_flash_erase(wt_slot_at(a[0]), &us)) {
+        wt_end(3);
+        return 3;
+    }
+    wt.slot = a[0];
+    wt.frames = a[2];
+    wt.bytes = bytes;
+    wt.crc = ota_rd32(a + 8);
+    wt.next = 0;
+    for (i = 0; i < 8u; i++)
+        wt.name[i] = a[12 + i] == 0u ? 0 : a[12 + i] >= 0x20u && a[12 + i] < 0x7Fu ? (char)a[12 + i] : '?';
+    wt.name[8] = 0;
+    wt.t_last = fm1_ms;
+    wt.shown_pct = 255;
+    wt.result = WT_R_NONE;
+    wt.show_until = 0;
+    wt.redraw = 1;
+    wt.busy = 1;
+    return WT_OK;
+}
+
+/* DATA: slot, u16 chunk index, data (256 B; the last chunk the rest). In order; the previous chunk again (a lost reply)
+ * is only compared. A sector is erased when its first chunk arrives; every chunk is read back. */
+static uint32_t wt_data(const uint8_t *a, uint32_t len, uint32_t *next)
+{
+    uint32_t idx, n, off, at, us, nch;
+    if (!wt.busy || len < 4u || a[0] != wt.slot)
+        return 6;
+    idx = ota_rd16(a + 1);
+    n = len - 3u;
+    nch = wt_chunks();
+    if (idx >= nch)
+        return WT_E_RANGE;
+    off = idx * 256u;
+    if (n != (idx + 1u == nch ? wt.bytes - off : 256u))
+        return WT_E_ARGS;
+    at = wt_slot_at(wt.slot) + 0x1000u + off;
+    if (idx + 1u == wt.next) {                   /* the one before: a retry */
+        if (!wt_same(at, a + 3, n)) {
+            wt_end(5);
+            return 5;
+        }
+    } else if (idx != wt.next)
+        return WT_E_RANGE;                       /* out of order: the upload stays open, the 15 s keep running */
+    else {
+        if (!(off & 0xFFFu) && wt_flash_erase(at, &us)) {
+            wt_end(3);
+            return 3;
+        }
+        if (wt_flash_prog(at, a + 3, n)) {
+            wt_end(4);
+            return 4;
+        }
+        if (!wt_same(at, a + 3, n)) {
+            wt_end(5);
+            return 5;
+        }
+        wt.next = idx + 1u;
+    }
+    wt.t_last = fm1_ms;                          /* only a chunk that was taken (or the benign retry) keeps the upload alive */
+    *next = wt.next;
+    return WT_OK;
+}
+
+/* COMMIT: slot. The CRC32 of what is stored must be BEGIN's; then the header is written, last, and read back. */
+static uint32_t wt_commit(const uint8_t *a, uint32_t len, uint32_t *crc)
+{
+    uint8_t h[WT_HDR_LEN], r[WT_HDR_LEN], b[64];
+    uint32_t k, c = 0xFFFFFFFFu, i;
+    wt_ent_t e;
+    if (!wt.busy || len != 1u || a[0] != wt.slot || wt.next != wt_chunks())
+        return 6;
+    for (k = 0; k < wt.bytes; k += 64u) {
+        uint32_t m = wt.bytes - k > 64u ? 64u : wt.bytes - k;
+        if (wt_read(wt_slot_at(wt.slot) + 0x1000u + k, b, m)) {
+            wt_end(5);
+            return 5;
+        }
+        c = wt_crc_upd(c, b, m);
+        fm1_wdt_feed();
+    }
+    c = ~c;
+    if (c != wt.crc) {
+        wt_end(8);
+        return 8;
+    }
+    for (i = 0; i < WT_HDR_LEN; i++)
+        h[i] = 0xFF;
+    h[0] = 'V'; h[1] = 'W'; h[2] = 'T'; h[3] = '1';
+    ota_wr16(h + 4, 1u);
+    h[6] = 0; h[7] = wt.frames; h[8] = 6; h[9] = 0;
+    for (i = 0; i < 8u; i++)
+        h[10 + i] = (uint8_t)wt.name[i];
+    ota_wr32(h + 18, wt.bytes);
+    ota_wr32(h + 22, c);
+    ota_wr32(h + 26, crc32(h, 26));
+    if (wt_flash_prog(wt_slot_at(wt.slot), h, WT_HDR_LEN)) {
+        wt_end(4);
+        return 4;
+    }
+    if (wt_read(wt_slot_at(wt.slot), r, WT_HDR_LEN) || !wt_same(wt_slot_at(wt.slot), h, WT_HDR_LEN)) {
+        wt_end(5);
+        return 5;
+    }
+    wt_parse(r, &e);
+    if (!e.valid) {
+        wt_end(5);
+        return 5;
+    }
+    wt_dir[wt.slot] = e;
+    *crc = c;
+    wt_end(WT_R_OK);
+    return WT_OK;
+}
+
+/* the upload screen; the app calls this every pass. 1: the upload owns the display (the app ignores everything else),
+ * 2: it just ended (the app redraws its own screen), 0: not involved */
+static void wt_u2s(char *o, uint32_t v)
+{
+    char t[11];
+    uint32_t n = 0, i = 0;
+    do { t[n++] = (char)('0' + v % 10u); v /= 10u; } while (v && n < 10u);
+    while (n) o[i++] = t[--n];
+    o[i] = 0;
+}
+static uint32_t wt_ui_poll(void)
+{
+    char b[16];
+    if (wt.busy) {
+        uint32_t pct = wt.next * 25600u / wt.bytes;
+        if (pct > 100u) pct = 100u;
+        if (wt.redraw) {
+            wt.redraw = 0;
+            lcd_fill(0, 0, 240, 240, C_BLACK);
+            draw_text_box(0, 40, 240, &FONT_S, "UPLOADING", C_WHITE, 1);
+            draw_text_box(0, 80, 240, &FONT_L, wt.name, C_WHITE, 1);
+            draw_text_box(0, 200, 240, &FONT_S, "DO NOT POWER OFF", C_WHITE, 1);
+        }
+        if (pct != wt.shown_pct && (wt.shown_pct == 255u || fm1_ms - wt.t_draw >= 80u)) {
+            wt.shown_pct = (uint8_t)pct;
+            wt.t_draw = fm1_ms;
+            wt_u2s(b, pct);
+            b[pct < 10u ? 1 : pct < 100u ? 2 : 3] = ' ';
+            b[pct < 10u ? 2 : pct < 100u ? 3 : 4] = '%';
+            b[pct < 10u ? 3 : pct < 100u ? 4 : 5] = 0;
+            draw_text_box(0, 130, 240, &FONT_L, b, C_WHITE, 1);
+        }
+        return 1;
+    }
+    if (wt.show_until) {
+        if (wt.redraw) {
+            const char *l1 = wt.result == WT_R_OK ? "TABLE SAVED" : wt.result == 6u ? "TIMED OUT" :
+                             wt.result == WT_R_ABORT ? "ABORTED" : "UPLOAD FAILED";
+            wt.redraw = 0;
+            lcd_fill(0, 0, 240, 240, C_BLACK);
+            draw_text_box(0, 70, 240, &FONT_L, l1, C_WHITE, 1);
+            draw_text_box(0, 120, 240, &FONT_S, wt.name, C_WHITE, 1);
+            if (wt.result != WT_R_OK && wt.result != WT_R_ABORT && wt.result != 6u) {
+                b[0] = 'C'; b[1] = 'O'; b[2] = 'D'; b[3] = 'E'; b[4] = ' ';
+                wt_u2s(b + 5, wt.result);
+                draw_text_box(0, 150, 240, &FONT_S, b, C_WHITE, 1);
+            }
+        }
+        if ((int32_t)(fm1_ms - wt.show_until) < 0)
+            return 1;
+        wt.show_until = 0;
+        wt.result = WT_R_NONE;
+        return 2;
+    }
+    return 0;
 }
 
 static uint8_t wt_msg[9 + 256 + 1], wt_wire[2 + (9 + 256 + 1) * 8 / 7 + 2];
@@ -261,10 +502,40 @@ static void wt_handle(const uint8_t *r)         /* r: a checked request, r[3] cm
             wt_reply(cmd, WT_E_ARGS, seq, out, 0);
             return;
         }
+        if (wt.busy) {                           /* not in the middle of an upload */
+            wt_reply(cmd, WT_E_BUSY, seq, out, 0);
+            return;
+        }
         n = wt_selftest(out);
         wt_reply(cmd, WT_OK, seq, out, n);
-    } else if ((cmd >= WT_CMD_BEGIN && cmd <= WT_CMD_ERASE) || cmd == WT_CMD_AUDITION) {
-        wt_reply(cmd, WT_E_BUSY, seq, out, 0);   /* no slot writes before stage 2 */
+    } else if (cmd == WT_CMD_BEGIN) {
+        wt_reply(cmd, wt_begin(a, len), seq, out, 0);
+    } else if (cmd == WT_CMD_DATA) {
+        uint32_t nx = 0, rc = wt_data(a, len, &nx);
+        ota_wr16(out, nx);                       /* the next chunk the firmware wants */
+        wt_reply(cmd, rc, seq, out, rc ? 0u : 2u);
+    } else if (cmd == WT_CMD_COMMIT) {
+        uint32_t crc = 0, rc = wt_commit(a, len, &crc);
+        ota_wr32(out, crc);
+        wt_reply(cmd, rc, seq, out, rc ? 0u : 4u);
+    } else if (cmd == WT_CMD_ABORT) {            /* the slot stays empty (BEGIN erased its header) */
+        if (wt.busy)
+            wt_end(WT_R_ABORT);
+        wt_reply(cmd, WT_OK, seq, out, 0);
+    } else if (cmd == WT_CMD_ERASE) {            /* slot: erase the header sector only; the slot is empty */
+        uint32_t us = 0, rc = WT_OK;
+        if (len != 1u || a[0] >= WT_SLOTS)
+            rc = WT_E_ARGS;
+        else if (wt.busy || !wt_may_write(a[0]))
+            rc = WT_E_BUSY;
+        else {
+            wt_dir[a[0]].valid = 0;
+            if (wt_flash_erase(wt_slot_at(a[0]), &us))
+                rc = 3;
+        }
+        wt_reply(cmd, rc, seq, out, 0);
+    } else if (cmd == WT_CMD_AUDITION) {
+        wt_reply(cmd, WT_E_BUSY, seq, out, 0);   /* stage 4 */
     } else {
         wt_reply(cmd, WT_E_ARGS, seq, out, 0);
     }
@@ -279,6 +550,8 @@ static void wt_service(void)
         wt_scanned = 1;
         wt_scan();
     }
+    if (wt.busy && (int32_t)(fm1_ms - wt.t_last) > (int32_t)WT_SESSION_MS)
+        wt_end(6);                               /* the tool went away: the slot stays empty */
     if (!ota_frame_get(&p, &n))
         return;
     d = ota_unpack7(p, n, ota_dec, sizeof ota_dec);

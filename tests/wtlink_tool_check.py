@@ -2,6 +2,8 @@
 """tools/fm1_wavetable.py `info` and `get` against the real firmware logic (firmware/src/wtlink.h, compiled by
 tests/run_wtlink.sh as build/host/wtlink_check --serve) on a fake flash: the wire format of both sides must agree.
 Run through tests/run_wtlink.sh."""
+import contextlib
+import io
 import subprocess
 import sys
 import tempfile
@@ -63,6 +65,7 @@ def fast(link):
 
 with tempfile.TemporaryDirectory() as t:
     td = Path(t)
+    (td / 'junk.vwt').write_bytes(b'junk' * 100)
     x = np.array([np.sin(np.arange(2048) * 2 * np.pi * (1 + f % 4) / 2048) for f in range(8)]).reshape(-1)
     sources = wt.spectra_of(x, 2048)
     data, _, _ = wt.convert(sources, None)
@@ -72,8 +75,8 @@ with tempfile.TemporaryDirectory() as t:
     link = FakeLink([f'2:{td / "a.vwt"}'])
     vw = fast(link)
     h = vw.hello()
-    check(h['proto'] == 1 and h['stage'] == 1 and h['slots'] == 8 and h['slot_size'] == 0x9000 and h['id'] == 'FM-1_950',
-          'HELLO: protocol, stage 1, 8 slots, identity')
+    check(h['proto'] == 1 and h['stage'] == 2 and h['slots'] == 8 and h['slot_size'] == 0x9000 and h['id'] == 'FM-1_950',
+          'HELLO: protocol, stage 2, 8 slots, identity')
     d = vw.directory()
     check([e['valid'] for e in d] == [False, False, True, False, False, False, False, False], 'DIR: only slot 2 holds a table')
     check(d[2]['name'] == 'PROLOGFA' and d[2]['frames'] == 32 and d[2]['levels'] == 6, 'DIR: name, frames, levels')
@@ -85,10 +88,10 @@ with tempfile.TemporaryDirectory() as t:
     except wt.LinkError as e:
         check('bad arguments' in str(e), 'READ slot 8 is refused with a clear message')
     try:
-        vw.request(3, b'')
-        check(False, 'a slot write command is refused at stage 1')
+        vw.request(9, b'')
+        check(False, 'AUDITION is refused')
     except wt.LinkError as e:
-        check('refused' in str(e), 'BEGIN is refused at stage 1')
+        check('refused' in str(e), 'AUDITION is refused until stage 4')
     link.close()
 
     # a lost reply is asked again
@@ -132,11 +135,30 @@ with tempfile.TemporaryDirectory() as t:
         link = FakeLink([])
         check(wt.main(['selftest', '--yes'], Backend(link)) == 0, 'selftest: passes on a healthy flash')
         link = FakeLink([])
-        import io, contextlib
         buf = io.StringIO()
         with contextlib.redirect_stdout(buf):
             wt.cmd_selftest(type('A', (), {'yes': False, 'port': None})(), Backend(link), ask=lambda p: 'n')
         check('cancelled' in buf.getvalue(), 'selftest: asks first, "n" cancels without sending the command')
+        # put / erase: the tool against the firmware's own upload code
+        link = FakeLink([])
+        rc = wt.main(['put', '0', str(td / 'a.vwt'), '--yes'], Backend(link))
+        check(rc == 0, 'put: a table goes into slot 0 and is read back')
+        link = FakeLink([])
+        check(wt.main(['put', '1', str(td / 'a.vwt'), '--yes'], Backend(link)) == 1, 'put: slot 1 is refused at stage 2')
+        link = FakeLink([])
+        check(wt.main(['put', '0', str(td / 'junk.vwt'), '--yes'], Backend(link)) == 1, 'put: a damaged file is refused before anything is sent')
+        link = FakeLink([f'0:{td / "a.vwt"}'])
+        rc = wt.main(['get', '0', str(td / 'back0.vwt')], Backend(link))
+        check(rc == 0 and (td / 'back0.vwt').read_bytes() == img, 'put + get with a table already there')
+        link = FakeLink([f'0:{td / "a.vwt"}'])
+        check(wt.cmd_put(type('A', (), {'slot': 0, 'file': str(td / 'a.vwt'), 'yes': False, 'port': None})(), Backend(link), ask=lambda p: 'n') == 1,
+              'put: "n" cancels before BEGIN')
+        link = FakeLink([f'0:{td / "a.vwt"}'])
+        check(wt.cmd_erase(type('A', (), {'slot': 0, 'yes': False, 'port': None})(), Backend(link), ask=lambda p: 'n') == 1, 'erase: "n" cancels')
+        link = FakeLink([f'0:{td / "a.vwt"}'])
+        check(wt.main(['erase', '0', '--yes'], Backend(link)) == 0, 'erase: slot 0 emptied')
+        link = FakeLink([])
+        check(wt.main(['erase', '0', '--yes'], Backend(link)) == 0, 'erase: an empty slot is not an error')
         link = FakeLink([f'2:{td / "a.vwt"}'])
         check(wt.main(['get', '9', str(td / 'x.vwt')], Backend(link)) == 1, 'get: slot 9 is an error')
         link.close()
