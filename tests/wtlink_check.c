@@ -437,7 +437,7 @@ static int check_main(void)
             c1[0] = 5; out_n = 0; request(WT_CMD_ABORT, 93, c1, 1); wt_service(); fm1_ms += 1600; wt_ui_poll(); wt_ui_poll();
             /* erase one slot, the others stay */
             c1[0] = 6; out_n = 0; request(WT_CMD_ERASE, 93, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0);
-            for (k2 = 0; k2 < 8; k2++) CHECK(wt_dir[k2].valid == (k2 != 3 && k2 != 6));
+            for (k2 = 0; k2 < 8; k2++) CHECK(wt_dir[k2].valid == (k2 != 3 && k2 != 5 && k2 != 6));   /* 5 was emptied by the BEGIN above */
             CHECK(wt_oob == 0);
             for (k2 = 0; k2 < 8; k2++) for (t = 0; t < 0x9000; t++) flash[0x97000 + k2 * 0x9000 + t] = 0xFF;
             wt_scan();
