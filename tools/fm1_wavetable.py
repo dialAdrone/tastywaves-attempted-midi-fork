@@ -378,7 +378,8 @@ class VwLink:
                     if r[1]:
                         raise LinkError(f'FM-1 answered: {RC_TEXT.get(r[1], "error %d" % r[1])}')
                     return r[3]
-        raise LinkError('no answer from the FM-1 (is the firmware new enough? VAVEWave with the VW link is needed)')
+        raise LinkError('no answer from the FM-1 (cable pulled or switched off? or firmware without the VW link?). '
+                        'A table being written stays empty until it is complete; run `info` to see.')
 
     def hello(self):
         d = self.request(CMD_HELLO)
