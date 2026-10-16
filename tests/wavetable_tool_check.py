@@ -85,7 +85,7 @@ def build(td, name, wav, **kw):
 
 
 def level0(img_data, f):
-    base = f * gw.FRAME_LEN
+    base = f * wt.gb.FLEN + wt.gb.PRE                      # the engine's layout: 3 pre guards, then level 0
     return img_data[base:base + 256].astype(float)
 
 
@@ -97,7 +97,7 @@ with tempfile.TemporaryDirectory() as td:
     check(wt.detect_frame(x, info)[0] == 2048 and 'clm' in wt.detect_frame(x, info)[1], 'serum: frame 2048 from the clm chunk')
     rc, out = build(td, 'SERUM', td / 'serum.wav')
     im = wt.parse_image(out.read_bytes())
-    check(rc == 0 and im['name'] == 'SERUM' and len(out.read_bytes()) == 64 + 32640, 'serum: image parses, 64 + 32,640 bytes')
+    check(rc == 0 and im['name'] == 'SERUM' and len(out.read_bytes()) == 64 + 35648, 'serum: image parses, 64 + 35,648 bytes')
     d0, d31 = level0(im['data'], 0), level0(im['data'], 31)
     ref0 = cycle(256, [(1, 1.0)])
     ref31 = cycle(256, [(1, 1.0)] + [(k, 1.0 / k) for k in range(2, 65)])
@@ -105,9 +105,22 @@ with tempfile.TemporaryDirectory() as td:
     check(np.corrcoef(d31, ref31)[0, 1] > 0.995, 'serum: frame 31 is the band-limited saw (harmonics <= 64)')
     check(np.max(np.abs(im['data'])) <= 0.9 * 32767 + 1, 'serum: peak at 0.9 full scale')
     # mip levels: level 1 of the saw has no content above harmonic 32
-    lv1 = im['data'][31 * gw.FRAME_LEN + gw.OFF[1]:31 * gw.FRAME_LEN + gw.OFF[1] + 128].astype(float)
+    g = wt.gb
+    lv1 = im['data'][31 * g.FLEN + g.OFF[1] + g.PRE:31 * g.FLEN + g.OFF[1] + g.PRE + 128].astype(float)
     sp = np.abs(np.fft.rfft(lv1))
     check(sp[33:].max() < 2e-4 * sp.max(), f'serum: mip level 1 keeps harmonics <= 32 only (above: {sp[33:].max():.1f}, fundamental {sp.max():.0f})')
+    # the engine's layout: every level carries 3 pre and 4 post guard samples that wrap, level 6 is the fundamental alone
+    okg = True
+    for f in (0, 13, 31):
+        for L in range(g.LEVELS):
+            n = g.LEN[L]
+            o = f * g.FLEN + g.OFF[L]
+            lv = im['data'][o + g.PRE:o + g.PRE + n]
+            okg &= np.array_equal(im['data'][o:o + g.PRE], lv[-g.PRE:]) and np.array_equal(im['data'][o + g.PRE + n:o + g.PRE + n + g.POST], np.tile(lv, 2)[:g.POST])
+    check(okg, 'engine layout: pre / post guard samples wrap on all 7 levels')
+    l6 = im['data'][31 * g.FLEN + g.OFF[6] + g.PRE:31 * g.FLEN + g.OFF[6] + g.PRE + 4].astype(float)
+    sp6 = np.abs(np.fft.rfft(l6))
+    check(sp6[1] > 0.99 * sp6.max() and np.abs(sp6[0]) < 0.01 * sp6[1] + 2, 'engine layout: level 6 holds the fundamental alone')
 
     # WaveEdit-like: 64 x 256, 16-bit, no clm: 16384 samples = the WaveEdit layout
     write_wav(td / 'we.wav', morph(256, 64), bits=16)

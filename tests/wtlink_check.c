@@ -65,7 +65,7 @@ static int fl_erase4k(uint32_t off, uint32_t *took)
     if (off & 0xFFFu) wt_oob++;
     wt_erases++;
     if (fault == 1 && off >= 0xDF000u) return -3;
-    if (fault == 5 && off == 0x97000u) return -3;                 /* the header erase of slot 0 fails */
+    if (fault == 5 && off == 0x97000u + 0x8000u) return -3;       /* the header sector erase of slot 0 fails */
     if (fault == 9 && off == 0x97000u + 0x2000u) return -3;       /* the erase of data sector 1 fails */
     memset(flash + off, 0xFF, 0x1000);
     if (fault == 4) flash[off + 77] = 0xFE;                       /* a bit that will not erase */
@@ -77,14 +77,17 @@ static int fl_write(uint32_t off, const uint8_t *s, uint32_t n)
     uint32_t i;
     if (!(off >= 0xDF000u && off + n <= 0xE0000u) && !(off >= 0x97000u && off + n <= 0xDF000u)) wt_oob++;
     if (fault == 2 && off == 0xDF000u + 3u * 256u) return -3;
-    if (fault == 6 && off == 0x98000u + 256u * 2u) return -3;     /* chunk 2 does not program */
-    if (fault == 8 && off == 0x97000u && n == 64u) return -3;     /* the header does not program */
+    if (fault == 6 && off == 0x97000u + 256u * 2u) return -3;     /* chunk 2 does not program */
+    if (fault == 8 && off == 0x97000u + 0x8F00u && n == 64u) return -3;     /* the header does not program */
     wt_progs++;
     for (i = 0; i < n; i++) flash[off + i] &= s[i];
     if (fault == 3 && off == 0xDF000u + 5u * 256u) flash[off + 9] ^= 0x10;   /* a bit that did not take */
-    if (fault == 7 && off == 0x98000u + 256u * 3u) flash[off + 9] ^= 0x10;   /* chunk 3: a bit that did not take */
+    if (fault == 7 && off == 0x97000u + 256u * 3u) flash[off + 9] ^= 0x10;   /* chunk 3: a bit that did not take */
     return 0;
 }
+static int xip_inits; static uint8_t *xip_base;
+static void fl_plain_window_init(void) { xip_inits++; }
+static const volatile uint8_t *fl_xip_vptr(uint32_t off) { return xip_base + off; }
 #include "../firmware/src/wtlink.h"
 
 static void send(const uint8_t *msg, uint32_t n)       /* decoded message -> pending SysEx frame */
@@ -117,11 +120,11 @@ static int reply(uint32_t *rc, uint32_t *seq)           /* last wire reply -> de
 }
 static void put_slot(uint32_t k, const char *name, uint32_t frames)
 {
-    uint8_t *h = flash + wt_slot_at(k);
+    uint8_t *h = flash + wt_slot_at(k) + WT_HDR_AT;
     memset(h, 0xFF, 64);
-    memcpy(h, "VWT1", 4); ota_wr16(h + 4, 1); h[6] = 0; h[7] = frames; h[8] = 6; h[9] = 0;
+    memcpy(h, "VWT1", 4); ota_wr16(h + 4, 2); h[6] = 1; h[7] = frames; h[8] = 7; h[9] = 0;
     memset(h + 10, 0, 8); memcpy(h + 10, name, strlen(name));
-    ota_wr32(h + 18, frames * 1020u); ota_wr32(h + 22, 0xA29EAB9Cu);
+    ota_wr32(h + 18, 35648u); ota_wr32(h + 22, 0xA29EAB9Cu);
     ota_wr32(h + 26, crc32(h, 26));
 }
 static int check_main(void);
@@ -134,17 +137,18 @@ static int serve(int argc, char **argv)
 {
     char line[2048];
     int i;
+    xip_base = flash;
     memset(flash, 0xFF, sizeof flash);
     for (i = 2; i < argc; i++) {
         unsigned k = (unsigned)atoi(argv[i]);
         const char *path = strchr(argv[i], ':') + 1;
         FILE *f = fopen(path, "rb");
-        static uint8_t img[0x9000];
+        static uint8_t img[64 + 35648];
         size_t n = f ? fread(img, 1, sizeof img, f) : 0;
         assert(f && k < WT_SLOTS && n > 0x40);
         fclose(f);
-        memcpy(flash + wt_slot_at(k), img, 64);
-        memcpy(flash + wt_slot_at(k) + 0x1000, img + 64, n - 64);
+        memcpy(flash + wt_slot_at(k) + WT_HDR_AT, img, 64);
+        memcpy(flash + wt_slot_at(k), img + 64, n - 64);
     }
     while (fgets(line, sizeof line, stdin)) {
         uint32_t n = 0, j;
@@ -172,10 +176,11 @@ static int check_main(void)
 {
     uint32_t rc, seq, i, k;
     uint8_t a[8];
+    xip_base = flash;
     memset(flash, 0xFF, sizeof flash);
     put_slot(0, "PROLOGFA", 32);
-    put_slot(3, "MY\x01TAB", 20);
-    put_slot(5, "BADCRC", 32); flash[wt_slot_at(5) + 12] ^= 1;     /* header CRC broken */
+    put_slot(3, "MY\x01TAB", 32);
+    put_slot(5, "BADCRC", 32); flash[wt_slot_at(5) + WT_HDR_AT + 12] ^= 1;     /* header CRC broken */
     put_slot(6, "TOOMANY", 33);                                    /* frames out of range, CRC fixed up by put_slot */
 
     /* HELLO (also runs the first-pass scan) */
@@ -188,20 +193,20 @@ static int check_main(void)
     /* DIR of all slots */
     out_n = 0; a[0] = 0; a[1] = 8; request(WT_CMD_DIR, 8, a, 2); wt_service();
     CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 128);
-    CHECK(rep[8 + 0] == 0 && rep[8 + 1] == 1 && rep[8 + 2] == 32 && rep[8 + 3] == 6 && !memcmp(rep + 8 + 4, "PROLOGFA", 8));
+    CHECK(rep[8 + 0] == 0 && rep[8 + 1] == 1 && rep[8 + 2] == 32 && rep[8 + 3] == 7 && !memcmp(rep + 8 + 4, "PROLOGFA", 8));
     CHECK(ota_rd32(rep + 8 + 12) == 0xA29EAB9Cu);
     CHECK(rep[8 + 16 + 1] == 0 && rep[8 + 16 * 5 + 1] == 0 && rep[8 + 16 * 6 + 1] == 0);   /* empty, bad CRC, 33 frames */
     CHECK(rep[8 + 16 * 3 + 1] == 1 && !memcmp(rep + 8 + 16 * 3 + 4, "MY?TAB\0\0", 8));      /* control char shown as ? */
-    CHECK(wt_dir[3].frames == 20 && !strcmp(wt_dir[3].name, "MY?TAB"));
+    CHECK(wt_dir[3].frames == 32 && !strcmp(wt_dir[3].name, "MY?TAB"));
     a[0] = 6; a[1] = 3; out_n = 0; request(WT_CMD_DIR, 9, a, 2); wt_service();        /* start + count past the end */
     CHECK(reply(&rc, &seq) && rc == WT_E_ARGS);
     a[0] = 2; a[1] = 2; out_n = 0; request(WT_CMD_DIR, 10, a, 2); wt_service();
     CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 32 && rep[8] == 2 && rep[8 + 16] == 3);
 
     /* READ: the header, then a range check */
-    { uint8_t q[5] = {0, 0, 0, 64, 0};
+    { uint8_t q[5] = {0, 0x00, 0x8F, 64, 0};
       out_n = 0; request(WT_CMD_READ, 11, q, 5); wt_service();
-      CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 64 && !memcmp(rep + 8, flash + wt_slot_at(0), 64)); }
+      CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 64 && !memcmp(rep + 8, flash + wt_slot_at(0) + WT_HDR_AT, 64)); }
     { uint8_t q[5] = {7, 0xF0, 0x8F, 0, 1};                          /* slot 7, offset 0x8FF0, 256 B: crosses the slot end */
       out_n = 0; request(WT_CMD_READ, 12, q, 5); wt_service();
       CHECK(reply(&rc, &seq) && rc == WT_E_RANGE); }
@@ -279,50 +284,50 @@ static int check_main(void)
 
     /* ---- stage 2: the upload session ---- */
     {
-        static uint8_t td[32640], img[64];
+        static uint8_t td[35648], img[64];
         uint32_t t, cut, crc = 0, nx, wr0;
         uint8_t b[20], d[259], c1[1] = {0};
         for (t = 0; t < sizeof td; t++) td[t] = (uint8_t)(t * 13u + (t >> 8) * 7u);
         crc = crc32(td, sizeof td);
-        #define BEGIN(slot, frames, bytes_, crcv, nm) do { memset(b, 0, 20); b[0] = slot; b[1] = 0; b[2] = frames; b[3] = 6; ota_wr32(b + 4, bytes_); ota_wr32(b + 8, crcv); memcpy(b + 12, nm, strlen(nm) > 8 ? 8 : strlen(nm)); out_n = 0; request(WT_CMD_BEGIN, 70, b, 20); wt_service(); CHECK(reply(&rc, &seq)); } while (0)
+        #define BEGIN(slot, frames, bytes_, crcv, nm) do { memset(b, 0, 20); b[0] = slot; b[1] = 1; b[2] = frames; b[3] = 7; ota_wr32(b + 4, bytes_); ota_wr32(b + 8, crcv); memcpy(b + 12, nm, strlen(nm) > 8 ? 8 : strlen(nm)); out_n = 0; request(WT_CMD_BEGIN, 70, b, 20); wt_service(); CHECK(reply(&rc, &seq)); } while (0)
         #define CHUNK(idx, n_) do { d[0] = 0; ota_wr16(d + 1, idx); memcpy(d + 3, td + (idx) * 256u, n_); out_n = 0; request(WT_CMD_DATA, 71, d, 3 + (n_)); wt_service(); CHECK(reply(&rc, &seq)); } while (0)
         #define CLEAN() do { for (t = 0; t < 0x9000; t++) flash[0x97000 + t] = 0xFF; wt_scan(); wt.busy = 0; wt.show_until = 0; } while (0)
-        #define UPLOAD_ALL() do { for (t = 0; t < 128; t++) { CHUNK(t, t == 127 ? 128 : 256); if (rc) break; } } while (0)
+        #define UPLOAD_ALL() do { for (t = 0; t < 140; t++) { CHUNK(t, t == 139 ? 64 : 256); if (rc) break; } } while (0)
         wt_oob = 0; fault = 0;
 
         /* a whole upload, read back through DIR / READ */
-        BEGIN(0, 32, 32640, crc, "TESTTAB"); CHECK(rc == 0 && wt.busy);
+        BEGIN(0, 32, 35648, crc, "TESTTAB"); CHECK(rc == 0 && wt.busy);
         CHECK(!wt_dir[0].valid);                                       /* empty from BEGIN on */
         CHECK(wt_ui_poll() == 1 && lcd_fills == 1 && !strcmp(last_text[0], "UPLOADING") && !strcmp(last_text[1], "TESTTAB"));
-        UPLOAD_ALL(); CHECK(rc == 0 && wt.next == 128);
+        UPLOAD_ALL(); CHECK(rc == 0 && wt.next == 140);
         CHECK(!wt_dir[0].valid);                                       /* still empty before COMMIT */
         out_n = 0; request(WT_CMD_COMMIT, 72, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 4 && ota_rd32(rep + 8) == crc);
         CHECK(wt_dir[0].valid && wt_dir[0].crc == crc && wt_dir[0].frames == 32 && !strcmp(wt_dir[0].name, "TESTTAB"));
-        CHECK(!memcmp(flash + 0x98000, td, sizeof td));
+        CHECK(!memcmp(flash + 0x97000, td, sizeof td));
         CHECK(wt_oob == 0 && wt_erases >= 9);
         CHECK(wt_ui_poll() == 1 && !strcmp(last_text[0], "TABLE SAVED"));         /* result screen */
         fm1_ms += 1600; CHECK(wt_ui_poll() == 2 && wt_ui_poll() == 0);             /* then the app redraws once */
         wt_scan(); CHECK(wt_dir[0].valid);                                          /* and it survives a rescan (= a reboot) */
 
         /* replace in place, same slot */
-        BEGIN(0, 32, 32640, crc, "AGAIN"); CHECK(rc == 0 && !wt_dir[0].valid && flash[0x97000] == 0xFF);
+        BEGIN(0, 32, 35648, crc, "AGAIN"); CHECK(rc == 0 && !wt_dir[0].valid && flash[0x97000 + 0x8F00] == 0xFF);
         out_n = 0; request(WT_CMD_ABORT, 73, 0, 0); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && !wt.busy);
         CHECK(wt_ui_poll() == 1 && !strcmp(last_text[0], "ABORTED")); fm1_ms += 1600; wt_ui_poll(); wt_ui_poll();
 
         /* power cut at every point: the header sector is erased from BEGIN, so a rescan finds an empty slot */
-        for (cut = 0; cut < 128; cut += 9) {
+        for (cut = 0; cut < 140; cut += 9) {
             uint32_t j;
-            CLEAN(); BEGIN(0, 32, 32640, crc, "CUT");
+            CLEAN(); BEGIN(0, 32, 35648, crc, "CUT");
             for (j = 0; j < cut; j++) CHUNK(j, 256);
             memset(&wt, 0, sizeof wt); wt_scan();                      /* the power came back */
-            CHECK(!wt_dir[0].valid && flash[0x97000] == 0xFF);
+            CHECK(!wt_dir[0].valid && flash[0x97000 + 0x8F00] == 0xFF);
         }
         /* power cut during COMMIT: data complete, header not written */
-        CLEAN(); BEGIN(0, 32, 32640, crc, "CUT"); UPLOAD_ALL();
+        CLEAN(); BEGIN(0, 32, 35648, crc, "CUT"); UPLOAD_ALL();
         memset(&wt, 0, sizeof wt); wt_scan(); CHECK(!wt_dir[0].valid);
 
         /* a retry of the previous chunk (the reply was lost) is fine, a different one is not */
-        CLEAN(); BEGIN(0, 32, 32640, crc, "RETRY");
+        CLEAN(); BEGIN(0, 32, 35648, crc, "RETRY");
         CHUNK(0, 256); CHUNK(1, 256); CHUNK(1, 256); CHECK(rc == 0 && wt.next == 2);
         wr0 = wt_progs; CHUNK(1, 256); CHECK(rc == 0 && wt_progs == wr0);           /* compared, not written again */
         CHUNK(5, 256); CHECK(rc == WT_E_RANGE && wt.busy && wt.next == 2);          /* out of order: refused, still open */
@@ -332,28 +337,28 @@ static int check_main(void)
         CHECK(reply(&rc, &seq) && rc == WT_E_RANGE);                                 /* beyond the end */
         d[0] = 3; ota_wr16(d + 1, 2); out_n = 0; request(WT_CMD_DATA, 71, d, 259); wt_service();
         CHECK(reply(&rc, &seq) && rc == 6);                                          /* another slot than BEGIN's */
-        flash[0x98000 + 256] ^= 1; CHUNK(1, 256); CHECK(rc == 5 && !wt.busy);        /* retry that differs from flash: verify failed */
+        flash[0x97000 + 256] ^= 1; CHUNK(1, 256); CHECK(rc == 5 && !wt.busy);        /* retry that differs from flash: verify failed */
         fm1_ms += 1600; wt_ui_poll(); wt_ui_poll();
 
         /* out-of-order chunks do not keep an upload alive; SELFTEST is refused while one runs */
-        CLEAN(); BEGIN(0, 32, 32640, crc, "STALL"); CHUNK(0, 256);
+        CLEAN(); BEGIN(0, 32, 35648, crc, "STALL"); CHUNK(0, 256);
         fm1_ms += 10000; CHUNK(5, 256); CHECK(rc == WT_E_RANGE);
         fm1_ms += 6000; wt_service(); CHECK(!wt.busy && wt.result == 6);
         fm1_ms += 1600; wt_ui_poll(); wt_ui_poll();
-        CLEAN(); BEGIN(0, 32, 32640, crc, "BUSY1");
+        CLEAN(); BEGIN(0, 32, 35648, crc, "BUSY1");
         out_n = 0; request(WT_CMD_SELFTEST, 80, 0, 0); wt_service(); CHECK(reply(&rc, &seq) && rc == WT_E_BUSY && wt.busy);
         out_n = 0; request(WT_CMD_ABORT, 81, 0, 0); wt_service(); fm1_ms += 1600; wt_ui_poll(); wt_ui_poll();
 
         /* COMMIT too early / bad CRC / no session */
-        CLEAN(); BEGIN(0, 32, 32640, crc, "EARLY"); CHUNK(0, 256);
+        CLEAN(); BEGIN(0, 32, 35648, crc, "EARLY"); CHUNK(0, 256);
         out_n = 0; request(WT_CMD_COMMIT, 72, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 6 && wt.busy);
-        BEGIN(0, 32, 32640, crc ^ 1u, "BADCRC"); UPLOAD_ALL();
-        out_n = 0; request(WT_CMD_COMMIT, 72, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 8 && !wt.busy && !wt_dir[0].valid && flash[0x97000] == 0xFF);
+        BEGIN(0, 32, 35648, crc ^ 1u, "BADCRC"); UPLOAD_ALL();
+        out_n = 0; request(WT_CMD_COMMIT, 72, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 8 && !wt.busy && !wt_dir[0].valid && flash[0x97000 + 0x8F00] == 0xFF);
         fm1_ms += 1600; wt_ui_poll(); CHECK(wt.result == 8 || 1); wt_ui_poll();
         out_n = 0; request(WT_CMD_COMMIT, 72, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 6);   /* nothing open */
 
         /* timeout: 15 s without a request */
-        CLEAN(); BEGIN(0, 32, 32640, crc, "SLOW"); CHUNK(0, 256);
+        CLEAN(); BEGIN(0, 32, 35648, crc, "SLOW"); CHUNK(0, 256);
         fm1_ms += 14000; wt_service(); CHECK(wt.busy);
         fm1_ms += 1100; wt_service(); CHECK(!wt.busy && wt.result == 6 && !wt_dir[0].valid);
         CHUNK(1, 256); CHECK(rc == 6);
@@ -361,39 +366,39 @@ static int check_main(void)
 
         /* refusals: other slots, bad arguments, sound, keys, no flash; nothing erased */
         wt_erases = 0; CLEAN();
-        BEGIN(8, 32, 32640, crc, "X"); CHECK(rc == WT_E_ARGS);
-        BEGIN(0, 33, 33660, crc, "X"); CHECK(rc == WT_E_ARGS);
+        BEGIN(8, 32, 35648, crc, "X"); CHECK(rc == WT_E_ARGS);
+        BEGIN(0, 33, 35648, crc, "X"); CHECK(rc == WT_E_ARGS);
         BEGIN(0, 0, 0, crc, "X"); CHECK(rc == WT_E_ARGS);
         BEGIN(0, 32, 32641, crc, "X"); CHECK(rc == WT_E_ARGS);
         { uint8_t bad[20] = {0}; out_n = 0; request(WT_CMD_BEGIN, 70, bad, 19); wt_service(); CHECK(reply(&rc, &seq) && rc == WT_E_ARGS); }
-        quiet_now = 0; BEGIN(0, 32, 32640, crc, "X"); CHECK(rc == WT_E_BUSY); quiet_now = 1;
-        fm1_in.notes = 1; BEGIN(0, 32, 32640, crc, "X"); CHECK(rc == WT_E_BUSY); fm1_in.notes = 0;
-        flash_ok = 0; BEGIN(0, 32, 32640, crc, "X"); CHECK(rc == WT_E_BUSY); flash_ok = 1;
+        quiet_now = 0; BEGIN(0, 32, 35648, crc, "X"); CHECK(rc == WT_E_BUSY); quiet_now = 1;
+        fm1_in.notes = 1; BEGIN(0, 32, 35648, crc, "X"); CHECK(rc == WT_E_BUSY); fm1_in.notes = 0;
+        flash_ok = 0; BEGIN(0, 32, 35648, crc, "X"); CHECK(rc == WT_E_BUSY); flash_ok = 1;
         CHECK(wt_erases == 0 && !wt.busy);
         d[0] = 0; out_n = 0; request(WT_CMD_DATA, 71, d, 259); wt_service(); CHECK(reply(&rc, &seq) && rc == 6);   /* DATA with no BEGIN */
 
         /* ERASE */
-        CLEAN(); BEGIN(0, 32, 32640, crc, "GONE"); UPLOAD_ALL(); out_n = 0; request(WT_CMD_COMMIT, 72, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0);
+        CLEAN(); BEGIN(0, 32, 35648, crc, "GONE"); UPLOAD_ALL(); out_n = 0; request(WT_CMD_COMMIT, 72, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0);
         fm1_ms += 1600; wt_ui_poll(); wt_ui_poll();
-        out_n = 0; request(WT_CMD_ERASE, 74, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && !wt_dir[0].valid && flash[0x97000] == 0xFF);
-        CHECK(!memcmp(flash + 0x98000, td, 4096));                                    /* data left: only the header sector is erased */
+        out_n = 0; request(WT_CMD_ERASE, 74, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && !wt_dir[0].valid && flash[0x97000 + 0x8F00] == 0xFF);
+        CHECK(!memcmp(flash + 0x97000, td, 4096));                                    /* data left: only the header sector is erased */
         { uint8_t s1[1] = {1}; out_n = 0; request(WT_CMD_ERASE, 74, s1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0); }   /* slot 1 is writable now (an empty slot erases fine) */
         { uint8_t s8[1] = {8}; out_n = 0; request(WT_CMD_ERASE, 74, s8, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == WT_E_ARGS); }
 
         /* hardware faults: every one ends the upload with an empty slot and the right code */
         { static const int F[] = {5, 9, 6, 7, 8}; static const uint32_t RC[] = {3, 3, 4, 5, 4}; uint32_t fi;
           for (fi = 0; fi < 5; fi++) {
-              CLEAN(); fault = F[fi]; BEGIN(0, 32, 32640, crc, "FAULT");
+              CLEAN(); fault = F[fi]; BEGIN(0, 32, 35648, crc, "FAULT");
               if (F[fi] != 5) { CHECK(rc == 0); UPLOAD_ALL(); if (rc == 0) { out_n = 0; request(WT_CMD_COMMIT, 72, c1, 1); wt_service(); CHECK(reply(&rc, &seq)); } }
               CHECK(rc == RC[fi] && !wt.busy && !wt_dir[0].valid);
-              if (F[fi] != 8) CHECK(flash[0x97000] == 0xFF);
+              if (F[fi] != 8) CHECK(flash[0x97000 + 0x8F00] == 0xFF);
               wt_scan(); CHECK(!wt_dir[0].valid);
               fault = 0; fm1_ms += 1600; wt_ui_poll(); wt_ui_poll();
           } }
         fault = 0;
         /* stage 3: all 8 slots, each independent */
         {
-            static uint8_t tt[8][32640]; uint32_t k2, j2, cr[8];
+            static uint8_t tt[8][35648]; uint32_t k2, j2, cr[8];
             for (k2 = 0; k2 < 8; k2++) {
                 for (j2 = 0; j2 < sizeof tt[0]; j2++) tt[k2][j2] = (uint8_t)(j2 * (k2 + 3u) + k2 * 29u + (j2 >> 7));
                 cr[k2] = crc32(tt[k2], sizeof tt[0]);
@@ -403,10 +408,10 @@ static int check_main(void)
             wt_scan();
             for (k2 = 0; k2 < 8; k2++) {
                 char nm[8] = {'T', 'B', (char)('0' + k2), 0};
-                memset(b, 0, 20); b[0] = k2; b[2] = 32; b[3] = 6; ota_wr32(b + 4, 32640); ota_wr32(b + 8, cr[k2]); memcpy(b + 12, nm, 3);
+                memset(b, 0, 20); b[0] = k2; b[1] = 1; b[2] = 32; b[3] = 7; ota_wr32(b + 4, 35648); ota_wr32(b + 8, cr[k2]); memcpy(b + 12, nm, 3);
                 out_n = 0; request(WT_CMD_BEGIN, 90, b, 20); wt_service(); CHECK(reply(&rc, &seq) && rc == 0);
-                for (j2 = 0; j2 < 128; j2++) {
-                    uint32_t nn = j2 == 127 ? 128 : 256;
+                for (j2 = 0; j2 < 140; j2++) {
+                    uint32_t nn = j2 == 139 ? 64 : 256;
                     d[0] = k2; ota_wr16(d + 1, j2); memcpy(d + 3, tt[k2] + j2 * 256, nn);
                     out_n = 0; request(WT_CMD_DATA, 91, d, 3 + nn); wt_service(); CHECK(reply(&rc, &seq) && rc == 0);
                 }
@@ -414,11 +419,11 @@ static int check_main(void)
                 fm1_ms += 1600; wt_ui_poll(); wt_ui_poll();
             }
             for (k2 = 0; k2 < 8; k2++)
-                CHECK(wt_dir[k2].valid && wt_dir[k2].crc == cr[k2] && !memcmp(flash + 0x97000 + k2 * 0x9000 + 0x1000, tt[k2], 32640));
+                CHECK(wt_dir[k2].valid && wt_dir[k2].crc == cr[k2] && !memcmp(flash + 0x97000 + k2 * 0x9000 + 0, tt[k2], 35648));
             CHECK(wt_oob == 0);
             wt_scan(); for (k2 = 0; k2 < 8; k2++) CHECK(wt_dir[k2].valid);
             /* a cut in slot 3 leaves the other seven alone */
-            memset(b, 0, 20); b[0] = 3; b[2] = 32; b[3] = 6; ota_wr32(b + 4, 32640); ota_wr32(b + 8, cr[3]); memcpy(b + 12, "NEW", 3);
+            memset(b, 0, 20); b[0] = 3; b[1] = 1; b[2] = 32; b[3] = 7; ota_wr32(b + 4, 35648); ota_wr32(b + 8, cr[3]); memcpy(b + 12, "NEW", 3);
             out_n = 0; request(WT_CMD_BEGIN, 90, b, 20); wt_service(); CHECK(reply(&rc, &seq) && rc == 0);
             for (j2 = 0; j2 < 40; j2++) {
                 d[0] = 3; ota_wr16(d + 1, j2); memcpy(d + 3, tt[3] + j2 * 256, 256);
@@ -426,12 +431,12 @@ static int check_main(void)
             }
             memset(&wt, 0, sizeof wt); wt_scan();
             for (k2 = 0; k2 < 8; k2++) CHECK(wt_dir[k2].valid == (k2 != 3));
-            for (k2 = 0; k2 < 8; k2++) if (k2 != 3) CHECK(!memcmp(flash + 0x97000 + k2 * 0x9000 + 0x1000, tt[k2], 32640));
+            for (k2 = 0; k2 < 8; k2++) if (k2 != 3) CHECK(!memcmp(flash + 0x97000 + k2 * 0x9000 + 0, tt[k2], 35648));
             /* BEGIN on slot 5 while slot 3's upload is open: 3 stays empty, 5 takes over */
-            memset(b, 0, 20); b[0] = 3; b[2] = 32; b[3] = 6; ota_wr32(b + 4, 32640); ota_wr32(b + 8, cr[3]); memcpy(b + 12, "A", 1);
+            memset(b, 0, 20); b[0] = 3; b[1] = 1; b[2] = 32; b[3] = 7; ota_wr32(b + 4, 35648); ota_wr32(b + 8, cr[3]); memcpy(b + 12, "A", 1);
             out_n = 0; request(WT_CMD_BEGIN, 90, b, 20); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && wt.slot == 3);
             b[0] = 5; out_n = 0; request(WT_CMD_BEGIN, 90, b, 20); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && wt.slot == 5 && wt.busy);
-            CHECK(!wt_dir[3].valid && !wt_dir[5].valid && flash[0x97000 + 3 * 0x9000] == 0xFF && flash[0x97000 + 5 * 0x9000] == 0xFF);
+            CHECK(!wt_dir[3].valid && !wt_dir[5].valid && flash[0x97000 + 3 * 0x9000 + 0x8F00] == 0xFF && flash[0x97000 + 5 * 0x9000 + 0x8F00] == 0xFF);
             d[0] = 3; ota_wr16(d + 1, 0); out_n = 0; request(WT_CMD_DATA, 91, d, 259); wt_service(); CHECK(reply(&rc, &seq) && rc == 6);   /* 3's chunks are refused now */
             c1[0] = 3; out_n = 0; request(WT_CMD_COMMIT, 92, c1, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 6 && !wt_dir[3].valid);
             c1[0] = 5; out_n = 0; request(WT_CMD_ABORT, 93, c1, 1); wt_service(); fm1_ms += 1600; wt_ui_poll(); wt_ui_poll();
@@ -450,6 +455,34 @@ static int check_main(void)
         CHECK(wt_erases == 0 && wt_progs == 0 && wt_oob == 0);
         (void)img; (void)nx; (void)wr0;
         CLEAN();
+    }
+
+    /* XIPCHECK (stage 4a): the window is set up on the first call only; a difference between XIP and SPI is reported */
+    {
+        static uint8_t alt[sizeof flash], td2[35648]; uint8_t o[16]; uint32_t t2, cr2;
+        for (t2 = 0; t2 < sizeof td2; t2++) td2[t2] = (uint8_t)(t2 * 5u + (t2 >> 9));
+        cr2 = crc32(td2, sizeof td2);
+        memset(&wt, 0, sizeof wt); wt_scan(); xip_inits = 0; wt_xip = 0;
+        memset(flash + 0x97000, 0xFF, 0x9000);
+        memcpy(flash + 0x97000, td2, sizeof td2);
+        { uint8_t *h = flash + 0x97000 + WT_HDR_AT; memset(h, 0xFF, 64); memcpy(h, "VWT1", 4); ota_wr16(h + 4, 2); h[6] = 1; h[7] = 32; h[8] = 7; h[9] = 0;
+          memset(h + 10, 0, 8); memcpy(h + 10, "XIPT", 4); ota_wr32(h + 18, 35648u); ota_wr32(h + 22, cr2); ota_wr32(h + 26, crc32(h, 26)); }
+        wt_scan(); CHECK(wt_dir[0].valid);
+        { uint8_t q[1] = {0};
+          out_n = 0; request(WT_CMD_XIPCHECK, 95, q, 1); wt_service();
+          CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 16 && rep[8] == 0 && ota_rd32(rep + 12) == 0 && ota_rd32(rep + 16) == 0xFFFFFFFFu);
+          CHECK(xip_inits == 1);
+          out_n = 0; request(WT_CMD_XIPCHECK, 96, q, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && xip_inits == 1);   /* once */
+          memcpy(alt, flash, sizeof flash); alt[0x97000 + 1000] ^= 1; alt[0x97000 + 35000] ^= 4; alt[0x97000 + WT_HDR_AT + 3] ^= 2;
+          xip_base = alt;                                              /* the window shows other bytes than the SPI path */
+          out_n = 0; request(WT_CMD_XIPCHECK, 97, q, 1); wt_service();
+          CHECK(reply(&rc, &seq) && rc == 0 && ota_rd32(rep + 12) == 3 && ota_rd32(rep + 16) == 1000);
+          xip_base = flash;
+          quiet_now = 0; out_n = 0; request(WT_CMD_XIPCHECK, 98, q, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && rep[8] == 7); quiet_now = 1;
+          q[0] = 8; out_n = 0; request(WT_CMD_XIPCHECK, 99, q, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && rep[8] == 7);
+          out_n = 0; request(WT_CMD_XIPCHECK, 99, q, 0); wt_service(); CHECK(reply(&rc, &seq) && rc == WT_E_ARGS); }
+        memset(flash + 0x97000, 0xFF, 0x9000); wt_scan();
+        (void)o;
     }
 
     /* no flash: DIR / READ say so */

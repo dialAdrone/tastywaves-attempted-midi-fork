@@ -75,13 +75,13 @@ with tempfile.TemporaryDirectory() as t:
     link = FakeLink([f'2:{td / "a.vwt"}'])
     vw = fast(link)
     h = vw.hello()
-    check(h['proto'] == 1 and h['stage'] == 3 and h['slots'] == 8 and h['slot_size'] == 0x9000 and h['id'] == 'FM-1_950',
-          'HELLO: protocol, stage 3, 8 slots, identity')
+    check(h['proto'] == 1 and h['stage'] == 4 and h['slots'] == 8 and h['slot_size'] == 0x9000 and h['id'] == 'FM-1_950',
+          'HELLO: protocol, stage 4, 8 slots, identity')
     d = vw.directory()
     check([e['valid'] for e in d] == [False, False, True, False, False, False, False, False], 'DIR: only slot 2 holds a table')
-    check(d[2]['name'] == 'PROLOGFA' and d[2]['frames'] == 32 and d[2]['levels'] == 6, 'DIR: name, frames, levels')
+    check(d[2]['name'] == 'PROLOGFA' and d[2]['frames'] == 32 and d[2]['levels'] == 7, 'DIR: name, frames, levels')
     check(d[2]['crc'] == wt.parse_image(img)['crc'], 'DIR: data CRC equals the tool\'s')
-    check(vw.read(2, 0, 64) == img[:64] and vw.read(2, 0x1000, 32640) == img[64:], 'READ: header and all data come back exact')
+    check(vw.read(2, wt.HEADER_AT, 64) == img[:64] and vw.read(2, 0, wt.DATA_BYTES) == img[64:], 'READ: header and all data come back exact')
     try:
         vw.request(wt.CMD_READ, bytes([8, 0, 0, 1, 0]))
         check(False, 'READ slot 8 is refused')
@@ -92,6 +92,14 @@ with tempfile.TemporaryDirectory() as t:
         check(False, 'AUDITION is refused')
     except wt.LinkError as e:
         check('refused' in str(e), 'AUDITION is refused until stage 4')
+    link.close()
+
+    # the flash-window check (firmware stage 4)
+    link = FakeLink([f'2:{td / "a.vwt"}'])
+    vw = fast(link)
+    d = vw.request(wt.CMD_XIPCHECK, bytes([2]))
+    check(len(d) == 16 and d[0] == 0 and int.from_bytes(d[4:8], 'little') == 0 and int.from_bytes(d[8:12], 'little') == 0xFFFFFFFF,
+          'XIPCHECK: the window read matches the SPI read')
     link.close()
 
     # a lost reply is asked again
@@ -139,6 +147,8 @@ with tempfile.TemporaryDirectory() as t:
         with contextlib.redirect_stdout(buf):
             wt.cmd_selftest(type('A', (), {'yes': False, 'port': None})(), Backend(link), ask=lambda p: 'n')
         check('cancelled' in buf.getvalue(), 'selftest: asks first, "n" cancels without sending the command')
+        link = FakeLink([f'2:{td / "a.vwt"}'])
+        check(wt.main(['xipcheck', '2'], Backend(link)) == 0, 'xipcheck: the command reports a match')
         # put / erase: the tool against the firmware's own upload code
         link = FakeLink([])
         rc = wt.main(['put', '0', str(td / 'a.vwt'), '--yes'], Backend(link))

@@ -24,11 +24,16 @@
 #define WT_BASE 0x00097000u                      /* slot k: WT_BASE + k * WT_SLOT_SIZE */
 #define WT_SLOT_SIZE 0x9000u                     /* 1 header sector + 8 data sectors */
 #define WT_HDR_LEN 64u
-#define WT_FRAME_BYTES 1020u                     /* fmt 0: one frame = 510 samples (6 mip levels) x 2 bytes */
-#define WT_STAGE 3u                              /* 0 read-only, 1 test sector, 2.. writer (docs/UPLOAD-DESIGN.md 8.2) */
+#define WT_HDR_AT 0x8F00u                        /* the header: last page of the slot's last sector (layout v2) */
+#define WT_HDR_SECTOR 0x8000u                    /* ... and that sector, erased at BEGIN: the slot is empty from then on */
+#define WT_FRAMES_N 32u
+#define WT_LEVELS_N 7u                           /* fmt 1: the engine's native layout, 7 mip levels with guards */
+#define WT_DATA_BYTES 35648u                     /* 32 frames x 557 int16 (firmware/gen/wt_bench.h layout), at slot offset 0 */
+#define WT_DATA_CHUNKS 140u                      /* of 256 B, the last one 64 B */
+#define WT_STAGE 4u                              /* 0 read-only, 1 test sector, 2.. writer (docs/UPLOAD-DESIGN.md 8.2) */
 
 enum { WT_CMD_HELLO = 1, WT_CMD_DIR = 2, WT_CMD_BEGIN = 3, WT_CMD_DATA = 4, WT_CMD_COMMIT = 5, WT_CMD_ABORT = 6,
-       WT_CMD_ERASE = 7, WT_CMD_READ = 8, WT_CMD_AUDITION = 9, WT_CMD_SELFTEST = 10 };
+       WT_CMD_ERASE = 7, WT_CMD_READ = 8, WT_CMD_AUDITION = 9, WT_CMD_SELFTEST = 10, WT_CMD_XIPCHECK = 11 };
 enum { WT_OK = 0, WT_E_ARGS = 1, WT_E_RANGE = 2, WT_E_BUSY = 7, WT_E_NOFLASH = 9 };
 
 typedef struct {
@@ -44,8 +49,8 @@ static uint8_t wt_scanned;
 static uint32_t wt_slot_at(uint32_t k) { return WT_BASE + k * WT_SLOT_SIZE; }
 
 /* Header sector content -> entry. Anything that does not check out is an empty slot, never a crash, never trusted.
- * Layout (little endian): "VWT1", u16 version = 1, u8 fmt = 0, u8 frames, u8 levels, u8 0, char name[8], u32 data
- * bytes, u32 data CRC32, u32 CRC32 of bytes 0..25. */
+ * Layout (little endian): "VWT1", u16 version = 2, u8 fmt = 1, u8 frames = 32, u8 levels = 7, u8 0, char name[8], u32 data
+ * bytes = 35648, u32 data CRC32, u32 CRC32 of bytes 0..25. */
 static void wt_parse(const uint8_t *h, wt_ent_t *e)
 {
     uint32_t i, bytes;
@@ -56,12 +61,12 @@ static void wt_parse(const uint8_t *h, wt_ent_t *e)
     e->bytes = e->crc = 0;
     if (h[0] != 'V' || h[1] != 'W' || h[2] != 'T' || h[3] != '1')
         return;
-    if (ota_rd16(h + 4) != 1u || h[6] != 0u)     /* version 1, fmt 0 */
+    if (ota_rd16(h + 4) != 2u || h[6] != 1u)     /* layout version 2, fmt 1 */
         return;
-    if (h[7] < 1u || h[7] > 32u || h[8] != 6u)   /* frames 1..32, 6 mip levels */
+    if (h[7] != WT_FRAMES_N || h[8] != WT_LEVELS_N)   /* 32 frames, 7 mip levels */
         return;
     bytes = ota_rd32(h + 18);
-    if (bytes != (uint32_t)h[7] * WT_FRAME_BYTES || bytes > 8u * 0x1000u)
+    if (bytes != WT_DATA_BYTES)
         return;
     if (crc32(h, 26) != ota_rd32(h + 26))
         return;
@@ -96,7 +101,7 @@ static void wt_scan(void)
     uint32_t k;
     for (k = 0; k < WT_SLOTS; k++) {
         wt_dir[k].valid = 0;
-        if (flash_ok && !wt_read(wt_slot_at(k), h, WT_HDR_LEN))
+        if (flash_ok && !wt_read(wt_slot_at(k) + WT_HDR_AT, h, WT_HDR_LEN))
             wt_parse(h, &wt_dir[k]);
         fm1_wdt_feed();
     }
@@ -206,7 +211,7 @@ static uint32_t wt_crc_upd(uint32_t c, const uint8_t *p, uint32_t n)   /* c star
     }
     return c;
 }
-static uint32_t wt_chunks(void) { return (wt.bytes + 255u) / 256u; }
+static uint32_t wt_chunks(void) { return (wt.bytes + 255u) / 256u; }   /* 140 */
 static void wt_end(uint32_t result)             /* the upload is over, ok or not: the screen shows it for 1.5 s */
 {
     wt.busy = 0;
@@ -239,16 +244,16 @@ static uint32_t wt_begin(const uint8_t *a, uint32_t len)
     uint32_t i, us, bytes;
     if (len != 20u || a[0] >= WT_SLOTS)
         return WT_E_ARGS;
-    if (a[1] != 0u || a[2] < 1u || a[2] > 32u || a[3] != 6u)
+    if (a[1] != 1u || a[2] != WT_FRAMES_N || a[3] != WT_LEVELS_N)
         return WT_E_ARGS;
     bytes = ota_rd32(a + 4);
-    if (bytes != (uint32_t)a[2] * WT_FRAME_BYTES)
+    if (bytes != WT_DATA_BYTES)
         return WT_E_ARGS;
     if (!wt_may_write(a[0]))
         return WT_E_BUSY;
     wt.busy = 0;                                 /* a BEGIN over a running upload starts again */
     wt_dir[a[0]].valid = 0;
-    if (wt_flash_erase(wt_slot_at(a[0]), &us)) {
+    if (wt_flash_erase(wt_slot_at(a[0]) + WT_HDR_SECTOR, &us)) {      /* the header's sector: empty from here on */
         wt_end(3);
         return 3;
     }
@@ -284,7 +289,7 @@ static uint32_t wt_data(const uint8_t *a, uint32_t len, uint32_t *next)
     off = idx * 256u;
     if (n != (idx + 1u == nch ? wt.bytes - off : 256u))
         return WT_E_ARGS;
-    at = wt_slot_at(wt.slot) + 0x1000u + off;
+    at = wt_slot_at(wt.slot) + off;
     if (idx + 1u == wt.next) {                   /* the one before: a retry */
         if (!wt_same(at, a + 3, n)) {
             wt_end(5);
@@ -293,7 +298,7 @@ static uint32_t wt_data(const uint8_t *a, uint32_t len, uint32_t *next)
     } else if (idx != wt.next)
         return WT_E_RANGE;                       /* out of order: the upload stays open, the 15 s keep running */
     else {
-        if (!(off & 0xFFFu) && wt_flash_erase(at, &us)) {
+        if (!(off & 0xFFFu) && off < WT_HDR_SECTOR && wt_flash_erase(at, &us)) {   /* sector 8 was erased by BEGIN */
             wt_end(3);
             return 3;
         }
@@ -322,7 +327,7 @@ static uint32_t wt_commit(const uint8_t *a, uint32_t len, uint32_t *crc)
         return 6;
     for (k = 0; k < wt.bytes; k += 64u) {
         uint32_t m = wt.bytes - k > 64u ? 64u : wt.bytes - k;
-        if (wt_read(wt_slot_at(wt.slot) + 0x1000u + k, b, m)) {
+        if (wt_read(wt_slot_at(wt.slot) + k, b, m)) {
             wt_end(5);
             return 5;
         }
@@ -337,18 +342,18 @@ static uint32_t wt_commit(const uint8_t *a, uint32_t len, uint32_t *crc)
     for (i = 0; i < WT_HDR_LEN; i++)
         h[i] = 0xFF;
     h[0] = 'V'; h[1] = 'W'; h[2] = 'T'; h[3] = '1';
-    ota_wr16(h + 4, 1u);
-    h[6] = 0; h[7] = wt.frames; h[8] = 6; h[9] = 0;
+    ota_wr16(h + 4, 2u);
+    h[6] = 1; h[7] = WT_FRAMES_N; h[8] = WT_LEVELS_N; h[9] = 0;
     for (i = 0; i < 8u; i++)
         h[10 + i] = (uint8_t)wt.name[i];
     ota_wr32(h + 18, wt.bytes);
     ota_wr32(h + 22, c);
     ota_wr32(h + 26, crc32(h, 26));
-    if (wt_flash_prog(wt_slot_at(wt.slot), h, WT_HDR_LEN)) {
+    if (wt_flash_prog(wt_slot_at(wt.slot) + WT_HDR_AT, h, WT_HDR_LEN)) {
         wt_end(4);
         return 4;
     }
-    if (wt_read(wt_slot_at(wt.slot), r, WT_HDR_LEN) || !wt_same(wt_slot_at(wt.slot), h, WT_HDR_LEN)) {
+    if (wt_read(wt_slot_at(wt.slot) + WT_HDR_AT, r, WT_HDR_LEN) || !wt_same(wt_slot_at(wt.slot) + WT_HDR_AT, h, WT_HDR_LEN)) {
         wt_end(5);
         return 5;
     }
@@ -418,6 +423,55 @@ static uint32_t wt_ui_poll(void)
         return 2;
     }
     return 0;
+}
+
+/* XIPCHECK (cmd 11, stage 4a): the engine will read user tables through the plain XIP window, so prove on the device that
+ * it works before it matters. The window is set up here, once, on the first XIPCHECK (not at boot: a bad setup can then
+ * only follow an explicit command, never a boot loop). Compares the 35,648 data bytes and the header page of one slot read
+ * through XIP with the same bytes read over SPI (st_read). Reply (16 B, rc 0): result (0 ok, 7 refused), u32 differing bytes,
+ * u32 offset of the first difference (0xFFFFFFFF none), u32 microseconds to read the data through XIP once. */
+static uint8_t wt_xip;
+static void wt_xip_init(void)
+{
+    if (!wt_xip) {
+        fl_plain_window_init();                  /* hal/fm1_flash.h: SFC plain window from 0x93000, then the cache is dropped */
+        wt_xip = 1;
+    }
+}
+static uint32_t wt_xipcheck(uint32_t slot, uint8_t *o)
+{
+    uint32_t i, k, bad = 0, first = 0xFFFFFFFFu, t0, sum = 0, base;
+    uint8_t b[64];
+    if (slot >= WT_SLOTS || !flash_ok || wt.busy || !quiet() || fm1_in.notes) {
+        o[0] = 7;
+        for (i = 1; i < 16u; i++) o[i] = 0;
+        return 16;
+    }
+    wt_xip_init();
+    base = wt_slot_at(slot);
+    t0 = fm1_ticks();
+    for (i = 0; i < WT_DATA_BYTES; i++)
+        sum += fl_xip_vptr(base)[i];      /* time one pass over the data */
+    t0 = (fm1_ticks() - t0) / FM1_TICKS_PER_US;
+    (void)sum;
+    for (k = 0; k < WT_DATA_BYTES + 64u; k += 64u) {             /* data, then (past it) the header page's first 64 B */
+        uint32_t at = k < WT_DATA_BYTES ? k : WT_HDR_AT;
+        const volatile uint8_t *x = fl_xip_vptr(base + at);
+        uint32_t m = k < WT_DATA_BYTES ? (WT_DATA_BYTES - k > 64u ? 64u : WT_DATA_BYTES - k) : 64u;
+        if (wt_read(base + at, b, m)) { bad += m; continue; }
+        for (i = 0; i < m; i++)
+            if (x[i] != b[i]) {
+                bad++;
+                if (first == 0xFFFFFFFFu) first = at + i;
+            }
+        fm1_wdt_feed();
+        if (k >= WT_DATA_BYTES) break;
+    }
+    o[0] = 0; o[1] = o[2] = o[3] = 0;
+    ota_wr32(o + 4, bad);
+    ota_wr32(o + 8, first);
+    ota_wr32(o + 12, t0);
+    return 16;
 }
 
 static uint8_t wt_msg[9 + 256 + 1], wt_wire[2 + (9 + 256 + 1) * 8 / 7 + 2];
@@ -530,10 +584,17 @@ static void wt_handle(const uint8_t *r)         /* r: a checked request, r[3] cm
             rc = WT_E_BUSY;
         else {
             wt_dir[a[0]].valid = 0;
-            if (wt_flash_erase(wt_slot_at(a[0]), &us))
+            if (wt_flash_erase(wt_slot_at(a[0]) + WT_HDR_SECTOR, &us))
                 rc = 3;
         }
         wt_reply(cmd, rc, seq, out, 0);
+    } else if (cmd == WT_CMD_XIPCHECK) {         /* slot */
+        if (len != 1u) {
+            wt_reply(cmd, WT_E_ARGS, seq, out, 0);
+            return;
+        }
+        n = wt_xipcheck(a[0], out);
+        wt_reply(cmd, WT_OK, seq, out, n);
     } else if (cmd == WT_CMD_AUDITION) {
         wt_reply(cmd, WT_E_BUSY, seq, out, 0);   /* stage 4 */
     } else {

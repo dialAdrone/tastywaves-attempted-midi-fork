@@ -191,3 +191,21 @@ T19 this document (+ your decisions). T20a stage 0 firmware. T20b stage 1 self-t
   should be assumed to lose the slots: back slots up with `get` before such an install (recovery R5).
 - **Stage 4 must check the data CRC32** (header offset 22) when the engine first loads a table: `wt_parse` trusts the header alone, so a
   valid header over damaged data would otherwise play.
+
+## 12. Stage 4: layout v2 (2026-10-16)
+
+The engine reads tables in place in its own layout (`firmware/gen/wt_bench.h`: 7 mip levels, each `[3 pre guards][256 >> L samples][4 post guards]`,
+557 int16 per frame, 32 frames = 35,648 B), which does not fit the 8 data sectors of layout v1 (32,640 B, 6 levels, 1 guard). So the slot
+changed, keeping 8 slots of 9 sectors at the same addresses:
+
+- **data** at slot offset 0 (35,648 B, sectors 0..8, tail in sector 8 up to 0x8B40);
+- **header** (64 B, same fields, version 2, fmt 1, frames 32, levels 7, bytes 35,648) at slot offset 0x8F00, the last page of sector 8,
+  a page no data chunk touches;
+- **BEGIN** erases sector 8 (data tail + header): the slot reads empty once that erase has completed (about 45 ms; a power cut INSIDE it, on a slot that already holds a table, can leave the header page intact over a damaged data tail: the data CRC32 check before first use, stage 4b, is therefore mandatory, not optional; a possible extra hardening is to program a zero byte over the header magic before the erase, which needs its own review); sectors 0..7 are erased as their first chunk arrives;
+  COMMIT writes the header last. Header absent or damaged = empty slot, as before.
+- Layout v1 slots (the first test tables) read as empty (their bytes at 0x8F00 are sample data) and must be uploaded again.
+- READ / DIR unchanged; the tool reads the header from 0x8F00 and the data from 0. `.vwt` files are header + data as before, 35,712 B.
+
+Stage 4 is split: **4a** (this commit) = layout v2 + `XIPCHECK` (cmd 11), which sets up the plain flash window on its first call (not at boot)
+and compares the slot read through XIP with the SPI read; the engine does not use the slots yet. **4b** = the engine and the ALGORITHM list use
+valid user tables (data CRC32 checked first, fallback to table 0), then `fl_plain_window_init()` moves to boot if the 4a device test is clean.

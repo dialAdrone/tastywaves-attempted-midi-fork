@@ -6,6 +6,7 @@
     info [--port NAME]            the connected FM-1: firmware, and which of the 8 user slots hold a table
     get SLOT OUT.vwt [--port NAME]  copy a slot off the FM-1 into a file (backup; checked against its CRC)
     put SLOT FILE.vwt [--yes] [--port NAME]  write a table file into a slot (asks first; read back and checked)
+    xipcheck SLOT [--port NAME]  firmware stage 4: read a slot through the flash window and compare it with the SPI read
     erase SLOT [--yes] [--port NAME]  empty a slot (its header only; `put` over it replaces it in place)
     selftest [--yes] [--port NAME]  erase, program and read back ONE spare flash sector (0xDF000) and time it; no table
                                   or setting is touched (firmware stage 1; needs keys up and no sound)
@@ -16,8 +17,9 @@ several. --pick chooses source frames before the table is made: even (default), 
 0-based, end excluded) or a comma list like 0,4,8,12.
 
 The output is exactly what the firmware stores in one user slot (docs/UPLOAD-DESIGN.md sections 3 and 7): a 64-byte
-header (magic VWT1, version, fmt 0, frames 32, levels 6, name[8], data bytes, data CRC32, header CRC32, 0xFF pad)
-followed by 32 frames x 510 int16 (6 mip levels each) little endian = 32,640 bytes, made by the same band-limiter and
+header (magic VWT1, version 2, fmt 1, frames 32, levels 7, name[8], data bytes, data CRC32, header CRC32, 0xFF pad)
+followed by 32 frames x 557 int16 (7 mip levels with guard samples: the engine's own layout, read in place) little
+endian = 35,648 bytes, made by the same band-limiter and
 quantiser as the factory tables (tools/gen_wavetables.py). `info` and `get` only read (VW link, see docs/UPLOAD-DESIGN.md section 4); `selftest` writes one spare
 sector; `put` and `erase` write a slot (firmware stage 3: slots 0..7). Back a slot up first with
 `get` if you may want it again: `put` replaces in place.
@@ -40,11 +42,15 @@ import numpy as np
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import gen_wavetables as gw  # noqa: E402  (the factory-table band-limiter and quantiser)
+import gen_bench_tables as gb  # noqa: E402  (the engine's native layout: 7 mip levels, 3 + 4 guard samples)
 
 MAGIC = b'VWT1'
-VERSION = 1
+VERSION = 2                                         # layout v2: the engine's native table, header at the end of the slot
+FMT = 1
 HEADER_LEN = 64
-DATA_BYTES = gw.FRAMES * gw.FRAME_LEN * 2          # 32,640
+HEADER_AT = 0x8F00                                  # offset of the header inside the 9-sector slot (the data is at 0)
+LEVELS_OUT = gb.LEVELS                              # 7
+DATA_BYTES = gw.FRAMES * gb.FLEN * 2                # 35,648: 32 frames x 557 int16
 FRAME_CHOICES = (2048, 1024, 512, 256)
 FORMATS = ('auto', 'serum', 'waveedit', 'ableton', 'surge')
 
@@ -234,12 +240,18 @@ def clean_name(name):
     return s or 'USER'
 
 
+def native(data):
+    """32 frames x 510 int16 (factory layout: 6 levels, 1 guard) -> 32 x 557 (7 levels, 3 pre + 4 post guards): what the
+    engine reads in place (firmware/gen/wt_bench.h), int16 little endian."""
+    return np.clip(gb.relayout(np.asarray(data, dtype=np.int32).reshape(-1), 1), -32768, 32767).astype('<i2')
+
+
 def slot_image(name, data):
     """64-byte header + data; the exact bytes of one user slot (header sector content, then the data sectors)."""
-    raw = data.astype('<i2').tobytes()
+    raw = native(data).tobytes()
     assert len(raw) == DATA_BYTES
     nm = clean_name(name).encode('ascii').ljust(8, b'\0')
-    h = struct.pack('<4sHBBBB8sII', MAGIC, VERSION, 0, gw.FRAMES, gw.LEVELS, 0, nm, len(raw), zlib.crc32(raw))
+    h = struct.pack('<4sHBBBB8sII', MAGIC, VERSION, FMT, gw.FRAMES, LEVELS_OUT, 0, nm, len(raw), zlib.crc32(raw))
     h += struct.pack('<I', zlib.crc32(h))
     return h.ljust(HEADER_LEN, b'\xff') + raw
 
@@ -252,7 +264,7 @@ def parse_image(img):
     hcrc = struct.unpack_from('<I', img, 26)[0]
     if magic != MAGIC or ver != VERSION or zlib.crc32(img[:26]) != hcrc:
         raise ValueError('header')
-    if frames != gw.FRAMES or levels != gw.LEVELS or nbytes != DATA_BYTES or zlib.crc32(img[HEADER_LEN:]) != dcrc:
+    if fmt != FMT or frames != gw.FRAMES or levels != LEVELS_OUT or nbytes != DATA_BYTES or zlib.crc32(img[HEADER_LEN:]) != dcrc:
         raise ValueError('data')
     return {'name': nm.rstrip(b'\0').decode(), 'frames': frames, 'levels': levels, 'crc': dcrc,
             'data': np.frombuffer(img[HEADER_LEN:], '<i2')}
@@ -327,14 +339,14 @@ def cmd_build(a):
 # ---- the FM-1 over USB-MIDI ("VW link" v1, docs/UPLOAD-DESIGN.md section 4) ----
 import fm1_install as fi  # noqa: E402  (pack7, the MIDI backend and the port search of the installer)
 
-SLOTS, SLOT_SIZE, DATA_AT = 8, 0x9000, 0x1000
-CMD_HELLO, CMD_DIR, CMD_BEGIN, CMD_DATA, CMD_COMMIT, CMD_ABORT, CMD_ERASE, CMD_READ, CMD_SELFTEST = 1, 2, 3, 4, 5, 6, 7, 8, 10
+SLOTS, SLOT_SIZE = 8, 0x9000
+CMD_HELLO, CMD_DIR, CMD_BEGIN, CMD_DATA, CMD_COMMIT, CMD_ABORT, CMD_ERASE, CMD_READ, CMD_SELFTEST, CMD_XIPCHECK = 1, 2, 3, 4, 5, 6, 7, 8, 10, 11
 RC_TEXT = {1: 'bad arguments', 2: 'range or alignment', 3: 'erase failed', 4: 'program failed', 5: 'verify failed',
            6: 'no BEGIN or timeout', 7: 'refused (this firmware stage cannot do that)', 8: 'CRC mismatch',
            9: 'no flash'}
 
 
-STAGES = {0: 'read only', 1: 'read only + spare-sector self-test', 2: 'can write slot 0', 3: 'can write slots 0..7'}
+STAGES = {0: 'read only', 1: 'read only + spare-sector self-test', 2: 'can write slot 0', 3: 'can write slots 0..7', 4: 'can write slots 0..7 + XIP check'}
 
 
 class LinkError(Exception):
@@ -471,7 +483,7 @@ def cmd_put(a, backend=None, ask=input):
             return 1
         nm = clean_name(t['name']).encode('ascii').ljust(8, b'\0')
         data = img[HEADER_LEN:]
-        vw.request(CMD_BEGIN, bytes([a.slot, 0, t['frames'], t['levels']]) + len(data).to_bytes(4, 'little')
+        vw.request(CMD_BEGIN, bytes([a.slot, FMT, t['frames'], t['levels']]) + len(data).to_bytes(4, 'little')
                    + t['crc'].to_bytes(4, 'little') + nm)
         try:
             n = (len(data) + 255) // 256
@@ -491,7 +503,7 @@ def cmd_put(a, backend=None, ask=input):
         e = vw.directory(a.slot, 1)[0]
         if not (e['valid'] and e['crc'] == t['crc']):
             raise LinkError('the slot does not hold the table after COMMIT')
-        back = vw.read(a.slot, 0, HEADER_LEN) + vw.read(a.slot, DATA_AT, DATA_BYTES)
+        back = vw.read(a.slot, HEADER_AT, HEADER_LEN) + vw.read(a.slot, 0, DATA_BYTES)
         if back != img:
             raise LinkError('read-back differs from the file (the slot was written but does not match: `put` again)')
     finally:
@@ -552,6 +564,28 @@ def cmd_selftest(a, backend=None, ask=input):
     return 0 if res == 0 else 1
 
 
+def cmd_xipcheck(a, backend=None):
+    if not 0 <= a.slot < SLOTS:
+        raise LinkError(f'slot must be 0..{SLOTS - 1}')
+    vw, dev = connect(a, backend)
+    try:
+        if vw.hello()['stage'] < 4:
+            raise LinkError('this firmware has no XIP check (stage < 4)')
+        d = vw.request(CMD_XIPCHECK, bytes([a.slot]), timeout=5.0, tries=1)
+    finally:
+        dev.link.close()
+    if len(d) != 16:
+        raise LinkError('unexpected XIPCHECK reply')
+    if d[0] == 7:
+        print('REFUSED: release all keys, let sound die away, and try again (or an upload is running)')
+        return 1
+    bad, first, us = (int.from_bytes(d[i:i + 4], 'little') for i in (4, 8, 12))
+    print(f'slot {a.slot}: reading the table through the flash window ' +
+          ('MATCHES the SPI read byte for byte' if bad == 0 else f'DIFFERS in {bad} byte(s), first at offset {first:#x}') +
+          f'; one pass over {DATA_BYTES} bytes took {us / 1000:.2f} ms')
+    return 0 if bad == 0 else 1
+
+
 def cmd_get(a, backend=None):
     if not 0 <= a.slot < SLOTS:
         raise LinkError(f'slot must be 0..{SLOTS - 1}')
@@ -560,7 +594,7 @@ def cmd_get(a, backend=None):
         e = vw.directory(a.slot, 1)[0]
         if not e['valid']:
             raise LinkError(f'slot {a.slot} is empty (nothing to copy)')
-        img = vw.read(a.slot, 0, HEADER_LEN) + vw.read(a.slot, DATA_AT, DATA_BYTES)
+        img = vw.read(a.slot, HEADER_AT, HEADER_LEN) + vw.read(a.slot, 0, DATA_BYTES)
         parse_image(img)                             # header and data CRC: a bad copy is never written out
     finally:
         dev.link.close()
@@ -572,14 +606,14 @@ def cmd_get(a, backend=None):
 def main(argv=None, backend=None):
     ap = argparse.ArgumentParser(description=__doc__.split('\n')[0])
     sub = ap.add_subparsers(dest='cmd', required=True)
-    for name in ('info', 'get', 'selftest', 'put', 'erase'):
+    for name in ('info', 'get', 'selftest', 'put', 'erase', 'xipcheck'):
         p = sub.add_parser(name)
         if name in ('selftest', 'put', 'erase'):
             p.add_argument('--yes', action='store_true', help='do not ask')
         if name == 'put':
             p.add_argument('slot', type=int)
             p.add_argument('file')
-        if name == 'erase':
+        if name in ('erase', 'xipcheck'):
             p.add_argument('slot', type=int)
         if name == 'get':
             p.add_argument('slot', type=int)
@@ -596,8 +630,9 @@ def main(argv=None, backend=None):
         p.add_argument('--format', choices=FORMATS, default='auto')
     a = ap.parse_args(argv)
     try:
-        if a.cmd in ('info', 'get', 'selftest', 'put', 'erase'):
-            return {'info': cmd_info, 'get': cmd_get, 'selftest': cmd_selftest, 'put': cmd_put, 'erase': cmd_erase}[a.cmd](a, backend)
+        if a.cmd in ('info', 'get', 'selftest', 'put', 'erase', 'xipcheck'):
+            return {'info': cmd_info, 'get': cmd_get, 'selftest': cmd_selftest, 'put': cmd_put, 'erase': cmd_erase,
+                    'xipcheck': cmd_xipcheck}[a.cmd](a, backend)
         return {'inspect': cmd_inspect, 'build': cmd_build}[a.cmd](a)
     except (WavError, LinkError, OSError) as e:
         print(f'error: {e}', file=sys.stderr)
