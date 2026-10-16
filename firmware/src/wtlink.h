@@ -20,7 +20,8 @@
  *
  * Needs (platform.c supplies them before this file): ota_pack7 / ota_unpack7 / ota_wire_send / ota_frame_get /
  * ota_frame_done / ota_dec (ota.c), st_read, flash_ok, crc32, FELUCCA_ID. */
-#define WT_SLOTS 8u
+#include "usertab.h"                             /* wt_ent_t, wt_dir, eng_user_base, UT_* (shared with the engine and the panel) */
+#define WT_SLOTS UT_SLOTS
 #define WT_BASE 0x00097000u                      /* slot k: WT_BASE + k * WT_SLOT_SIZE */
 #define WT_SLOT_SIZE 0x9000u                     /* 1 header sector + 8 data sectors */
 #define WT_HDR_LEN 64u
@@ -36,14 +37,6 @@ enum { WT_CMD_HELLO = 1, WT_CMD_DIR = 2, WT_CMD_BEGIN = 3, WT_CMD_DATA = 4, WT_C
        WT_CMD_ERASE = 7, WT_CMD_READ = 8, WT_CMD_AUDITION = 9, WT_CMD_SELFTEST = 10, WT_CMD_XIPCHECK = 11 };
 enum { WT_OK = 0, WT_E_ARGS = 1, WT_E_RANGE = 2, WT_E_BUSY = 7, WT_E_NOFLASH = 9 };
 
-typedef struct {
-    uint8_t valid;                               /* 1: header passed every check */
-    uint8_t frames, levels;
-    char name[9];                                /* printable ASCII, NUL ended */
-    uint32_t bytes, crc;                         /* data size, CRC32 of the data (checked by COMMIT / the tool, not here) */
-} wt_ent_t;
-
-static wt_ent_t wt_dir[WT_SLOTS];
 static uint8_t wt_scanned;
 
 static uint32_t wt_slot_at(uint32_t k) { return WT_BASE + k * WT_SLOT_SIZE; }
@@ -55,6 +48,7 @@ static void wt_parse(const uint8_t *h, wt_ent_t *e)
 {
     uint32_t i, bytes;
     e->valid = 0;
+    e->state = UT_UNCHECKED;
     e->frames = e->levels = 0;
     for (i = 0; i < sizeof e->name; i++)
         e->name[i] = 0;                          /* the whole name: no bytes of an older one survive a rescan */
@@ -100,6 +94,7 @@ static void wt_scan(void)
     uint8_t h[WT_HDR_LEN];
     uint32_t k;
     for (k = 0; k < WT_SLOTS; k++) {
+        eng_user_base[k] = 0;
         wt_dir[k].valid = 0;
         if (flash_ok && !wt_read(wt_slot_at(k) + WT_HDR_AT, h, WT_HDR_LEN))
             wt_parse(h, &wt_dir[k]);
@@ -191,6 +186,14 @@ static uint32_t wt_selftest(uint8_t *o)         /* -> payload length (18) */
     return 18;
 }
 
+static void wt_xip_init(void);
+static void wt_drop(uint32_t k)                 /* the engine must not read slot k from here on (before it is touched) */
+{
+    eng_user_base[k] = 0;
+    wt_dir[k].state = UT_UNCHECKED;
+    wt_gen++;
+}
+
 /* ---- stage 2: the upload session (one at a time) ---- */
 #define WT_SESSION_MS 15000u                     /* no request for this long: the upload is dropped, the slot stays empty */
 #define WT_SHOW_MS 1500u
@@ -252,6 +255,7 @@ static uint32_t wt_begin(const uint8_t *a, uint32_t len)
     if (!wt_may_write(a[0]))
         return WT_E_BUSY;
     wt.busy = 0;                                 /* a BEGIN over a running upload starts again */
+    wt_drop(a[0]);                               /* the engine stops reading the slot BEFORE it is erased */
     wt_dir[a[0]].valid = 0;
     if (wt_flash_erase(wt_slot_at(a[0]) + WT_HDR_SECTOR, &us)) {      /* the header's sector: empty from here on */
         wt_end(3);
@@ -363,6 +367,10 @@ static uint32_t wt_commit(const uint8_t *a, uint32_t len, uint32_t *crc)
         return 5;
     }
     wt_dir[wt.slot] = e;
+    wt_dir[wt.slot].state = UT_OK;               /* the CRC32 of all 35,648 stored bytes was just checked */
+    wt_xip_init();
+    eng_user_base[wt.slot] = fl_xip_i16(wt_slot_at(wt.slot));
+    wt_gen++;
     *crc = c;
     wt_end(WT_R_OK);
     return WT_OK;
@@ -474,6 +482,47 @@ static uint32_t wt_xipcheck(uint32_t slot, uint8_t *o)
     return 16;
 }
 
+/* The engine plays a user table only after its data CRC32 matched the header's (a header alone can sit over damaged data:
+ * a power cut inside BEGIN's erase of the header sector, docs/UPLOAD-DESIGN.md 12). The check reads the 35,648 bytes over SPI
+ * (about 0.15 s, the main loop only; the audio runs on). Returns 1 for UT_OK. */
+static uint32_t wt_verify(uint32_t k)
+{
+    uint8_t b[64];
+    uint32_t i, c = 0xFFFFFFFFu;
+    eng_user_base[k] = 0;
+    for (i = 0; i < WT_DATA_BYTES; i += 64u) {
+        if (wt_read(wt_slot_at(k) + i, b, 64u))
+            return 0;                            /* a failed read proves nothing: stays UNCHECKED, tried again */
+        c = wt_crc_upd(c, b, 64u);
+        fm1_wdt_feed();
+    }
+    if (~c != wt_dir[k].crc) {
+        wt_dir[k].state = UT_BAD;                /* the data is not what the header says: never played, not tried again */
+        wt_gen++;
+        return 0;
+    }
+    wt_xip_init();
+    wt_dir[k].state = UT_OK;
+    eng_user_base[k] = fl_xip_i16(wt_slot_at(k));
+    wt_gen++;
+    return 1;
+}
+/* main loop, every pass: the user tables the patch refers to (table index t1 / t2, 12.. = slot 0..) are checked once;
+ * until then the engine plays table 0 */
+static void wt_user_poll(uint32_t t1, uint32_t t2)
+{
+    uint32_t i, t;
+    if (!wt_scanned || wt.busy || !flash_ok)
+        return;
+    for (i = 0; i < 2u; i++) {
+        t = i ? t2 : t1;
+        if (t >= UT_FIRST && t < UT_NTABLES && wt_dir[t - UT_FIRST].valid && wt_dir[t - UT_FIRST].state == UT_UNCHECKED) {
+            wt_verify(t - UT_FIRST);
+            return;                              /* one slot a pass */
+        }
+    }
+}
+
 static uint8_t wt_msg[9 + 256 + 1], wt_wire[2 + (9 + 256 + 1) * 8 / 7 + 2];
 
 static void wt_reply(uint32_t cmd, uint32_t rc, uint32_t seq, const uint8_t *pl, uint32_t n)   /* n <= 256 */
@@ -583,6 +632,7 @@ static void wt_handle(const uint8_t *r)         /* r: a checked request, r[3] cm
         else if (wt.busy || !wt_may_write(a[0]))
             rc = WT_E_BUSY;
         else {
+            wt_drop(a[0]);
             wt_dir[a[0]].valid = 0;
             if (wt_flash_erase(wt_slot_at(a[0]) + WT_HDR_SECTOR, &us))
                 rc = 3;
@@ -610,6 +660,7 @@ static void wt_service(void)
     if (!wt_scanned) {
         wt_scanned = 1;
         wt_scan();
+        wt_xip_init();                           /* the plain flash window for the engine's reads (proven by XIPCHECK, 4a) */
     }
     if (wt.busy && (int32_t)(fm1_ms - wt.t_last) > (int32_t)WT_SESSION_MS)
         wt_end(6);                               /* the tool went away: the slot stays empty */

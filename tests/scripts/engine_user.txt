@@ -1,0 +1,46 @@
+# VAVEWave stage 4b: user wavetables in the engine (tests/run_engine.sh). Slot 0 holds a table that is the 2nd harmonic alone
+# (a sine at twice the played pitch, so it is told from table 0 by pitch), slot 1 is listed as damaged (BAD), slot 2 is
+# not checked yet (the engine must not read it); slots 3..7 are empty. OSC 2 is silenced (patch 7 = P_LEVEL2).
+50 patch 7 0
+# the ALGORITHM encoder steps 0..11 on the factory tables, then to user slot 0 (index 12)
+100 enc 1 12
+200 midi 0x90 60 110
+1000 midi 0x80 60 0
+#! check user 400 900 pitch note=72
+#! check userlevel 400 900 level max=-3
+# one more step: slot 1 (BAD) is skipped, slot 2 (unchecked, listed) is index 14: no usable data, so table 0 plays
+1100 enc 1 1
+1200 midi 0x90 60 110
+2000 midi 0x80 60 0
+#! check unchecked 1400 1900 pitch note=60
+# another step finds nothing after 14 (3..7 are empty): it stays on 14
+2100 enc 1 1
+2200 midi 0x90 60 110
+3000 midi 0x80 60 0
+#! check stays 2400 2900 pitch note=60
+# one step back: 13 (BAD) is skipped, so 12 again
+3100 enc 1 -1
+3200 midi 0x90 60 110
+4000 midi 0x80 60 0
+#! check back 3400 3900 pitch note=72
+# a patch that refers to a damaged slot (13) or an empty one (15, 19) plays table 0: never silence, never a crash
+4100 patch 0 13
+4200 midi 0x90 60 110
+5000 midi 0x80 60 0
+#! check bad 4400 4900 pitch note=60
+5100 patch 0 15
+5200 midi 0x90 60 110
+6000 midi 0x80 60 0
+#! check empty 5400 5900 pitch note=60
+6100 patch 0 19
+6200 midi 0x90 60 110
+7000 midi 0x80 60 0
+#! check empty2 6400 6900 pitch note=60
+# the user table again, at another note, and with OSC 2 on the same table
+7100 patch 0 12
+7100 patch 5 12
+7100 patch 7 80
+7200 midi 0x90 48 110
+8000 midi 0x80 48 0
+#! check both 7400 7900 level max=-3
+8100 end

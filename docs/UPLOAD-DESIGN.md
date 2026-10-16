@@ -209,3 +209,19 @@ changed, keeping 8 slots of 9 sectors at the same addresses:
 Stage 4 is split: **4a** (this commit) = layout v2 + `XIPCHECK` (cmd 11), which sets up the plain flash window on its first call (not at boot)
 and compares the slot read through XIP with the SPI read; the engine does not use the slots yet. **4b** = the engine and the ALGORITHM list use
 valid user tables (data CRC32 checked first, fallback to table 0), then `fl_plain_window_init()` moves to boot if the 4a device test is clean.
+
+## 13. Stage 4b: the engine plays user tables (2026-10-16)
+
+- **Table index** 0..11 factory, 12..19 = user slot 0..7 (`usertab.h`; `P_TABLE1/2` range 0..19). The engine finds a table with
+  `eng_tbl(t)` (synth.h): a user table only if `eng_user_base[k]` is set, else table 0: an empty, unchecked or damaged slot never
+  silences a voice and never makes the ISR read flash that is not a table.
+- **`eng_user_base[k]` is set only after the data CRC32 matched the header's**: by `wt_verify` (main loop, `wt_user_poll`, one slot a pass, about
+  0.15 s over SPI, for the tables the patch refers to) or by COMMIT (which just checked it). **BEGIN and ERASE clear it before the slot is
+  touched.** A mismatch marks the slot BAD (shown as BAD, skipped by the encoder, plays table 0).
+- **The plain flash window** (`fl_plain_window_init`) is now set up on the first main-loop pass after boot (proven by XIPCHECK, stage 4a), so
+  the engine can read slots in place through the cache (24 ns/byte measured, same as other XIP reads).
+- **UI**: ALGORITHM steps through the 12 factory tables, then the user tables that exist (empty and BAD slots skipped); the user name is shown
+  in full (8 characters) on the big views and as 5 characters on the status line (decision A); an unknown index shows EMPTY.
+- Host test: `DINGHY_USERTAB` + `patch` script lines (tests/host.c) and tests/scripts/engine_user.txt: a user table at the exact pitch,
+  fallbacks for BAD / unchecked / empty slots, encoder stepping and skipping, under UBSan.
+- **Device checks (docs/DEVICE-TEST-PLAN.md section 9)**: the CPU cost of a user table (OSC1, OSC2, both; worst case) against the factory numbers.

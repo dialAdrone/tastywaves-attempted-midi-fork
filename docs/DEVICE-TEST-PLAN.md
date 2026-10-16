@@ -116,3 +116,19 @@ to read or lag, and the answers to the design review points. I update `docs/TASK
 next steps (effects, patch storage T17, arp / sequencer T27-T29).
 
 To go back: `fm1_install.py` the stock `FM-1_093` package (rescue with OCT- held at power-on if the app won't start).
+
+## 9. User wavetables (stage 4b)
+
+Tables in the slots: `build` them with `tools/fm1_wavetable.py` (see its --help) and `put SLOT FILE.vwt`. Re-upload after the layout change of stage 4a.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 9.1 | Flash, `info`, `put 0` a table, play | the synth sounds as before (factory table), no glitch at the upload end, the normal screen returns |
+| 9.2 | ALGORITHM turned up past STAIR (12 factory tables) | the user name appears (full on the minimal HOME look, 5 characters on the status line), the waveform and spectrum follow, the sound is the uploaded table, SELECT morphs through its frames; empty slots are skipped |
+| 9.3 | First selection of a slot after power-on | up to about 0.15 s before the table sounds (its CRC is checked first), meanwhile the factory table 0; no click-and-silence |
+| 9.4 | OSC2 chip (EDIT, EDIT) and ALGORITHM: the user table on OSC2, on both | works on each oscillator |
+| 9.5 | CPU MAX (GLO, EDIT + HOME restarts it): 12 notes, default patch with user table on OSC1; on OSC1 and OSC2 (different slots); worst case (BEND both, SUB, NOISE, HP) | compare with section 2 (49 / 50 / 50 %): user tables are read through the same cache, expect the same; a rise above 75 % or crackle is a fail |
+| 9.6 | Replace the table in the slot you are playing: `put` while no key is down | the upload screen, then the NEW table sounds (no restart needed) |
+| 9.7 | Preset with a user table (edit, SAVE), `erase` that slot, power-cycle, load the patch | plays table 0 (never silence), the name shows EMPTY; no crash |
+| 9.8 | Power-cycle with tables in all 8 slots, wait, play | normal boot, no delay (CRC checks run only for slots a patch uses) |
+| 9.9 | Pull the cable / switch off in the middle of a `put` into the slot that is sounding (keys up), power-cycle | that slot is empty (EMPTY), the others intact |

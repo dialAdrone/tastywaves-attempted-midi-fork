@@ -4,6 +4,8 @@
  *   build/host/selftest */
 #include <assert.h>
 enum { BTN_OCT_DOWN = 0, BTN_OCT_UP = 1 };
+#include <stdint.h>
+static void patch_set(uint32_t id, int32_t v) { (void)id; (void)v; }
 #define main host_main
 #include "host.c"
 #undef main

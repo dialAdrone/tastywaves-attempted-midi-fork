@@ -15,11 +15,12 @@
  * all use the same table; values fit an int16, all but the positions an int8). Values out of range are clamped by
  * patch_set and again by the ISR's reads, so a corrupted preset cannot make the ISR index out of a table. */
 #pragma once
+#include "usertab.h"                             /* table 12..19 = user slot 0..7 */
 
 #define ENG_NV 12u                              /* voices */
 
 enum {
-    /* oscillator 1 / 2: wavetable (0..11), position 0..4095 over the 32 frames (12 bit, any frame, morphs between
+    /* oscillator 1 / 2: wavetable (0..11 factory, 12..19 user slots 0..7), position 0..4095 over the 32 frames (12 bit, any frame, morphs between
      * neighbours), level, coarse (semitones) and fine (1/128 semitone: +-64 = +-50 cents) tune */
     P_TABLE1, P_POS1, P_LEVEL1, P_SEMI1, P_FINE1,
     P_TABLE2, P_POS2, P_LEVEL2, P_SEMI2, P_FINE2,
@@ -64,8 +65,8 @@ enum {
 
 typedef struct { char name[6]; int16_t min, max, def; } pdesc_t;
 static const pdesc_t PDESC[P_COUNT] = {
-    {"TBL1", 0, 11, 0},   {"POS1", 0, 4095, 0},  {"LVL1", 0, 127, 100}, {"SEMI1", -24, 24, 0}, {"FINE1", -64, 63, 0},
-    {"TBL2", 0, 11, 0},   {"POS2", 0, 4095, 0},  {"LVL2", 0, 127, 80},  {"SEMI2", -24, 24, 0}, {"FINE2", -64, 63, 9},
+    {"TBL1", 0, UT_NTABLES - 1, 0},   {"POS1", 0, 4095, 0},  {"LVL1", 0, 127, 100}, {"SEMI1", -24, 24, 0}, {"FINE1", -64, 63, 0},
+    {"TBL2", 0, UT_NTABLES - 1, 0},   {"POS2", 0, 4095, 0},  {"LVL2", 0, 127, 80},  {"SEMI2", -24, 24, 0}, {"FINE2", -64, 63, 9},
     {"SUB", 0, 127, 0},   {"NOISE", 0, 127, 0},
     {"BEND", -64, 63, 0}, {"BDEST", 0, 2, 0},    {"ECO", 0, 1, 0},
     {"CUT", 0, 127, 110}, {"RES", 0, 127, 20},   {"FMODE", 0, 2, 0},    {"KTRK", 0, 127, 64},  {"FENV", -64, 63, 0},

@@ -257,6 +257,9 @@ static int fl_write(uint32_t off, const uint8_t *src_ram, uint32_t n)
  * fl_plain_window_init for data above 0x93000). */
 static inline const volatile uint8_t *fl_xip_vptr(uint32_t off) { return (const volatile uint8_t *)FL_XIP(off); }
 
+/* The same, as int16 samples (a wavetable the engine reads in place; even offsets only). */
+static inline const int16_t *fl_xip_i16(uint32_t off) { return (const int16_t *)FL_XIP(off); }
+
 /* Read back through XIP (needs fl_plain_window_init) and compare. */
 static int fl_verify_xip(uint32_t off, const uint8_t *ref, uint32_t n)
 {

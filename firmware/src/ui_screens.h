@@ -33,7 +33,7 @@ typedef struct {
     uint8_t voices, voices_max, cpu, modified;  /* voices sounding / available, CPU % of the block, patch edited */
     uint8_t table, frame, nframes;              /* table index, nearest frame 0..nframes-1, frames in the table */
     uint16_t pos;                               /* 12-bit wavetable position 0..4095 */
-    char patch[16], tname[8];
+    char patch[16], tname[9];
     const char *klabel[4];                      /* <= 7 characters */
     char kval[4][8];                            /* what to print: <= 3 characters big, 4..7 small */
     uint8_t kfrac[4];                           /* bar fill 0..255 */
@@ -59,7 +59,7 @@ typedef struct {
 typedef struct {
     uint8_t valid, page, variant, sub, touched, voices, cpu, modified, table, frame, kbip, ksmall;
     uint16_t pos;
-    char patch[16], tname[8], linea[48], kval[4][8];
+    char patch[16], tname[9], linea[48], kval[4][8];
     const char *klabel[4];
     uint8_t kfrac[4], env[2][4], harm[16];
     uint8_t flash, nsets, set;
@@ -71,6 +71,7 @@ typedef struct {
 
 /* ---- small helpers (own copies: ui.h's s_cat / s_num belong to the sine build) */
 static char *ui_cat(char *d, const char *s) { while (*s) *d++ = *s++; *d = 0; return d; }
+static char *ui_cat5(char *d, const char *s) { uint32_t n = 0; while (*s && n++ < 5u) *d++ = *s++; *d = 0; return d; }   /* a table name on the status line: 5 characters */
 static char *ui_num(char *d, int32_t v)
 {
     char t[12];
@@ -366,14 +367,14 @@ static void ui_left_text(char *out, const ui_view_t *v)       /* the left part o
     static const char *const OSC[4] = {"OSC1", "OSC2", "SUB", "NOISE"};
     char *d = out;
     switch (v->page) {
-    case UI_P_EDIT: d = ui_cat(d, OSC[v->sub & 3u]); d = ui_cat(d, " "); ui_cat(d, v->tname); break;
+    case UI_P_EDIT: d = ui_cat(d, OSC[v->sub & 3u]); d = ui_cat(d, " "); ui_cat5(d, v->tname); break;
     case UI_P_ENV: d = ui_cat(d, "ENV "); ui_cat(d, v->sub ? "FILTER" : "AMP"); break;
     case UI_P_FX: ui_cat(d, v->sub ? "FILTER 2/2" : "FILTER 1/2"); break;
     case UI_P_LFO: ui_cat(d, v->sub ? "LFO 2/2" : "LFO 1/2"); break;
     case UI_P_SEL: ui_cat(d, "VOICE"); break;
     case UI_P_GLO: ui_cat(d, v->sub == 2u ? "BOOT KEYS 3/3" : v->sub ? "GLOBAL 2/3" : "GLOBAL 1/3"); break;
     default:
-        if (v->variant != UI_H_MINIMAL) { d = ui_cat(d, v->tname); d = ui_cat(d, " "); }
+        if (v->variant != UI_H_MINIMAL) { d = ui_cat5(d, v->tname); d = ui_cat(d, " "); }
         d = ui_cat(d, "FRM ");
         d = ui_num(d, v->frame + 1);
         d = ui_cat(d, "/");
@@ -658,7 +659,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
     s->table = v->table; s->frame = v->frame; s->pos = v->pos;
     s->flash = v->flash; s->wave_key = v->wave_key;
     ui_copy(s->patch, v->patch, 16);
-    ui_copy(s->tname, v->tname, 8);
+    ui_copy(s->tname, v->tname, 9);
     for (i = 0; i < 8u; i++) s->env[i >> 2][i & 3u] = v->env[i >> 2][i & 3u];
 }
 

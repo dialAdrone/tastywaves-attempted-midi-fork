@@ -88,6 +88,7 @@ static int fl_write(uint32_t off, const uint8_t *s, uint32_t n)
 static int xip_inits; static uint8_t *xip_base;
 static void fl_plain_window_init(void) { xip_inits++; }
 static const volatile uint8_t *fl_xip_vptr(uint32_t off) { return xip_base + off; }
+static const int16_t *fl_xip_i16(uint32_t off) { return (const int16_t *)(xip_base + off); }
 #include "../firmware/src/wtlink.h"
 
 static void send(const uint8_t *msg, uint32_t n)       /* decoded message -> pending SysEx frame */
@@ -483,6 +484,59 @@ static int check_main(void)
           out_n = 0; request(WT_CMD_XIPCHECK, 99, q, 0); wt_service(); CHECK(reply(&rc, &seq) && rc == WT_E_ARGS); }
         memset(flash + 0x97000, 0xFF, 0x9000); wt_scan();
         (void)o;
+    }
+
+    /* stage 4b: the engine reads a user table only after its data CRC32 matched; before a slot is touched it is dropped */
+    {
+        static uint8_t tv[35648]; uint32_t t3, crv;
+        for (t3 = 0; t3 < sizeof tv; t3++) tv[t3] = (uint8_t)(t3 * 11u + (t3 >> 6));
+        crv = crc32(tv, sizeof tv);
+        memset(flash + 0x97000, 0xFF, 0x9000 * 8); 
+        memset(&wt, 0, sizeof wt);
+        for (t3 = 0; t3 < 8; t3++) { memcpy(flash + wt_slot_at(t3), tv, sizeof tv); }
+        for (t3 = 0; t3 < 8; t3++) {                                   /* headers for slots 0..7: 6 = bad data, 5 = bad header CRC */
+            uint8_t *h = flash + wt_slot_at(t3) + WT_HDR_AT; memset(h, 0xFF, 64); memcpy(h, "VWT1", 4); ota_wr16(h + 4, 2); h[6] = 1; h[7] = 32; h[8] = 7; h[9] = 0;
+            memset(h + 10, 0, 8); memcpy(h + 10, "USERT", 5); ota_wr32(h + 18, 35648u); ota_wr32(h + 22, crv); ota_wr32(h + 26, crc32(h, 26));
+        }
+        flash[wt_slot_at(6) + 5000] ^= 0x01;                           /* slot 6: the header is fine, the data is damaged */
+        flash[wt_slot_at(5) + WT_HDR_AT + 12] ^= 1;                    /* slot 5: header CRC broken = empty */
+        wt_scan();
+        { uint32_t k3, anyb = 0; for (k3 = 0; k3 < 8; k3++) anyb |= (uint32_t)(uintptr_t)eng_user_base[k3] | wt_dir[k3].state; CHECK(anyb == 0); }   /* nothing usable before a check */
+        CHECK(wt_dir[6].valid && !wt_dir[5].valid && wt_dir[0].valid);
+        wt_user_poll(3, 4); CHECK(!eng_user_base[0] && wt_dir[0].state == UT_UNCHECKED);      /* factory tables: nothing to do */
+        wt_user_poll(UT_FIRST + 5, UT_FIRST + 5); CHECK(!eng_user_base[5] && wt_dir[5].state == UT_UNCHECKED);   /* an empty slot: nothing */
+        wt_user_poll(UT_FIRST + 0, UT_FIRST + 1);                      /* one slot a pass */
+        CHECK(wt_dir[0].state == UT_OK && eng_user_base[0] == (const int16_t *)(xip_base + wt_slot_at(0)) && wt_dir[1].state == UT_UNCHECKED);
+        wt_user_poll(UT_FIRST + 0, UT_FIRST + 1);
+        CHECK(wt_dir[1].state == UT_OK && eng_user_base[1] != 0);
+        wt_user_poll(UT_FIRST + 6, 0);
+        CHECK(wt_dir[6].valid && wt_dir[6].state == UT_BAD && !eng_user_base[6]);                 /* damaged data: never given to the engine */
+        wt_user_poll(UT_FIRST + 6, 0); CHECK(wt_dir[6].state == UT_BAD);                          /* and not retried every pass */
+        wt.busy = 1; wt_user_poll(UT_FIRST + 2, 0); CHECK(!eng_user_base[2]); wt.busy = 0;        /* not during an upload */
+        flash_ok = 0; wt_user_poll(UT_FIRST + 2, 0); CHECK(!eng_user_base[2]); flash_ok = 1;
+        wt_user_poll(UT_FIRST + 7, 99); CHECK(wt_dir[7].state == UT_OK);
+        wt_user_poll(200, UT_FIRST + 7);                               /* out of range indices are ignored */
+        /* BEGIN drops the slot first; COMMIT makes the new table usable at once; ERASE drops it */
+        { uint8_t bb[20] = {0}; uint8_t cc[1] = {0};
+          bb[0] = 0; bb[1] = 1; bb[2] = 32; bb[3] = 7; ota_wr32(bb + 4, 35648u); ota_wr32(bb + 8, crv); memcpy(bb + 12, "NEW", 3);
+          CHECK(eng_user_base[0] != 0);
+          out_n = 0; request(WT_CMD_BEGIN, 100, bb, 20); wt_service(); CHECK(reply(&rc, &seq) && rc == 0);
+          CHECK(!eng_user_base[0] && wt_dir[0].state == UT_UNCHECKED && !wt_dir[0].valid);
+          for (t3 = 0; t3 < 140; t3++) { uint8_t dd[259]; uint32_t nn = t3 == 139 ? 64 : 256; dd[0] = 0; ota_wr16(dd + 1, t3); memcpy(dd + 3, tv + t3 * 256, nn);
+              out_n = 0; request(WT_CMD_DATA, 101, dd, 3 + nn); wt_service(); CHECK(reply(&rc, &seq) && rc == 0); }
+          CHECK(!eng_user_base[0]);                                    /* still unusable until COMMIT */
+          out_n = 0; request(WT_CMD_COMMIT, 102, cc, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0);
+          CHECK(wt_dir[0].state == UT_OK && eng_user_base[0] == (const int16_t *)(xip_base + wt_slot_at(0)));
+          fm1_ms += 1600; wt_ui_poll(); wt_ui_poll();
+          out_n = 0; request(WT_CMD_ERASE, 103, cc, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 0 && !eng_user_base[0] && !wt_dir[0].valid);
+          /* a failed COMMIT (bad CRC) leaves it unusable */
+          bb[1] = 1; ota_wr32(bb + 8, crv ^ 1u);
+          out_n = 0; request(WT_CMD_BEGIN, 104, bb, 20); wt_service(); CHECK(reply(&rc, &seq) && rc == 0);
+          for (t3 = 0; t3 < 140; t3++) { uint8_t dd[259]; uint32_t nn = t3 == 139 ? 64 : 256; dd[0] = 0; ota_wr16(dd + 1, t3); memcpy(dd + 3, tv + t3 * 256, nn);
+              out_n = 0; request(WT_CMD_DATA, 105, dd, 3 + nn); wt_service(); CHECK(reply(&rc, &seq) && rc == 0); }
+          out_n = 0; request(WT_CMD_COMMIT, 106, cc, 1); wt_service(); CHECK(reply(&rc, &seq) && rc == 8 && !eng_user_base[0] && !wt_dir[0].valid);
+          fm1_ms += 1600; wt_ui_poll(); wt_ui_poll(); }
+        memset(flash + 0x97000, 0xFF, 0x9000 * 8); wt_scan(); memset(&wt, 0, sizeof wt);
     }
 
     /* no flash: DIR / READ say so */

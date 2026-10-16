@@ -3,6 +3,8 @@
  * no sound. Controls as on the panel: HOME cycles the three home looks, EDIT / ENV pages (ENV again: filter envelope),
  * SAVE clears "modified", ALGORITHM = table, SELECT = position, PRESETS = patch name, KNOB1-4 = the page's values,
  * keys = voices. Build and run: tests/run_ui.sh (script: tests/scripts/ui_demo.txt). */
+#include <stdint.h>
+static void patch_set(uint32_t id, int32_t v) { (void)id; (void)v; }   /* (the host script's "patch" line; no engine here) */
 #include "platform.c"
 #include "wavetables.h"
 #include "ui_screens.h"

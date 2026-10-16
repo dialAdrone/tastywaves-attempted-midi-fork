@@ -14,6 +14,7 @@
  * device. LED changes are logged as "LED id on/off". Change SCRIPT0 below to try your own app. */
 #include <stdint.h>
 #include <stdio.h>
+#include "usertab.h"
 #include <stdlib.h>
 #include <string.h>
 
@@ -41,6 +42,7 @@ static uint32_t fm1_ticks(void)
 
 static volatile uint32_t fm1_ms;
 static uint32_t wt_ui_poll(void) { return 0; }   /* the upload screen (wtlink.h) exists only on the device */
+static void wt_user_poll(uint32_t t1, uint32_t t2) { (void)t1; (void)t2; }   /* ... and so does the user tables' CRC check */
 static struct { uint32_t notes, buttons, frames; uint8_t raw[11]; } fm1_in;   /* frames / raw: what the boot scan saw (fake here) */
 static uint32_t host_edges, host_note_edges;
 static int32_t host_enc[7];
@@ -115,10 +117,40 @@ static void midi_send(uint32_t st, uint32_t d1, uint32_t d2) { printf("%6u ms  M
 
 static void app_audio(int32_t *out, uint32_t n);
 static void app_main(void);
+static void patch_set(uint32_t id, int32_t v);                   /* patch.h */
+
+/* DINGHY_USERTAB="K:file.vwt[:bad|:unchecked];..." fills user slot K from a table file (tools/fm1_wavetable.py build):
+ * as the device after its CRC check (usable), or damaged (listed as BAD, not given to the engine), or not checked yet */
+static void host_usertab(const char *spec)
+{
+    char *dup = strdup(spec), *tok, *save = 0;
+    for (tok = strtok_r(dup, ";", &save); tok; tok = strtok_r(0, ";", &save)) {
+        unsigned k = (unsigned)atoi(tok);
+        char *path = strchr(tok, ':'), *mode;
+        FILE *f;
+        static uint8_t img[64 + 35648];
+        int16_t *data;
+        if (!path || k >= UT_SLOTS) { fprintf(stderr, "DINGHY_USERTAB: bad entry '%s'\n", tok); exit(1); }
+        path++;
+        mode = strchr(path, ':');
+        if (mode) *mode++ = 0;
+        f = fopen(path, "rb");
+        if (!f || fread(img, 1, sizeof img, f) != sizeof img) { fprintf(stderr, "DINGHY_USERTAB: cannot read %s\n", path); exit(1); }
+        fclose(f);
+        data = malloc(35648);
+        memcpy(data, img + 64, 35648);
+        wt_dir[k].valid = 1; wt_dir[k].frames = img[7]; wt_dir[k].levels = img[8];
+        memcpy(wt_dir[k].name, img + 10, 8); wt_dir[k].name[8] = 0;
+        wt_dir[k].bytes = 35648; wt_dir[k].crc = 0;
+        wt_dir[k].state = mode && !strcmp(mode, "bad") ? UT_BAD : mode && !strcmp(mode, "unchecked") ? UT_UNCHECKED : UT_OK;
+        eng_user_base[k] = wt_dir[k].state == UT_OK ? data : 0;
+    }
+    free(dup);
+}
 
 /* the script: at t ms, keys down (bit k = key k, 0 = F3), a button edge, a MIDI message. A script file (the second
  * argument) replaces it, a line each: "T keys MASK" (hex or decimal), "T btn ID", "T enc ID DELTA", "T midi ST D1 D2",
- * "T bdown ID" / "T bup ID" (a button pressed and held / released: fm1_in.buttons), "T shot NAME" (screen -> OUT-NAME.ppm at that time; any shot line replaces the default 1 s / 3 s screens), "T end" */
+ * "T patch ID VALUE" (engine parameter, patch.h), "T bdown ID" / "T bup ID" (a button pressed and held / released: fm1_in.buttons), "T shot NAME" (screen -> OUT-NAME.ppm at that time; any shot line replaces the default 1 s / 3 s screens), "T end" */
 typedef struct { uint32_t t, keys; int btn; uint8_t st, d1, d2; int enc; int32_t delta; char shot[24]; uint8_t hold; } host_ev_t;
 static const host_ev_t SCRIPT0[] = {
     {200, 1u << 7, -1, 0, 0, 0},                                /* C4 */
@@ -157,6 +189,11 @@ static void read_script(const char *path)
         else if (!strcmp(what, "bdown")) { sscanf(line, "%*u %*s %d", &e.btn); e.hold = 1; }   /* pressed and held */
         else if (!strcmp(what, "bup")) { sscanf(line, "%*u %*s %d", &e.btn); e.hold = 2; }     /* released */
         else if (!strcmp(what, "midi")) { sscanf(line, "%*u %*s %i %u %u", (int *)&a, &b, &c); e.st = (uint8_t)a; e.d1 = (uint8_t)b; e.d2 = (uint8_t)c; }
+        else if (!strcmp(what, "patch")) {
+            int id = -1, v = 0;
+            if (sscanf(line, "%*u %*s %d %d", &id, &v) != 2 || id < 0) continue;
+            e.enc = id; e.delta = v; e.hold = 3;
+        }
         else if (!strcmp(what, "enc")) {
             int id = -1, d = 0;
             if (sscanf(line, "%*u %*s %d %d", &id, &d) != 2 || id < 0 || id > 6) continue;
@@ -226,6 +263,8 @@ static void platform_poll(void)                 /* one call = one millisecond */
         } else if (script[step].st) {
             mq[mq_w % 64u][0] = script[step].st; mq[mq_w % 64u][1] = script[step].d1; mq[mq_w % 64u][2] = script[step].d2;
             mq_w++;
+        } else if (script[step].hold == 3) {
+            patch_set((uint32_t)script[step].enc, script[step].delta);   /* "T patch ID VALUE": the engine parameter directly */
         } else if (script[step].btn >= 0) {
             uint32_t bit = 1u << script[step].btn;
             if (script[step].hold == 2) fm1_in.buttons &= ~bit;     /* bup: no press edge */
@@ -274,6 +313,7 @@ int main(int argc, char **argv)
     if (argc > 1) host_out = argv[1];
     if (argc > 2) read_script(argv[2]);
     if (argc > 3) frame_fps = (uint32_t)atoi(argv[3]);
+    if (getenv("DINGHY_USERTAB")) host_usertab(getenv("DINGHY_USERTAB"));
     {   /* host has no boot scan: fake values for the BOOT KEYS page (GLO, third set): OCT- held, 80 frames */
         uint32_t i;
         fm1_in.buttons = 0x0001u;

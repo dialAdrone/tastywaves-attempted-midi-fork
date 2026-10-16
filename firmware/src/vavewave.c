@@ -146,7 +146,7 @@ static uint8_t boot_raw[11];
 static void app_main(void)
 {
     app_set_t set;
-    uint32_t prev = 0, started = 0, k, t_change = 0, dirty = 0, t_cpu = 0, cpu = 0, cpu_mx = 0;
+    uint32_t prev = 0, started = 0, k, t_change = 0, dirty = 0, t_cpu = 0, cpu = 0, cpu_mx = 0, gen_seen = 0;
     uint8_t held[27] = {0};                     /* the note each key plays */
 
     boot_btn = fm1_in.buttons;                  /* before anything else */
@@ -173,6 +173,12 @@ static void app_main(void)
                 continue;
             }
             if (w == 2u) memset(&pn_shadow, 0, sizeof pn_shadow);     /* the next ui_draw repaints everything */
+            wt_user_poll((uint32_t)patch_get(P_TABLE1), (uint32_t)patch_get(P_TABLE2));   /* a user table the patch uses: CRC first */
+            if (wt_gen != gen_seen) {           /* what a table index plays changed: draw the table pictures again */
+                gen_seen = wt_gen;
+                memset(&pn_shadow, 0, sizeof pn_shadow);
+                pn.wave_key = ~0u;
+            }
         }
 
         hb = fm1_in.buttons;                    /* held now */

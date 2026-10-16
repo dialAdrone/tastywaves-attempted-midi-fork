@@ -1,0 +1,31 @@
+# VAVEWave stage 4b: a user table of full-scale noise (tests/make_hostile_table.py) in slot 3, on both oscillators, with the
+# loudest settings: the engine must not leave the table, overflow, or crash (UBSan + ASan in tests/run_engine.sh). No audio check
+# beyond "the run finishes": the sound is garbage by construction.
+50 patch 0 15
+50 patch 5 15
+50 patch 2 127
+50 patch 7 127
+100 midi 0xB0 71 127
+110 midi 0xB0 74 100
+# chords from the lowest to the highest notes
+200 midi 0x90 24 127
+200 midi 0x90 31 127
+200 midi 0x90 36 127
+200 midi 0x90 48 127
+200 midi 0x90 60 127
+200 midi 0x90 72 127
+200 midi 0x90 84 127
+200 midi 0x90 96 127
+200 midi 0x90 108 127
+200 midi 0x90 120 127
+900 midi 0xB0 123 0
+1000 midi 0xB0 13 2
+1000 midi 0xB0 15 0
+1100 midi 0x90 40 127
+1100 midi 0x90 52 127
+1100 midi 0x90 100 127
+1100 midi 0xB0 12 127
+1800 midi 0xB0 12 0
+1900 midi 0xB0 15 127
+1900 midi 0x90 45 127
+2600 end

@@ -169,10 +169,24 @@ static uint32_t eng_warp_preview(uint32_t ph, int32_t warp)   /* main loop: the 
     return w.A ? warp_ph(ph, w.A) : ph;
 }
 
+/* table index -> sample 0 of level 0 of frame 0 (the guards sit before it). 12.. = user slots: only a slot whose data CRC
+ * matched has a base (usertab.h); an empty, unchecked or damaged one plays table 0: never silence, never a crash. */
+static const int16_t *eng_tbl(uint32_t t)
+{
+    if (t < WTG_TABLES)
+        return WTG_DATA + t * WTG_FRAMES * WTG_FRAME_LEN + WTG_PRE;
+    if (t < UT_NTABLES) {
+        const int16_t *u = eng_user_base[t - UT_FIRST];
+        if (u)
+            return u + WTG_PRE;
+    }
+    return WTG_DATA + WTG_PRE;
+}
+
 static const int16_t *eng_frames(uint32_t table, uint32_t *stride)
 {
     if (stride) *stride = WTG_FRAME_LEN;
-    return WTG_DATA + (table % WTG_TABLES) * WTG_FRAMES * WTG_FRAME_LEN + WTG_PRE;
+    return eng_tbl(table);
 }
 
 /* ---------------------------------------------------------------- oscillators (per frame: the hot loops)
@@ -192,7 +206,8 @@ ENG_INLINE int32_t rd_sinc(const int16_t *p, uint32_t w, uint32_t sh, uint32_t s
     t = c[5]; s0 += (int64_t)t * a[5]; s1 += (int64_t)t * b[5];
     t = c[6]; s0 += (int64_t)t * a[6]; s1 += (int64_t)t * b[6];
     t = c[7]; s0 += (int64_t)t * a[7]; s1 += (int64_t)t * b[7];
-    /* |s0 >> 15| <= 29490 * 52244 / 32768 = 47019; x (wa + wb < 2^15): < 2^31 */
+    /* factory peak 29490: |s0 >> 15| <= 29490 * 52244 / 32768 = 47019. A user table may hold any int16: <= 32768 * 52244 / 32768 = 52244
+     * (52244 = the largest sum of |taps|); x (wa + wb < 2^15): < 2^31 either way */
     return (int32_t)(((int64_t)(int32_t)(s0 >> 15) * wa + (int64_t)(int32_t)(s1 >> 15) * wb) >> 15);
 }
 
@@ -275,8 +290,9 @@ static uint32_t osc_noise(int32_t *buf, uint32_t seed, int32_t lvl)
  *   v3 = x - ic2; v1 = a1 ic1 + a2 v3; v2 = ic2 + a2 ic1 + a3 v3; ic1 = 2 v1 - ic1; ic2 = 2 v2 - ic2;
  *   LP = v2, BP = v1, HP = x - k v1 - v2.
  * Two 64-bit multiply-accumulates per output (one instruction each on pi32v2). States carry the signal x SVF_X.
- * Bound (no clamp needed): |x| <= 16 x (2 x 47019 + 32767 + 16384) = 2.3e6; the largest gain of any state is about
- * 1 / (2R) = 33 at R = 0.015, so |ic1|, |ic2| < 2 x 33 x 2.3e6 = 1.5e8 < 2^31, and every product < 2^57. */
+ * Bound (no clamp needed): |x| <= 16 x (2 x 52244 + 32767 + 16384) = 2.5e6 (52244: any int16 in a user table; the factory peak
+ * gives 2.3e6); the largest gain of any state is about 1 / (2R) = 33 at R = 0.015, so |ic1|, |ic2| < 2 x 33 x 2.5e6 = 1.6e8
+ * < 2^31, and every product < 2^57. */
 #define SVF_LOOP(OUT)                                                                                         \
     for (i = 0; i < ENG_CR; i++) {                                                                            \
         int32_t x = vbuf[i] * SVF_X, v3 = x - ic2, v1, v2;                                                    \
@@ -522,8 +538,8 @@ static void voice_render(uint32_t v, uint32_t nsteps)
     int32_t sus_a = p[P_S1] * 8454660, sus_m = p[P_S2] * 8454660, lin = !p[P_ECURVE];   /* 127 -> 2^30 */
     int32_t gk = GLIDE_K[p[P_GLIDE]], kt = p[P_KEYTRK], vg;
     const int16_t *tb[2];
-    tb[0] = WTG_DATA + (uint32_t)p[P_TABLE1] * WTG_FRAMES * WTG_FRAME_LEN + WTG_PRE;
-    tb[1] = WTG_DATA + (uint32_t)p[P_TABLE2] * WTG_FRAMES * WTG_FRAME_LEN + WTG_PRE;
+    tb[0] = eng_tbl((uint32_t)p[P_TABLE1]);
+    tb[1] = eng_tbl((uint32_t)p[P_TABLE2]);
     /* velocity -> level: 1 - sens * (1 - vel / 127) */
     vg = 32767 - (((p[P_VEL_AMP] * 258) * ((127 - vp->vel) * 258)) >> 15);
     for (i = 0; i < nsteps; i++) {

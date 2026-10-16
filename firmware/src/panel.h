@@ -222,7 +222,7 @@ static uint32_t pn_edit_wave(uint32_t sub)
         uint32_t t = (uint32_t)patch_get(sub ? P_TABLE2 : P_TABLE1), pos = (uint32_t)patch_get(sub ? P_POS2 : P_POS1);
         int32_t warp = patch_get(P_WARP), dest = patch_get(P_WARP_DEST);
         int apply = warp && (dest == 0 || dest == (int32_t)sub + 1);
-        key = t | pos << 4 | (uint32_t)(apply ? warp & 127 : 0) << 16 | sub << 24;
+        key = t | pos << 5 | (uint32_t)(apply ? warp & 127 : 0) << 17 | sub << 24;      /* t 5 bits, pos 12, warp 7, sub 1 */
         if (key == pn.wave_key) return key;
         {
             uint32_t stride, P = pos * 31u >> 4, f0 = P >> 8, a = P & 255u, f1 = f0 < 31u ? f0 + 1u : f0;
@@ -299,6 +299,26 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
     if (b & 1u << BTN_SAVE) pn.save_req = 1;
 }
 
+/* ALGORITHM steps through the 12 factory tables, then the user tables that exist (empty slots and damaged ones are skipped) */
+static uint32_t ut_listed(uint32_t t) { return t < UT_FIRST || (t < UT_NTABLES && wt_dir[t - UT_FIRST].valid && wt_dir[t - UT_FIRST].state != UT_BAD); }
+static void pn_table_step(uint32_t id, int32_t d)
+{
+    int32_t t = patch_get(id), step = d > 0 ? 1 : -1, n = d > 0 ? d : -d;
+    while (n--) {
+        int32_t u = t;
+        do u += step; while (u >= 0 && u < (int32_t)UT_NTABLES && !ut_listed((uint32_t)u));
+        if (u < 0 || u >= (int32_t)UT_NTABLES) break;       /* the ends stop, as before */
+        t = u;
+    }
+    patch_set(id, t);
+}
+static const char *pn_tname(uint32_t t)
+{
+    if (t < UT_FIRST) return WTG_NAME[t % WTG_TABLES];
+    if (t >= UT_NTABLES || !wt_dir[t - UT_FIRST].valid) return "EMPTY";
+    return wt_dir[t - UT_FIRST].state == UT_BAD ? "BAD" : wt_dir[t - UT_FIRST].name;
+}
+
 /* the oscillator the table / position encoders act on: OSC2 only while its EDIT chip is shown */
 static uint32_t pn_osc(void) { return pn.page == UI_P_EDIT && pn.sub == 1u; }
 
@@ -306,7 +326,7 @@ static void pn_encoders(void)
 {
     uint32_t i, o = pn_osc();
     int32_t d;
-    if ((d = fm1_enc_take(ENC_ALGORITHM)) != 0) patch_add(o ? P_TABLE2 : P_TABLE1, d);
+    if ((d = fm1_enc_take(ENC_ALGORITHM)) != 0) pn_table_step(o ? P_TABLE2 : P_TABLE1, d);
     if ((d = fm1_enc_take(ENC_SELECT)) != 0) patch_add(o ? P_POS2 : P_POS1, pn_accel(d) * 32);
     for (i = 0; i < 4u; i++) {
         const kdef_t *k = &PG[pn.page][pn.sub][i];
@@ -359,7 +379,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
     v->frame = (uint8_t)((pos * 31u + 2048u) >> 12);        /* the nearest of the 32 frames (the engine maps pos * 31 / 4096) */
     v->frames = fr;
     v->wave2 = fr + (uint32_t)v->frame * stride + WTG_LEVEL_OFF[2];
-    ui_copy(v->tname, WTG_NAME[t % WTG_TABLES], 8);
+    ui_copy(v->tname, pn_tname(t), 9);
     pn_name(v->patch, pn.browse);
 
     for (i = 0; i < 4u; i++) {
