@@ -108,6 +108,10 @@ build NAME out.vwt input.wav           no device: the exact bytes the firmware w
   WaveEdit is 64 frames x 256 samples; Ableton and Surge exports are WAVs of 2048-sample frames; `--frame N`
   overrides. Without a chunk or a format the usual 2048 (or 256 for exactly 16384 samples) is assumed and printed as
   ASSUMED: statistics cannot tell a cycle from a piece of one. Mono or stereo (mixed), 8/16/24/32-bit PCM, float 32/64.
+  **Surge `.wt`** (documented in Surge XT's "WT fileformat.txt": `vawt`, wave_size, wave_count, flags, int16 or
+  float32) is read natively; the `is sample` flag is refused. **Ableton:** a `.alp` pack holds Wavetable *presets*
+  (XML) that name Live's built-in tables, not audio, so it is not a source; Ableton-made tables are WAV of 2048-sample
+  frames. Real files checked: Serum (`Prologue FatA`), WaveEdit (`E.GUITAR`), Surge (`.wt` and `HQ.wav`).
   Implemented as `build` and `inspect` (T21, no device commands yet); `tests/run_wavetable_tool.sh` covers it.
 - **Conversion:** per frame, FFT truncation or zero padding to 256 samples (exact for periodic frames, discards
   harmonics above 64; with the 32-frame limit, 64/128/256-frame tables are picked evenly or interpolated), per-table

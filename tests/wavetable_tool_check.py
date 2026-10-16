@@ -148,6 +148,29 @@ with tempfile.TemporaryDirectory() as td:
     im = wt.parse_image(out.read_bytes())
     check(rc == 0 and np.array_equal(level0(im['data'], 0), level0(im['data'], 31)), 'one frame: all 32 frames equal')
 
+    # Surge .wt: float32, int16 (legacy 2^15 range and full 2^16 range), the 'is sample' flag is refused
+    def write_wt(path, x, size, count, flags):
+        x = np.asarray(x, dtype=float)
+        if flags & 4:
+            scale = 32767.0 if flags & 8 else 16383.0
+            raw = np.round(x * scale).astype('<i2').tobytes()
+        else:
+            raw = x.astype('<f4').tobytes()
+        Path(path).write_bytes(b'vawt' + struct.pack('<IHH', size, count, flags) + raw)
+    m = morph(1024, 16)
+    for nm, fl in (('wtf', 0), ('wt16', 4), ('wt16f', 4 | 8)):
+        write_wt(td / f'{nm}.wt', m, 1024, 16, fl)
+        rc, out = build(td, nm.upper(), td / f'{nm}.wt')
+        im = wt.parse_image(out.read_bytes())
+        check(rc == 0 and np.corrcoef(level0(im['data'], 31), ref31)[0, 1] > 0.995, f'surge .wt flags {fl}: 16 x 1024 read, last frame is the saw')
+        check(np.max(np.abs(im['data'])) <= 0.9 * 32767 + 1, f'surge .wt flags {fl}: normalised')
+    write_wt(td / 'smp.wt', m, 1024, 16, 1)
+    rc, _ = build(td, 'X', td / 'smp.wt')
+    check(rc == 1, 'surge .wt: "is sample" flag is refused')
+    (td / 'short.wt').write_bytes(b'vawt' + struct.pack('<IHH', 2048, 64, 4) + b'\0' * 100)
+    rc, _ = build(td, 'X', td / 'short.wt')
+    check(rc == 1, 'surge .wt: truncated data is refused')
+
     # --pick on a 64-frame set: first / last / odd / slice / list, and the default takes whole frames (no blends)
     rc, out = build(td, 'FIRST', td / 'we.wav', pick='first')
     f_first = wt.parse_image(out.read_bytes())['data']

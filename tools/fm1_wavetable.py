@@ -1,10 +1,10 @@
 # SPDX-License-Identifier: GPL-3.0-only
 """fm1_wavetable.py: turn wavetable WAV files (Serum, WaveEdit, Ableton, Surge exports) into a VAVEWave user table.
 
-    build  NAME OUT.vwt INPUT... [--frame N] [--format auto|serum|waveedit|ableton|surge] [--pick WHICH]
+    build  NAME OUT.vwt INPUT...  (WAV or Surge .wt) [--frame N] [--format auto|serum|waveedit|ableton|surge] [--pick WHICH]
     inspect INPUT...              what each file looks like and how it would be split (no output file)
 
-INPUT is a WAV file or a folder of WAV files (taken in natural name order, 'a2' before 'a10'). Several inputs are
+INPUT is a WAV or Surge .wt file or a folder of them (natural name order, 'a2' before 'a10'). Several inputs are
 joined in order: a file of single cycles from the Serum "Frames" collection becomes one frame, a wavetable file
 several. --pick chooses source frames before the table is made: even (default), first, last, odd, A:B (a slice,
 0-based, end excluded) or a comma list like 0,4,8,12.
@@ -17,7 +17,7 @@ with the firmware receive path (T20); this tool has no device commands yet.
 
 Input rules: mono or stereo (mixed to mono), PCM 8/16/24/32 or float 32/64 WAV, any sample rate (a frame is one
 cycle, the rate does not matter). The frame length comes from the format: Serum writes it in a `clm ` chunk
-("<!>2048 ..."), WaveEdit is 64 frames of 256, Ableton and Surge exports use 2048; without any of these the
+("<!>2048 ..."), WaveEdit is 64 frames of 256, Ableton and Surge WAV exports use 2048, and a Surge .wt file carries its wave_size; without any of these the
 largest of 2048/1024/512/256 that divides the length is ASSUMED and printed as such, and --frame overrides it. Frames beyond 32 are picked evenly, fewer are
 interpolated. Only harmonics 1..64 are kept (a 256-sample cycle at 44.1 kHz); DC is removed.
 """
@@ -46,9 +46,37 @@ class WavError(Exception):
 
 
 # ---- WAV reading (own reader: wave.* refuses float and extensible files) ----
+def read_wt(b):
+    """Surge .wt ('vawt', docs: Surge XT's "WT fileformat.txt"): u32 wave_size, u16 wave_count, u16 flags (1 sample,
+    2 loop, 4 int16 data, 8 int16 full range), then wave_count x wave_size values. info['frame'] is wave_size."""
+    if len(b) < 12:
+        raise WavError('truncated .wt header')
+    size, count, flags = struct.unpack_from('<IHH', b, 4)
+    if not (2 <= size <= 4096) or count < 1 or count > 512:
+        raise WavError(f'.wt wave_size {size} / wave_count {count} out of range')
+    if flags & 1:
+        raise WavError('.wt is flagged "is sample" (a recording, not single cycles)')
+    n = size * count
+    if flags & 4:
+        if len(b) < 12 + 2 * n:
+            raise WavError('truncated .wt data')
+        x = np.frombuffer(b[12:12 + 2 * n], '<i2').astype(np.float64) / (32768.0 if flags & 8 else 16384.0)
+        bits = 16
+    else:
+        if len(b) < 12 + 4 * n:
+            raise WavError('truncated .wt data')
+        x = np.frombuffer(b[12:12 + 4 * n], '<f4').astype(np.float64)
+        bits = 32
+    x = np.nan_to_num(x, nan=0.0, posinf=0.0, neginf=0.0)
+    return x, 0, {'clm': None, 'channels': 1, 'bits': bits, 'frame': size}
+
+
 def read_wav(path):
-    """Returns (mono float array in -1..1, rate, info dict with 'clm' text or None, 'channels', 'bits')."""
+    """Returns (mono float array in -1..1, rate, info dict with 'clm' text or None, 'channels', 'bits').
+    A Surge .wt file is read here too (rate 0, info['frame'] set)."""
     b = Path(path).read_bytes()
+    if b[:4] == b'vawt':
+        return read_wt(b)
     if len(b) < 12 or b[:4] != b'RIFF' or b[8:12] != b'WAVE':
         raise WavError('not a RIFF/WAVE file')
     pos, fmt, data, clm = 12, None, None, None
@@ -100,8 +128,10 @@ def read_wav(path):
 
 # ---- frame length ----
 def detect_frame(x, info, fmt='auto'):
-    """(frame length, why). The explicit format wins, then Serum's clm chunk, then a periodicity guess."""
+    """(frame length, why): a .wt header, the explicit format, Serum's clm chunk, then the usual sizes (ASSUMED)."""
     n = len(x)
+    if info.get('frame'):
+        return info['frame'], 'wave_size in the .wt header'
     if fmt == 'waveedit':
         return 256, 'format waveedit'
     if fmt in ('ableton', 'surge'):
@@ -231,10 +261,10 @@ def expand(inputs):
     for i in inputs:
         p = Path(i)
         if p.is_dir():
-            fs = sorted((f for f in p.iterdir() if f.suffix.lower() == '.wav' and not f.name.startswith('.')),
+            fs = sorted((f for f in p.iterdir() if f.suffix.lower() in ('.wav', '.wt') and not f.name.startswith('.')),
                         key=natural_key)
             if not fs:
-                raise WavError(f'{p}: no .wav files')
+                raise WavError(f'{p}: no .wav or .wt files')
             out += fs
         else:
             out.append(p)
