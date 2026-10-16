@@ -73,7 +73,7 @@ platform), the tool retries a timed-out request unchanged (4 tries, 1.5 s).
 
 Stage 2 payloads: BEGIN (20 B) slot, fmt 0, frames, levels 6, u32 bytes, u32 data CRC32, name[8]; DATA slot, u16 chunk index,
 data (256 B, the last chunk the rest; in order; the previous chunk again is only compared; reply: u16 next chunk wanted);
-COMMIT slot (reply: u32 CRC of what is stored); ABORT; ERASE slot (header sector only). Slot 0 only at stage 2.
+COMMIT slot (reply: u32 CRC of what is stored); ABORT; ERASE slot (header sector only). Slot 0 only at stage 2, slots 0..7 at stage 3.
 rc: 0 ok, 1 bad args, 2 range/alignment, 3 erase failed, 4 program failed, 5 verify failed, 6 no BEGIN/timeout,
 7 busy/refused, 8 CRC mismatch, 9 no flash. Frame limit: 640 B on the wire (`sx_frame`).
 
@@ -182,3 +182,12 @@ working (T30 option A, then B) or R5 rehearsed once by you with the stock packag
 
 T19 this document (+ your decisions). T20a stage 0 firmware. T20b stage 1 self-test. T20c stages 2-3. T21 the tool
 (`build` first, no device needed, can start now). T30 option A before stage 1.
+
+## 11. Notes from the stage 3 review (2026-10-16)
+
+- **Updates keep the slots only with the Felucca loader.** By the code, `firmware/loader` erases/programs `[0x4000, 0x93000)` only (plus
+  `ldr_records_drop` after success, which erases a sector above 0x93000 only if its last 256 bytes form a valid update record: about 2^-32
+  per slot data sector). The vendor loader `usb_hid_ota.bin` (accepted by `ota_stage`) and the stock FM-1_093 package are unknown and
+  should be assumed to lose the slots: back slots up with `get` before such an install (recovery R5).
+- **Stage 4 must check the data CRC32** (header offset 22) when the engine first loads a table: `wt_parse` trusts the header alone, so a
+  valid header over damaged data would otherwise play.

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* User wavetable slots, "VW link" v1 (docs/UPLOAD-DESIGN.md). STAGE 2: uploads into slot 0 (BEGIN / DATA / COMMIT / ABORT / ERASE), SELFTEST of one spare sector.
+/* User wavetable slots, "VW link" v1 (docs/UPLOAD-DESIGN.md). STAGE 3: uploads into slots 0..7 (BEGIN / DATA / COMMIT / ABORT / ERASE), SELFTEST of one spare sector.
  *
  * What this file does: finds out which of the 8 slots hold a valid header (a RAM directory, made once on the first
  * main-loop pass) and answers HELLO, DIR and READ from the computer. The engine does not use the slots yet.
@@ -8,7 +8,7 @@
  * is read back and compared), COMMIT checks the CRC32 of everything stored and writes the header LAST. A power cut,
  * cable pull, timeout (15 s without a request) or any error therefore leaves an empty slot, never a half table.
  * wt_flash_erase / wt_flash_prog are the ONLY calls to the flash writer in this file. They are limited to the spare
- * sector WT_TEST_AT and the writable slots (slot 0 at stage 2: WT_W_LO..WT_W_HI) by their own check and again by
+ * sector WT_TEST_AT and the writable slots (WT_W_LO..WT_W_HI, the 8 slots) by their own check and again by
  * FL_RANGE_OK (platform.c). A later stage widens the window to the slot region and nowhere else.
  * The app's loop calls wt_ui_poll(): while an upload runs it owns the screen and the app ignores keys, knobs, MIDI.
  *
@@ -25,7 +25,7 @@
 #define WT_SLOT_SIZE 0x9000u                     /* 1 header sector + 8 data sectors */
 #define WT_HDR_LEN 64u
 #define WT_FRAME_BYTES 1020u                     /* fmt 0: one frame = 510 samples (6 mip levels) x 2 bytes */
-#define WT_STAGE 2u                              /* 0 read-only, 1 test sector, 2.. writer (docs/UPLOAD-DESIGN.md 8.2) */
+#define WT_STAGE 3u                              /* 0 read-only, 1 test sector, 2.. writer (docs/UPLOAD-DESIGN.md 8.2) */
 
 enum { WT_CMD_HELLO = 1, WT_CMD_DIR = 2, WT_CMD_BEGIN = 3, WT_CMD_DATA = 4, WT_CMD_COMMIT = 5, WT_CMD_ABORT = 6,
        WT_CMD_ERASE = 7, WT_CMD_READ = 8, WT_CMD_AUDITION = 9, WT_CMD_SELFTEST = 10 };
@@ -106,7 +106,7 @@ static int quiet(void);                          /* the app: nothing sounds (eng
 
 /* ---- the one flash writer. Window: the spare sector and the writable slots (WT_WRITABLE slots from slot 0). */
 #define WT_TEST_LEN 0x1000u
-#define WT_WRITABLE 1u                           /* slots 0 .. WT_WRITABLE - 1 may be written (stage 2: slot 0) */
+#define WT_WRITABLE 8u                           /* slots 0 .. WT_WRITABLE - 1 may be written (stage 3: all 8) */
 typedef char wt_window_matches[(WT_W_HI - WT_W_LO == WT_WRITABLE * WT_SLOT_SIZE && WT_W_LO == WT_BASE) ? 1 : -1];
 static int wt_flash_ok(uint32_t off, uint32_t n)
 {

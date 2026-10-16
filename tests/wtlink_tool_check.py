@@ -75,8 +75,8 @@ with tempfile.TemporaryDirectory() as t:
     link = FakeLink([f'2:{td / "a.vwt"}'])
     vw = fast(link)
     h = vw.hello()
-    check(h['proto'] == 1 and h['stage'] == 2 and h['slots'] == 8 and h['slot_size'] == 0x9000 and h['id'] == 'FM-1_950',
-          'HELLO: protocol, stage 2, 8 slots, identity')
+    check(h['proto'] == 1 and h['stage'] == 3 and h['slots'] == 8 and h['slot_size'] == 0x9000 and h['id'] == 'FM-1_950',
+          'HELLO: protocol, stage 3, 8 slots, identity')
     d = vw.directory()
     check([e['valid'] for e in d] == [False, False, True, False, False, False, False, False], 'DIR: only slot 2 holds a table')
     check(d[2]['name'] == 'PROLOGFA' and d[2]['frames'] == 32 and d[2]['levels'] == 6, 'DIR: name, frames, levels')
@@ -144,7 +144,10 @@ with tempfile.TemporaryDirectory() as t:
         rc = wt.main(['put', '0', str(td / 'a.vwt'), '--yes'], Backend(link))
         check(rc == 0, 'put: a table goes into slot 0 and is read back')
         link = FakeLink([])
-        check(wt.main(['put', '1', str(td / 'a.vwt'), '--yes'], Backend(link)) == 1, 'put: slot 1 is refused at stage 2')
+        check(wt.main(['put', '8', str(td / 'a.vwt'), '--yes'], Backend(link)) == 1, 'put: slot 8 does not exist')
+        link.close()
+        link = FakeLink([])
+        check(wt.main(['put', '7', str(td / 'a.vwt'), '--yes'], Backend(link)) == 0, 'put: slot 7 works at stage 3')
         link = FakeLink([])
         check(wt.main(['put', '0', str(td / 'junk.vwt'), '--yes'], Backend(link)) == 1, 'put: a damaged file is refused before anything is sent')
         link = FakeLink([f'0:{td / "a.vwt"}'])

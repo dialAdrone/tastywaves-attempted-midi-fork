@@ -19,7 +19,7 @@ The output is exactly what the firmware stores in one user slot (docs/UPLOAD-DES
 header (magic VWT1, version, fmt 0, frames 32, levels 6, name[8], data bytes, data CRC32, header CRC32, 0xFF pad)
 followed by 32 frames x 510 int16 (6 mip levels each) little endian = 32,640 bytes, made by the same band-limiter and
 quantiser as the factory tables (tools/gen_wavetables.py). `info` and `get` only read (VW link, see docs/UPLOAD-DESIGN.md section 4); `selftest` writes one spare
-sector; `put` and `erase` write a slot (firmware stage 2: slot 0 only, stage 3: slots 0..7). Back a slot up first with
+sector; `put` and `erase` write a slot (firmware stage 3: slots 0..7). Back a slot up first with
 `get` if you may want it again: `put` replaces in place.
 
 Input rules: mono or stereo (mixed to mono), PCM 8/16/24/32 or float 32/64 WAV, any sample rate (a frame is one
