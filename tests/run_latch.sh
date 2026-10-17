@@ -33,8 +33,9 @@ n2 = n0 + 2
 check(at(1100, 1200) == [('on', n2)] and at(1200, 1400) == [], 'a key held when latch goes on is latched, its release does nothing')
 check(at(1400, 1500) == [('off', n2)], 'latch off lets it go')
 check(at(1500, 1800) == [('on', n1)], 'latched again')
-check(at(1800, 2100) == [('on', n1 + 12)], 'OCT+: the same key is another note, the first one keeps sounding')
-check(at(2100, 2400) == [('off', n1)], 'OCT-: pressing the first note again lets it go')
+check(at(1800, 1900) == [('off', n1), ('on', n1 + 12)], 'OCT+: the latched note moves up an octave')
+check(at(1900, 2100) == [('off', n1 + 12)], 'the key at the new octave is that note: pressing it lets it go')
+check(at(2100, 2200) == [] and at(2200, 2400) == [('on', n1)], 'OCT- with nothing latched changes nothing; the key is the lower note again')
 check(at(2500, 2800) == [('on', n1)], 'after MIDI all-notes-off the latch is clear: the key starts a note again')
 raise SystemExit(1 if fails else 0)
 PY

@@ -164,10 +164,10 @@ SAVE (one patch in the settings sector) is copied to U01 at the first boot.
 | 11.4 | Turn knobs, change tables, EDIT pages with both hands while notes are latched | the sound changes live; a filter sweep over a drone works |
 | 11.5 | Hold keys, then press PLAY, then let go | the held keys stay latched |
 | 11.6 | Press PLAY again | every latched note is released; LED off, `V` back |
-| 11.7 | With notes latched press OCT+ and the same key | a second note an octave up; the first keeps sounding; pressing the first note's key (OCT- back) releases it |
+| 11.7 | With notes latched press OCT+ (then OCT-) | every latched note moves up an octave (down again with OCT-); the key at the new octave lets that note go |
 | 11.8 | Latch 12+ notes | oldest are stolen as usual; nothing crashes |
 | 11.9 | A DAW sends all-notes-off (CC 123) while notes are latched | silence; the next press of a key starts a note again |
-| 11.10 | Latched notes with a patch change / SAVE | notes keep sounding through a patch change (SAVE waits for quiet, so it waits until you release the latch) |
+| 11.10 | Latched notes with a patch change / SAVE | notes keep sounding through a patch change (SAVE works while notes sound: one short gap in the sound is possible when the log compacts) |
 | 11.11 | MIDI notes from a keyboard with latch on | behave normally (not latched) |
 
 ## 12. Arpeggiator (ARP button)

@@ -590,7 +590,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
 }
 
 /* ---- SAVE and DELETE, as pn_save_buttons decided (docs/PATCH-STORAGE-DESIGN.md section 7): the record goes into the
- * patch log (patchlog.h). The write waits for quiet() (compaction erases stop the sound) and at most one a second;
+ * patch log (patchlog.h). The write does not wait for quiet (a latched note or the arp would block it; a compaction erase is one 17 ms gap) and happens at most once a second;
  * ACT_NONE (nothing changed since loaded / saved) only shows the confirmation. Returns 1 when a message is shown. A failed
  * write shows SAVE FAILED, keeps the patch modified and drops the request (no retry loop). */
 static int pn_save_poll(app_set_t *st, uint32_t *dirty)
@@ -598,7 +598,7 @@ static int pn_save_poll(app_set_t *st, uint32_t *dirty)
     uint32_t i, id;
     if (!pn.save_req) return 0;
     if (pn.act != ACT_NONE) {
-        if (!quiet() || fm1_ms - pn.t_save < 1000u) return 0;      /* try again in a later pass; the LED keeps blinking */
+        if (fm1_ms - pn.t_save < 1000u) return 0;                  /* try again in a later pass; the LED keeps blinking (not waiting for quiet: with a latched note or the arp it would never come; a compaction erase costs one 17 ms gap) */
         pn.t_save = fm1_ms;
         id = pn.act_id % PL_IDS;
         if (pn.act == ACT_SAVE) {

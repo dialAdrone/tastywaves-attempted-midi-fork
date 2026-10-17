@@ -189,8 +189,23 @@ static void app_main(void)
         hb = fm1_in.buttons;                    /* held now */
         edit_held = hb >> BTN_EDIT & 1u;
         b = fm1_input_edges(&rel);              /* pressed since the last pass */
-        if (b & (1u << BTN_OCT_DOWN) && set.oct > -2) { set.oct--; dirty = 1; t_change = fm1_ms; }
-        if (b & (1u << BTN_OCT_UP) && set.oct < 2) { set.oct++; dirty = 1; t_change = fm1_ms; }
+        {   int shift = 0;
+            if (b & (1u << BTN_OCT_DOWN) && set.oct > -2) { set.oct--; shift -= 12; dirty = 1; t_change = fm1_ms; }
+            if (b & (1u << BTN_OCT_UP) && set.oct < 2) { set.oct++; shift += 12; dirty = 1; t_change = fm1_ms; }
+            if (shift && latch) {               /* latched notes move with the octave: let them go, start them again shifted */
+                uint8_t nl[16] = {0};
+                for (k = 0; k < 128u; k++)
+                    if (lat[k >> 3] >> (k & 7u) & 1u) { stop((uint8_t)k); midi_send(0x80, k, 0); }
+                for (k = 0; k < 128u; k++)
+                    if (lat[k >> 3] >> (k & 7u) & 1u) {
+                        int n = (int)k + shift;
+                        if (n < 0 || n > 127) continue;
+                        nl[n >> 3] |= (uint8_t)(1u << (n & 7));
+                        play((uint8_t)n, 100); midi_send(0x90, (uint32_t)n, 100);
+                    }
+                for (k = 0; k < 16u; k++) lat[k] = nl[k];
+            }
+        }
         if (b & (1u << BTN_PLAY)) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
             latch ^= 1u;
             for (k = 0; k < 27u; k++)
