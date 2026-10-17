@@ -48,6 +48,7 @@ typedef struct {
     uint32_t wave_key;                          /* changes when `wave` does (the shadow compares it) */
     uint32_t ms;                                /* the clock (ms): the waterfall redraws once the position rests; 0 in the mock-up */
     uint8_t cpu_max, flash;                     /* worst CPU % since reset; flash: 1 = "SAVED" instead of the patch name */
+    uint8_t latch;                              /* LATCH is on: the voice counter on the status line reads L instead of V, in the accent colour */
     uint8_t nsets, set;                         /* FX / LFO / GLO: knob sets on the page, the one shown */
     uint8_t flt_cut, flt_res, flt_mode;         /* FX picture: cutoff, resonance 0..127, mode 0 LP 1 BP 2 HP */
     uint8_t lfo_shape, drive;                   /* LFO picture (0 sine 1 tri 2 saw 3 square 4 S&H), GLO picture 0..127 */
@@ -62,7 +63,7 @@ typedef struct {
     char patch[16], tname[9], fmsg[12], linea[48], kval[4][8];
     const char *klabel[4];
     uint8_t kfrac[4], env[2][4], harm[16];
-    uint8_t flash, nsets, set;
+    uint8_t flash, latch, nsets, set;
     uint32_t wave_key, pic_key;
     uint32_t t_chg;                             /* waterfall: ms of the last frame change */
     uint8_t wf_arrow, wf_frame;                 /* waterfall: frame of the arrow on screen, of the white trace */
@@ -334,7 +335,7 @@ static void ui_dots(uint32_t y, uint32_t used, uint32_t max)
 static void ui_linea(uint32_t y, const char *left, const ui_view_t *v)
 {
     char r[24], *d = r;
-    d = ui_cat(d, "V");                       /* fixed field widths: the text must not move as digits change */
+    d = ui_cat(d, v->latch ? "L" : "V");      /* fixed field widths: the text must not move as digits change (L: latch on) */
     if (v->voices < 10u) d = ui_cat(d, " ");
     d = ui_num(d, v->voices);
     d = ui_cat(d, "/");
@@ -346,6 +347,7 @@ static void ui_linea(uint32_t y, const char *left, const ui_view_t *v)
     cv_begin(240, 16, C_BLACK);
     cv_text(4, 0, &FONT_S, left, UI_ACC);
     cv_text(236 - text_w(&FONT_S, r), 0, &FONT_S, r, v->cpu > 80u ? RGB(255, 90, 90) : UI_GRAY);
+    if (v->latch) cv_text(236 - text_w(&FONT_S, r), 0, &FONT_S, "L", UI_ACC);
     cv_blit(0, y);
 }
 
@@ -490,20 +492,20 @@ static const char *const UI_HELP[2][14] = {
      "HOME  3 looks (press again)",
      "EDIT  OSC1 OSC2 SUB NOISE",
      "FX    FILTER 1, 2",
-     "ENV   AMP, FILTER",
-     "LFO   LFO 1, 2",
+     "ENV LFO  ENVELOPES, LFO 1, 2",
      "SEL   VOICE MODE, QUALITY",
      "GLO   VOLUME, GLIDE, MIDI",
-     "SAVE  STORE THE PATCH",
+     "SAVE  STORE (HOLD: PICK, DEL)",
      "OCT- OCT+  OCTAVE DOWN, UP",
-     "ARP SEQ PLAY REC  NOT YET",
+     "PLAY  LATCH: KEYS KEEP SOUND",
+     "ARP SEQ REC  NOT YET",
      "EDIT+HOME  RESET CPU MAX",
      "EDIT+F# G# A# C#  PICK OSC",
      "HOME: NEXT PAGE, THEN EXIT"},
     {"HELP 2/2  KNOBS",
      "ALGORITHM  WAVETABLE",
      "SELECT     POSITION IN TABLE",
-     "PRESETS    8 FACTORY PATCHES",
+     "PRESETS    FACTORY + USER",
      "HOME  CUT RESO ATK REL",
      "EDIT  POS DETUNE LEVEL BEND",
      "FX    CUT RESO FENV KEYTRK",
@@ -648,7 +650,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
     }
 
     ui_left_text(left, v);                      /* the status line: when its text, voices or CPU changed */
-    if (full || !ui_eq(s->linea, left) || s->voices != v->voices || s->cpu != v->cpu) {
+    if (full || !ui_eq(s->linea, left) || s->voices != v->voices || s->cpu != v->cpu || s->latch != v->latch) {
         ui_linea(left_y, left, v);
         ui_copy(s->linea, left, 48);
     }
@@ -658,7 +660,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
     s->page = v->page; s->variant = v->variant; s->sub = v->sub;
     s->voices = v->voices; s->cpu = v->cpu; s->modified = v->modified;
     s->table = v->table; s->frame = v->frame; s->pos = v->pos;
-    s->flash = v->flash; s->wave_key = v->wave_key;
+    s->flash = v->flash; s->latch = v->latch; s->wave_key = v->wave_key;
     ui_copy(s->patch, v->patch, 16);
     ui_copy(s->fmsg, v->fmsg, 12);
     ui_copy(s->tname, v->tname, 9);

@@ -148,6 +148,7 @@ static void app_main(void)
     app_set_t set;
     uint32_t prev = 0, started = 0, k, t_change = 0, dirty = 0, t_cpu = 0, cpu = 0, cpu_mx = 0, gen_seen = 0;
     uint8_t held[27] = {0};                     /* the note each key plays */
+    uint8_t latch = 0, lat[16] = {0};           /* LATCH (the PLAY button): notes kept sounding after the key is up, 1 bit per note */
 
     boot_btn = fm1_in.buttons;                  /* before anything else */
     boot_frames = fm1_in.frames;
@@ -190,6 +191,15 @@ static void app_main(void)
         b = fm1_input_edges(&rel);              /* pressed since the last pass */
         if (b & (1u << BTN_OCT_DOWN) && set.oct > -2) { set.oct--; dirty = 1; t_change = fm1_ms; }
         if (b & (1u << BTN_OCT_UP) && set.oct < 2) { set.oct++; dirty = 1; t_change = fm1_ms; }
+        if (b & (1u << BTN_PLAY)) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
+            latch ^= 1u;
+            for (k = 0; k < 27u; k++)
+                if (latch && (started >> k & 1u)) { lat[held[k] >> 3] |= (uint8_t)(1u << (held[k] & 7u)); started &= ~(1u << k); }
+            if (!latch)
+                for (k = 0; k < 128u; k++)
+                    if (lat[k >> 3] >> (k & 7u) & 1u) { stop((uint8_t)k); midi_send(0x80, k, 0); }
+            if (!latch) for (k = 0; k < 16u; k++) lat[k] = 0;
+        }
         {
             uint8_t look = set.look;
             uint32_t d0 = dirty;
@@ -206,6 +216,11 @@ static void app_main(void)
             if (down >> k & 1u) {
                 int chip = k == 1u ? 0 : k == 3u ? 1 : k == 5u ? 2 : k == 8u ? 3 : -1;   /* the OP1..OP4 black keys */
                 if (edit_held && chip >= 0) { pn.page = UI_P_EDIT; pn.sub = (uint8_t)chip; pn.touched = 4; }
+                else if (latch) {               /* latched: the same note again lets it go; the key's release does nothing */
+                    uint32_t n = base + k;
+                    if (lat[n >> 3] >> (n & 7u) & 1u) { lat[n >> 3] &= (uint8_t)~(1u << (n & 7u)); stop((uint8_t)n); midi_send(0x80, n, 0); }
+                    else { lat[n >> 3] |= (uint8_t)(1u << (n & 7u)); play((uint8_t)n, 100); midi_send(0x90, n, 100); }
+                }
                 else { started |= 1u << k; held[k] = (uint8_t)(base + k); play(held[k], 100); midi_send(0x90, held[k], 100); }
             }
             if (up >> k & 1u && started >> k & 1u) { started &= ~(1u << k); stop(held[k]); midi_send(0x80, held[k], 0); }
@@ -219,8 +234,11 @@ static void app_main(void)
         save_shown = pn_save_poll(&set, &dirty);
         if (save_shown) t_change = fm1_ms;      /* (a changed last patch is written to the settings 2 s later) */
 
-        while (midi_get(&st, &d1, &d2))         /* USB-MIDI in, any channel */
+        while (midi_get(&st, &d1, &d2)) {       /* USB-MIDI in, any channel */
+            if ((st & 0xF0u) == 0xB0u && (d1 == 120u || d1 == 123u))     /* all sound / notes off: nothing is latched any more */
+                for (k = 0; k < 16u; k++) lat[k] = 0;
             eng_midi(st, d1, d2);
+        }
 
         if (fm1_ms - t_cpu >= 250u) {           /* the ISR cost, 4 times a second */
             uint32_t t = cpu_max > 4000000u ? 4000000u : cpu_max;
@@ -229,6 +247,7 @@ static void app_main(void)
             cpu_mx = (t * 1000u / AUDIO_BUDGET_TICKS + 5u) / 10u;
         }
         pn_view_fill(cpu, cpu_mx, eng_voices_busy(), fm1_ms < pn.t_flash);
+        pn_view.latch = latch;
         ui_draw(&pn_view, &pn_shadow);          /* redraws only what changed */
 
         lit = eng_lit(base);                    /* LEDs: what sounds, on the keys of this octave */
@@ -240,6 +259,7 @@ static void app_main(void)
         }
         m = ui_button_leds(&pn_view, fm1_ms >> 8 & 1u);
         if (fm1_ms < pn.t_flash) m |= 1u << BTN_SAVE;
+        if (latch) m |= 1u << BTN_PLAY;
         if (set.oct < 0) m |= 1u << BTN_OCT_DOWN;
         if (set.oct > 0) m |= 1u << BTN_OCT_UP;
         for (k = 0; k < 14u; k++) fm1_led_key(k, (int)(m >> k & 1u));

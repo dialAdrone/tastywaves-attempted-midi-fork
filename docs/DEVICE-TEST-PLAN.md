@@ -153,3 +153,19 @@ SAVE (one patch in the settings sector) is copied to U01 at the first boot.
 | 10.11 | Switch off during a SAVE (press SAVE and cut power within a second) several times | after power-on every previous patch is intact; the patch being saved is either its old or its new version |
 | 10.12 | Firmware update over the top (`fm1_install.py` with this build again) | all patches still there |
 | 10.13 | Wavetable `put` and patch SAVE do not disturb each other: upload a table, then SAVE, `info` | both fine |
+
+## 11. Latch (PLAY button)
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 11.1 | Press PLAY | its LED lights; the voice counter on the status line reads `L` (accent colour) instead of `V` |
+| 11.2 | Press a key and let go | the note keeps sounding, its key LED stays lit; press more keys: they all keep sounding |
+| 11.3 | Press a latched key again | that note (only) is released |
+| 11.4 | Turn knobs, change tables, EDIT pages with both hands while notes are latched | the sound changes live; a filter sweep over a drone works |
+| 11.5 | Hold keys, then press PLAY, then let go | the held keys stay latched |
+| 11.6 | Press PLAY again | every latched note is released; LED off, `V` back |
+| 11.7 | With notes latched press OCT+ and the same key | a second note an octave up; the first keeps sounding; pressing the first note's key (OCT- back) releases it |
+| 11.8 | Latch 12+ notes | oldest are stolen as usual; nothing crashes |
+| 11.9 | A DAW sends all-notes-off (CC 123) while notes are latched | silence; the next press of a key starts a note again |
+| 11.10 | Latched notes with a patch change / SAVE | notes keep sounding through a patch change (SAVE waits for quiet, so it waits until you release the latch) |
+| 11.11 | MIDI notes from a keyboard with latch on | behave normally (not latched) |

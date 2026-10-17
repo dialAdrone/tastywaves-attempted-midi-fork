@@ -1,0 +1,36 @@
+# LATCH (PLAY, button 12): see tests/run_latch.sh. Key 0 = bit 0 (0x1), key 1 = 0x2, key 2 = 0x4; OCT+ is button 1, OCT- button 0.
+# normal playing: note on at the press, off at the release
+100 keys 0x1
+200 keys 0
+# latch on: a pressed key keeps sounding after the release
+300 btn 12
+400 keys 0x1
+500 keys 0
+600 keys 0x2
+700 keys 0
+# the same key again lets that note go
+800 keys 0x1
+900 keys 0
+# latch off lets the rest go (key 1's note)
+1000 btn 12
+# a key held while latch goes on is latched; its release does nothing; latch off lets it go
+1100 keys 0x4
+1200 btn 12
+1300 keys 0
+1400 btn 12
+# octave change while latched: the same key at the other octave is another note; the first note is still released by pressing it
+1500 btn 12
+1600 keys 0x2
+1700 keys 0
+1800 btn 1
+1900 keys 0x2
+2000 keys 0
+2100 btn 0
+2200 keys 0x2
+2300 keys 0
+2400 shot latch_on
+# MIDI all-notes-off clears the latch (nothing is released by the next press of a latched note, it starts again)
+2500 midi 0xB0 123 0
+2600 keys 0x2
+2700 keys 0
+2900 end
