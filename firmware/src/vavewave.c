@@ -94,6 +94,8 @@ static void app_main(void)
         }
 
         while (midi_get(&st, &d1, &d2))
+            if (st == 0xF8u) arp_ext.ticks++;                            /* MIDI clock and start: the arp follows them */
+            else if (st == 0xFAu) arp_ext.start++;
             eng_midi(st, d1, d2);
 
         base = (uint32_t)(KEY0 + 12 * set.oct);
@@ -133,7 +135,7 @@ typedef struct {
     uint8_t slot;                               /* the entry last loaded: 0..7 factory, 8..39 user patch U01..U32 (panel.h) */
     uint8_t uslot;                              /* the old single-patch overlay: the factory slot it replaced, 0xFF none; migrated to U01 at boot */
     uint8_t pad[3];
-    int16_t uval[P_COUNT];                      /* the old overlay's values (read once for the migration, never written again) */
+    int16_t uval[P_COUNT_V1];                    /* the old overlay's values (read once for the migration, never written again) */
 } app_set_t;
 typedef char app_set_fits[sizeof(app_set_t) <= 256u ? 1 : -1];
 
@@ -260,6 +262,7 @@ static void app_main(void)
         m = ui_button_leds(&pn_view, fm1_ms >> 8 & 1u);
         if (fm1_ms < pn.t_flash) m |= 1u << BTN_SAVE;
         if (latch) m |= 1u << BTN_PLAY;
+        if (patch_get(P_ARP)) m |= 1u << BTN_ARP;
         if (set.oct < 0) m |= 1u << BTN_OCT_DOWN;
         if (set.oct > 0) m |= 1u << BTN_OCT_UP;
         for (k = 0; k < 14u; k++) fm1_led_key(k, (int)(m >> k & 1u));

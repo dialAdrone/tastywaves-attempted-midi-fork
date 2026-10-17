@@ -440,8 +440,13 @@ static void all_off(int hard)
     }
 }
 
+#ifdef DINGHY_HOST                              /* the host test log shows what the arp played (tests/run_arp_panel.sh) */
+#define ARP_NOTE_ON(n, v) (host_arp_trace(1, (n)), note_on(n, v))
+#define ARP_NOTE_OFF(n) (host_arp_trace(0, (n)), note_off(n))
+#else
 #define ARP_NOTE_ON(n, v) note_on(n, v)
 #define ARP_NOTE_OFF(n) note_off(n)
+#endif
 #include "arp.h"
 
 static void events_drain(void)
@@ -467,6 +472,8 @@ static void block_control(void)
     uint32_t i, k;
     int32_t *p = es.p;
     for (i = 0; i < P_COUNT; i++) p[i] = pclamp(i, patch.p[i]);
+    arp_cfg.mode = p[P_ARP]; arp_cfg.rate = p[P_ARP_RATE]; arp_cfg.oct = p[P_ARP_OCT];
+    arp_cfg.gate = p[P_ARP_GATE]; arp_cfg.swing = p[P_ARP_SWING]; arp_cfg.bpm = p[P_TEMPO];
     if (p[P_VMODE] != es.vmode) {               /* a new voice mode: release everything */
         if (es.vmode >= 0) all_off(0);
         es.vmode = p[P_VMODE];

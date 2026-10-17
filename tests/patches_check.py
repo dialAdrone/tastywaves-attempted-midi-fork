@@ -52,7 +52,7 @@ print('      P_COUNT', NP)
 
 if sys.argv[2] == 'run1':
     check(sorted(live) == [0, 6], 'ids U01 and U07 hold patches (U02 saved, replaced, then deleted)')
-    check(len(live.get(0, ('', []))[1]) == NP, 'U01 has all %d parameters' % NP)
+    check(len(live.get(0, ('', []))[1]) == 47, 'U01 has 47 parameters (trailing defaults are not stored; the arp ones are defaults)')
     u1 = live[0][1]
     check(live[0][0] == 'BRIGHT PAD' and u1[P_CUTOFF] == 55, 'U01: named after BRIGHT PAD, cutoff 55 (the replace in place won)')
     u5 = live[6]

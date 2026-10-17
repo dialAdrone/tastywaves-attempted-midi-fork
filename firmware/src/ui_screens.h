@@ -23,7 +23,7 @@
 #define UI_Y_LINEA 182u
 #define UI_Y_PATCH 202u
 
-enum { UI_P_HOME, UI_P_EDIT, UI_P_FX, UI_P_ENV, UI_P_LFO, UI_P_SEL, UI_P_GLO, UI_P_HELP, UI_P_N };
+enum { UI_P_HOME, UI_P_EDIT, UI_P_FX, UI_P_ENV, UI_P_LFO, UI_P_SEL, UI_P_GLO, UI_P_ARP, UI_P_HELP, UI_P_N };
 enum { UI_H_WATERFALL, UI_H_SPECTRUM, UI_H_MINIMAL, UI_H_N };
 
 typedef struct {
@@ -52,7 +52,8 @@ typedef struct {
     uint8_t nsets, set;                         /* FX / LFO / GLO: knob sets on the page, the one shown */
     uint8_t flt_cut, flt_res, flt_mode;         /* FX picture: cutoff, resonance 0..127, mode 0 LP 1 BP 2 HP */
     uint8_t lfo_shape, drive;                   /* LFO picture (0 sine 1 tri 2 saw 3 square 4 S&H), GLO picture 0..127 */
-    char ptxt[8];                               /* SEL picture: the voice mode, big */
+    char ptxt[8];                               /* SEL picture: the voice mode, big; ARP picture: the arp mode */
+    char info[20];                              /* ARP picture: tempo and rate */
     char list[8][16];                           /* FX / LFO / SEL / GLO: 4 rows x 2 columns of "LABEL VALUE" (14 chars) */
     char boot[2][32];                           /* GLO set 3 (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
 } ui_view_t;
@@ -67,7 +68,7 @@ typedef struct {
     uint32_t wave_key, pic_key;
     uint32_t t_chg;                             /* waterfall: ms of the last frame change */
     uint8_t wf_arrow, wf_frame;                 /* waterfall: frame of the arrow on screen, of the white trace */
-    char list[8][16], ptxt[8];
+    char list[8][16], ptxt[8], info[20];
 } ui_shadow_t;
 
 /* ---- small helpers (own copies: ui.h's s_cat / s_num belong to the sine build) */
@@ -375,6 +376,7 @@ static void ui_left_text(char *out, const ui_view_t *v)       /* the left part o
     case UI_P_FX: ui_cat(d, v->sub ? "FILTER 2/2" : "FILTER 1/2"); break;
     case UI_P_LFO: ui_cat(d, v->sub ? "LFO 2/2" : "LFO 1/2"); break;
     case UI_P_SEL: ui_cat(d, "VOICE"); break;
+    case UI_P_ARP: ui_cat(d, v->sub ? "ARP 2/2" : "ARP 1/2"); break;
     case UI_P_GLO: ui_cat(d, v->sub == 2u ? "BOOT KEYS 3/3" : v->sub ? "GLOBAL 2/3" : "GLOBAL 1/3"); break;
     default:
         if (v->variant != UI_H_MINIMAL) { d = ui_cat5(d, v->tname); d = ui_cat(d, " "); }
@@ -498,7 +500,7 @@ static const char *const UI_HELP[2][14] = {
      "SAVE  STORE (HOLD: PICK, DEL)",
      "OCT- OCT+  OCTAVE DOWN, UP",
      "PLAY  LATCH: KEYS KEEP SOUND",
-     "ARP SEQ REC  NOT YET",
+     "ARP   ON/OFF (HOLD: PAGE)",
      "EDIT+HOME  RESET CPU MAX",
      "EDIT+F# G# A# C#  PICK OSC",
      "HOME: NEXT PAGE, THEN EXIT"},
@@ -622,17 +624,21 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
                 ui_env(UI_Y_MID + i * 64u, i ? "FILTER ENV" : "AMP ENV", v->env[i], v->sub == i);
     } else if (v->page != UI_P_HOME) {          /* FX, LFO, SEL, GLO */
         uint32_t pk = v->page == UI_P_FX ? (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16
-                    : v->page == UI_P_LFO ? v->lfo_shape : v->page == UI_P_SEL ? v->voices | (uint32_t)v->voices_max << 8
+                    : v->page == UI_P_LFO ? v->lfo_shape : v->page == UI_P_ARP ? 0x20000000u : v->page == UI_P_SEL ? v->voices | (uint32_t)v->voices_max << 8
                     : v->sub == 2u ? 0x40000000u : (uint32_t)v->drive | (uint32_t)v->cpu_max << 8;
         uint32_t lch = full || s->set != v->set;
         for (i = 0; i < 8u && !lch; i++) lch = !ui_eq(s->list[i], v->list[i]);
-        if (full || s->pic_key != pk || (v->page == UI_P_SEL && !ui_eq(s->ptxt, v->ptxt))) {
+        if (full || s->pic_key != pk || ((v->page == UI_P_SEL || v->page == UI_P_ARP) && !ui_eq(s->ptxt, v->ptxt)) || (v->page == UI_P_ARP && !ui_eq(s->info, v->info))) {
             switch (v->page) {
             case UI_P_FX: ui_filter_pic(UI_Y_MID, v); break;
             case UI_P_LFO: ui_lfo_pic(UI_Y_MID, v->lfo_shape); break;
             case UI_P_SEL:
                 draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1);
                 ui_dots(100, v->voices, v->voices_max);
+                break;
+            case UI_P_ARP:
+                draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1);
+                ui_text_line(96, v->info, UI_GRAY);
                 break;
             default:
                 if (v->sub == 2u) ui_boot_pic(UI_Y_MID, v);
@@ -641,6 +647,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             }
             s->pic_key = pk;
             ui_copy(s->ptxt, v->ptxt, 8);
+            ui_copy(s->info, v->info, 20);
         }
         if (lch) {
             ui_list(116, v);
@@ -680,6 +687,7 @@ static uint32_t ui_button_leds(const ui_view_t *v, uint32_t blink)
     case UI_P_LFO: m |= 1u << BTN_LFO; break;
     case UI_P_SEL: m |= 1u << BTN_SEL; break;
     case UI_P_GLO: m |= 1u << BTN_GLO; break;
+    case UI_P_ARP: m |= 1u << BTN_ARP; break;
     default: break;
     }
     if (v->modified && blink) m |= 1u << BTN_SAVE;

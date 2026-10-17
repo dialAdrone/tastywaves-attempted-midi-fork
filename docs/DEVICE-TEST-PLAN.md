@@ -169,3 +169,24 @@ SAVE (one patch in the settings sector) is copied to U01 at the first boot.
 | 11.9 | A DAW sends all-notes-off (CC 123) while notes are latched | silence; the next press of a key starts a note again |
 | 11.10 | Latched notes with a patch change / SAVE | notes keep sounding through a patch change (SAVE waits for quiet, so it waits until you release the latch) |
 | 11.11 | MIDI notes from a keyboard with latch on | behave normally (not latched) |
+
+## 12. Arpeggiator (ARP button)
+
+Flash `build/vavewave.fwsc`. The arp is part of the patch (6 new parameters); old saved patches load with the arp off.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 12.1 | Short press ARP | ARP LED on; hold a chord on the keys: the notes play one after another, UP, 120 BPM 1/16 |
+| 12.2 | Let go of the keys | the arp stops after the last note |
+| 12.3 | Hold ARP (half a second) | the ARP page: MODE RATE OCT GATE (knobs 1-4), hold again: SWING TEMPO |
+| 12.4 | Turn MODE through all 8 | UP DOWN UP-DN UP-DN2 RANDOM PLAYED CHORD; each sounds as named; OFF stops it |
+| 12.5 | RATE, OCT, GATE, SWING, TEMPO | faster/slower, more octaves, shorter/longer notes, shuffle, tempo 40..240 |
+| 12.6 | PLAY (latch) on, tap a chord, let go | the arp keeps playing; turn the knobs with both hands (the drone / modulation use); PLAY again stops it |
+| 12.7 | Play MIDI keys from a computer with the arp on | MIDI notes also go into the arp |
+| 12.8 | Send MIDI clock (a DAW, tempo 90 and 140) | the arp follows it (page shows EXT CLOCK); stop the clock: back to the TEMPO knob after half a second |
+| 12.9 | SAVE a patch with the arp on, power-cycle, load it | arp mode, rate, tempo come back; a patch saved before still loads (arp off) |
+| 12.10 | Arp on, press ARP short | arp off; keys held at that moment sound as plain notes and end when released |
+| 12.11 | CPU on the HOME status line with the arp running and 8 notes held | note the percentage (CPU headroom budget for the effects) |
+| 12.12 | Timing feel | steps are in time (jitter up to 6 ms is known: the clock runs once per audio block) |
+| 12.13 | Hold keys, change patch (PRESETS) and back | no hung notes, no crash |
+

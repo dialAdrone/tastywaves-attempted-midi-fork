@@ -18,6 +18,7 @@
 #include "usertab.h"                             /* table 12..19 = user slot 0..7 */
 
 #define ENG_NV 12u                              /* voices */
+#define P_COUNT_V1 47u                          /* parameters in a patch record before the arpeggiator (P_ARP): records never get shorter than this */
 
 enum {
     /* oscillator 1 / 2: wavetable (0..11 factory, 12..19 user slots 0..7), position 0..4095 over the 32 frames (12 bit, any frame, morphs between
@@ -60,6 +61,13 @@ enum {
     /* output */
     P_DRIVE,        /* master drive into the soft clip, 0..127 = gain 1 .. 16 */
     P_VOLUME,       /* voice level 0..127 */
+    /* arpeggiator (arp.h), appended after the patch format of the first user patches: P_COUNT_V1 values were all a record had */
+    P_ARP,          /* 0 off, 1 up, 2 down, 3 up-down, 4 up-down (ends repeat), 5 random, 6 played, 7 chord */
+    P_ARP_RATE,     /* 0 1/4, 1 1/8, 2 1/8T, 3 1/16, 4 1/16T, 5 1/32 */
+    P_ARP_OCT,      /* octaves 1..4 */
+    P_ARP_GATE,     /* note length 1..127 of 128 of a step */
+    P_ARP_SWING,    /* 0..50 % of a step: the odd steps are late */
+    P_TEMPO,        /* BPM 40..240 (the arp and the sequencers; follows MIDI clock when there is one) */
     P_COUNT
 };
 
@@ -79,6 +87,8 @@ static const pdesc_t PDESC[P_COUNT] = {
     {"MWPOS", 0, 127, 64},{"MWVIB", 0, 127, 20}, {"ATCUT", 0, 127, 0},  {"VEL", 0, 127, 64},   {"PBR", 0, 24, 2},
     {"MODE", 0, 2, 0},    {"GLIDE", 0, 127, 0},
     {"DRIVE", 0, 127, 0}, {"VOL", 0, 127, 100},
+    {"ARP", 0, 7, 0},     {"RATE", 0, 5, 3},     {"OCT", 1, 4, 1},      {"GATE", 1, 127, 64},  {"SWING", 0, 50, 0},
+    {"TEMPO", 40, 240, 120},
 };
 
 static struct { volatile int32_t p[P_COUNT]; } patch;                       /* main writes */

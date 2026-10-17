@@ -151,6 +151,7 @@ static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)
     mq_r++;
     return 1;
 }
+static void host_arp_trace(int on, uint32_t n) { printf("%6u ms  ARP %s %u\n", fm1_ms, on ? "on" : "off", n); }
 static void midi_send(uint32_t st, uint32_t d1, uint32_t d2) { printf("%6u ms  MIDI out %02X %u %u\n", fm1_ms, st, d1, d2); }
 
 static void app_audio(int32_t *out, uint32_t n);

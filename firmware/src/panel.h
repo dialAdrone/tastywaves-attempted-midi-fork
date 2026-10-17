@@ -60,12 +60,12 @@ static void preset_apply(uint32_t i)
 
 /* ---- pages: four fixed knobs per page and set. NSUB[page] sets (EDIT: the four oscillators). */
 enum { F_NONE, F_PCT, F_TIME, F_BIP, F_CENTS, F_FRAMES, F_RATE, F_POS, F_TXT, F_INT };
-enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_N };
+enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_N };
 typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2};   /* HELP: two text pages (PG[HELP] stays empty) */
+static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 2};   /* HELP: two text pages (PG[HELP] stays empty) */
 static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
@@ -94,17 +94,23 @@ static const kdef_t PG[UI_P_N][4][4] = {
                   {K("MW>POS", P_MW_POS, F_PCT, 1, 0), K("MW>VIB", P_MW_VIB, F_PCT, 1, 0), K("AT>CUT", P_AT_CUT, F_PCT, 1, 0),
                    K("VEL>AMP", P_VEL_AMP, F_PCT, 1, 0)},
                   {KN, KN, KN, KN}},            /* set 3: BOOT KEYS (no knobs; ui_boot_pic) */
+    [UI_P_ARP] = {{K("MODE", P_ARP, F_TXT, 1, TX_ARP), K("RATE", P_ARP_RATE, F_TXT, 1, TX_ARATE), K("OCT", P_ARP_OCT, F_INT, 1, 0),
+                   K("GATE", P_ARP_GATE, F_PCT, 1, 0)},
+                  {K("SWING", P_ARP_SWING, F_INT, 1, 0), K("TEMPO", P_TEMPO, F_INT, 1, 0), KN, KN}},
 };
 
-static const char *const TXT[TX_N][5] = {
+static const char *const TXT[TX_N][8] = {
     {"LP", "BP", "HP"}, {"POLY", "MONO", "LEGATO"}, {"BOTH", "OSC1", "OSC2"}, {"HI", "ECO"}, {"LIN", "EXP"},
-    {"SINE", "TRI", "SAW", "SQUARE", "S&H"}};
+    {"SINE", "TRI", "SAW", "SQUARE", "S&H"},
+    {"OFF", "UP", "DOWN", "UP-DN", "UP-DN2", "RANDOM", "PLAYED", "CHORD"}, {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"}};
 
 /* ---- panel state (main loop only) */
 static struct {
     uint8_t page, look, sub, touched;
     uint8_t slot, browse, browse_pend;          /* entry loaded (0..7 factory, 8.. user); entry shown in the name line; load pending */
     uint8_t save_req, home_arm;                 /* HOME pressed and not yet decided: short press or hold */
+    uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: on / off, hold: the page); the mode it switches back to */
+    uint32_t t_arp;
     uint8_t sv, act, act_id, tgt;               /* SAVE gesture (SV_*), the request for pn_save_poll (ACT_*, user id), the chosen target id */
     uint32_t t_browse, t_flash, t_save, t_home, t_sv;
     char fmsg[12];                              /* the confirmation shown while t_flash runs */
@@ -163,7 +169,7 @@ static void pn_load(uint32_t i, const app_set_t *st)
     }
     preset_apply(i);
     if (st->uslot == i)
-        for (p = 0; p < P_COUNT; p++) patch_set(p, st->uval[p]);
+        for (p = 0; p < P_COUNT_V1; p++) patch_set(p, st->uval[p]);
     pn_snapshot();
     pn.slot = pn.browse = (uint8_t)i;
     pn.browse_pend = 0;
@@ -176,7 +182,7 @@ static void pn_validate(app_set_t *st)
     uint32_t i, bad = st->ver != SET_VER || st->oct < -2 || st->oct > 2 || st->look >= UI_H_N || st->slot >= PN_ENTRIES;
     if (!bad && st->uslot != PN_NONE) {
         bad = st->uslot >= PN_PRESETS;
-        for (i = 0; i < P_COUNT && !bad; i++)
+        for (i = 0; i < P_COUNT_V1 && !bad; i++)
             bad = st->uval[i] < PDESC[i].min || st->uval[i] > PDESC[i].max;
         if (bad) st->uslot = PN_NONE;           /* keep the rest of the settings, drop the patch overlay */
         bad = 0;
@@ -187,7 +193,7 @@ static void pn_validate(app_set_t *st)
         st->look = UI_H_SPECTRUM;               /* the default look: 2 */
         st->slot = 0;
         st->uslot = PN_NONE;
-        for (i = 0; i < P_COUNT; i++) st->uval[i] = PDESC[i].def;
+        for (i = 0; i < P_COUNT_V1; i++) st->uval[i] = PDESC[i].def;
     }
 }
 
@@ -199,8 +205,8 @@ static void pn_migrate(app_set_t *st, uint32_t *dirty)
     if (!pl.ready || st->uslot >= PN_PRESETS || pl_present()) return;
     for (i = 0; i < PL_NAME && PRESET[st->uslot].name[i]; i++) pn_tmp.name[i] = PRESET[st->uslot].name[i];
     pn_tmp.name[i] = 0;
-    pn_tmp.n = P_COUNT;
-    for (i = 0; i < P_COUNT; i++) pn_tmp.v[i] = st->uval[i];
+    pn_tmp.n = P_COUNT_V1;
+    for (i = 0; i < P_COUNT_V1; i++) pn_tmp.v[i] = st->uval[i];
     if (pl_put(0, &pn_tmp) != PL_OK) return;     /* the overlay stays and keeps working */
     if (st->slot == st->uslot) st->slot = (uint8_t)PN_PRESETS;    /* the patch in use was that one: it is U01 now */
     st->uslot = PN_NONE;
@@ -363,6 +369,14 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
     if (b & 1u << BTN_LFO) pn_page(UI_P_LFO);
     if (b & 1u << BTN_SEL) pn_page(UI_P_SEL);
     if (b & 1u << BTN_GLO) pn_page(UI_P_GLO);
+    if (b & 1u << BTN_ARP) { pn.arp_arm = 1; pn.t_arp = fm1_ms; }
+    if (pn.arp_arm) {
+        if (!(held >> BTN_ARP & 1u)) {                              /* released: a short press switches the arp */
+            pn.arp_arm = 0;
+            if (patch_get(P_ARP)) { pn.arp_last = (uint8_t)patch_get(P_ARP); patch_set(P_ARP, 0); }
+            else patch_set(P_ARP, pn.arp_last ? pn.arp_last : 1);
+        } else if (fm1_ms - pn.t_arp >= 500u) { pn.arp_arm = 0; pn_page(UI_P_ARP); }   /* held: its page (again: the next set) */
+    }
     if (b & 1u << BTN_HOME) {
         if (held >> BTN_EDIT & 1u) cpu_reset_req++;                 /* the max starts over */
         else if (pn.page == UI_P_HELP) {                            /* next help page, then out */
@@ -543,7 +557,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             *d = 0;
         }
     }
-    if (pn.page == UI_P_FX || pn.page == UI_P_LFO || pn.page == UI_P_SEL || pn.page == UI_P_GLO) {
+    if (pn.page == UI_P_FX || pn.page == UI_P_LFO || pn.page == UI_P_SEL || pn.page == UI_P_GLO || pn.page == UI_P_ARP) {
         uint32_t s, n = NSUB[pn.page];
         v->nsets = (uint8_t)n;
         v->set = pn.sub;
@@ -552,7 +566,14 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         v->flt_mode = (uint8_t)patch_get(P_FMODE);
         v->lfo_shape = (uint8_t)patch_get(P_LFO_SHAPE);
         v->drive = (uint8_t)patch_get(P_DRIVE);
-        ui_copy(v->ptxt, TXT[TX_VMODE][patch_get(P_VMODE)], 8);
+        ui_copy(v->ptxt, pn.page == UI_P_ARP ? TXT[TX_ARP][patch_get(P_ARP)] : TXT[TX_VMODE][patch_get(P_VMODE)], 8);
+        if (pn.page == UI_P_ARP) {
+            char *d = v->info;
+            if (arp_tap.ext) d = ui_cat(d, "EXT CLOCK");
+            else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }
+            d = ui_cat(d, "  ");
+            ui_cat(d, TXT[TX_ARATE][patch_get(P_ARP_RATE)]);
+        }
         for (s = 0; s < 2u; s++)
             for (i = 0; i < 4u; i++) {
                 char *d = v->list[s * 4u + i];
@@ -585,8 +606,9 @@ static int pn_save_poll(app_set_t *st, uint32_t *dirty)
             const char *src = pn.slot >= PN_PRESETS ? pn.uname[(pn.slot - PN_PRESETS) % PL_IDS] : PRESET[pn.slot % PN_PRESETS].name;
             for (i = 0; i < PL_NAME && src[i]; i++) pn_tmp.name[i] = src[i];       /* named after the patch it was made from */
             pn_tmp.name[i] = 0;
-            pn_tmp.n = P_COUNT;
             for (i = 0; i < P_COUNT; i++) pn_tmp.v[i] = (int16_t)patch.p[i];
+            pn_tmp.n = P_COUNT;
+            while (pn_tmp.n > P_COUNT_V1 && pn_tmp.v[pn_tmp.n - 1u] == PDESC[pn_tmp.n - 1u].def) pn_tmp.n--;     /* trailing defaults are not stored: a patch without arp keeps its 124 bytes */
             rc = pl_put(id, &pn_tmp);
             pn.save_req = 0;
             if (rc != PL_OK) { pn_msg(rc == PL_E_FULL ? "STORE FULL" : "SAVE FAILED", 0, 0); return 1; }
