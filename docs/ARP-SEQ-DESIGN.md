@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Arpeggiator, note sequencer, modulation sequencer (T27): design note
 
-Status: proposal, decisions G-N below wait for the user. No code yet.
+Status: decisions G-N accepted as recommended (2026-10-17). Stage S0 (clock + arp engine) next.
 
 ## 1. Goal
 

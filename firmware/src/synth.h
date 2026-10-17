@@ -440,15 +440,22 @@ static void all_off(int hard)
     }
 }
 
+#define ARP_NOTE_ON(n, v) note_on(n, v)
+#define ARP_NOTE_OFF(n) note_off(n)
+#include "arp.h"
+
 static void events_drain(void)
 {
     uint32_t t = ev_tail, h = ev_head;
     while (t != h) {
         uint32_t e = ev_ring[t % EV_N], ty = e >> 16, note = (e >> 8) & 127u, vel = e & 127u;
-        if (ty == EV_ON && vel) note_on(note, vel);
-        else if (ty == EV_ON || ty == EV_OFF) note_off(note);
-        else if (ty == EV_ALLOFF) all_off(0);
-        else if (ty == EV_PANIC) all_off(1);
+        if (ty == EV_ON && vel) { if (arp_on()) arp_in_on(note, vel); else note_on(note, vel); }
+        else if (ty == EV_ON || ty == EV_OFF) {
+            if (arp_on()) { arp_in_off(note); if (!arp_sounding(note)) note_off(note); }   /* (a note played before the arp went on still ends) */
+            else note_off(note);
+        }
+        else if (ty == EV_ALLOFF) { arp_clear(); all_off(0); }
+        else if (ty == EV_PANIC) { arp_clear(); all_off(1); }
         t++;
     }
     ev_tail = t;
@@ -616,6 +623,7 @@ static void engine_render(int32_t *out, uint32_t n, uint32_t t0)
     n = nsteps << ENG_CR_SHIFT;
     block_control();
     events_drain();
+    arp_run(n);
     for (v = 0; v < ENG_NV; v++) {
         voice_t *vp = &vx[v];
         if (vp->st_a == ENV_IDLE && !vp->amp) continue;     /* silent: costs nothing */
