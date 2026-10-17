@@ -244,6 +244,9 @@ static void app_main(void)
         pn_encoders();
         if (pn.browse_pend && fm1_ms - pn.t_browse >= 400u) {   /* the patch name turned, then 400 ms of quiet */
             pn_load(pn.browse, &set);
+            if (latch)                          /* a new patch may release the voices (voice mode): the latched notes start again on it */
+                for (k = 0; k < 128u; k++)
+                    if (lat[k >> 3] >> (k & 7u) & 1u) play((uint8_t)k, 100);
             if (set.slot != pn.slot) { set.slot = pn.slot; dirty = 1; t_change = fm1_ms; }
         }
         save_shown = pn_save_poll(&set, &dirty);

@@ -152,7 +152,7 @@ static uint32_t pn_entry_ok(uint32_t e) { return e < PN_PRESETS || (e < PN_ENTRI
 
 /* load entry i: a factory patch (then the user's old settings overlay when it replaces this slot) or a user patch of the
  * log; a user patch that is gone or damaged loads patch 1 */
-static void pn_load(uint32_t i, const app_set_t *st)
+static void pn_load_raw(uint32_t i, const app_set_t *st)
 {
     uint32_t p;
     if (i >= PN_PRESETS) {
@@ -174,6 +174,15 @@ static void pn_load(uint32_t i, const app_set_t *st)
     pn.slot = pn.browse = (uint8_t)i;
     pn.browse_pend = 0;
     pn.save_req = 0;
+}
+
+/* the arp is a performance switch: a patch that has it off (all the factory ones) leaves it as it is, so changing the patch
+ * while an arp plays does not stop it. A patch saved with an arp mode brings its own. */
+static void pn_load(uint32_t i, const app_set_t *st)
+{
+    int32_t arp = patch_get(P_ARP);
+    pn_load_raw(i, st);
+    if (arp && !patch_get(P_ARP)) { patch_set(P_ARP, arp); pn.base[P_ARP] = (int16_t)arp; }
 }
 
 /* the settings read back from flash: a bad one is the defaults (version byte, ranges) */
