@@ -89,19 +89,25 @@ export function detectFrame(x, info, fmt = 'auto') {
 }
 
 // ---- spectra: {re, im} Float64Array(64), x(t) = sum Im(c_k e^{ikt}) ----
+const TW = new Map();                            // frame length -> cos / sin of 2 pi j / n
+function twiddle(n) {
+  if (!TW.has(n)) TW.set(n, { c: Float64Array.from({ length: n }, (_, j) => Math.cos(2 * Math.PI * j / n)), s: Float64Array.from({ length: n }, (_, j) => Math.sin(2 * Math.PI * j / n)) });
+  return TW.get(n);
+}
 export function frameSpectrum(fr) {
-  const n = fr.length, m = Math.min(HMAX, n >> 1), re = new Float64Array(HMAX), im = new Float64Array(HMAX), s = 2 / n;
+  const n = fr.length, m = Math.min(HMAX, n >> 1), re = new Float64Array(HMAX), im = new Float64Array(HMAX), s = 2 / n, { c, s: sn } = twiddle(n);
   for (let k = 1; k <= m; k++) {
     let a = 0, b = 0;
-    for (let j = 0; j < n; j++) { const t = 2 * Math.PI * ((j * k) % n) / n; a += fr[j] * Math.cos(t); b -= fr[j] * Math.sin(t); }
+    for (let j = 0, q = 0; j < n; j++, q += k) { if (q >= n) q %= n; a += fr[j] * c[q]; b -= fr[j] * sn[q]; }
     re[k - 1] = -b * s; im[k - 1] = a * s;             // c = i * X
   }
   return { re, im };
 }
+// one function per frame, computed on first use and kept: a frame that the pick leaves out is never transformed
 export function spectraOf(x, frame) {
   const n = Math.floor(x.length / frame);
   if (n < 1) throw new WavError('file shorter than one frame');
-  return Array.from({ length: n }, (_, i) => frameSpectrum(x.subarray(i * frame, (i + 1) * frame)));
+  return Array.from({ length: n }, (_, i) => { let v = null; return () => v || (v = frameSpectrum(x.subarray(i * frame, (i + 1) * frame))); });
 }
 
 export function select(n, how) {
@@ -127,12 +133,13 @@ export function select(n, how) {
 
 function pick32(sp) {
   const n = sp.length;
-  if (n === 1) return Array(FRAMES).fill(sp[0]);
-  if (n >= FRAMES) return Array.from({ length: FRAMES }, (_, i) => sp[roundEven(i * (n - 1) / (FRAMES - 1))]);
+  if (n === 1) return Array(FRAMES).fill(sp[0]());
+  if (n >= FRAMES) return Array.from({ length: FRAMES }, (_, i) => sp[roundEven(i * (n - 1) / (FRAMES - 1))]());
   return Array.from({ length: FRAMES }, (_, i) => {
     const p = i * (n - 1) / (FRAMES - 1), a = Math.floor(p), b = Math.min(a + 1, n - 1), t = p - a;
     const re = new Float64Array(HMAX), im = new Float64Array(HMAX);
-    for (let k = 0; k < HMAX; k++) { re[k] = sp[a].re[k] * (1 - t) + sp[b].re[k] * t; im[k] = sp[a].im[k] * (1 - t) + sp[b].im[k] * t; }
+    const A = sp[a](), B = sp[b]();
+    for (let k = 0; k < HMAX; k++) { re[k] = A.re[k] * (1 - t) + B.re[k] * t; im[k] = A.im[k] * (1 - t) + B.im[k] * t; }
     return { re, im };
   });
 }
@@ -184,12 +191,14 @@ export function naturalCompare(a, b) {
 }
 
 // files: [{name, bytes}] in the order wanted -> {raw, report: [text], total, kept, gain}
-export function buildTable(files, { frame = 0, format = 'auto', pick = 'even' } = {}) {
+export function buildTable(files, { frame = 0, format = 'auto', pick = 'even' } = {}, cache = new Map()) {
   const sources = [], report = [], lens = new Set();
   for (const f of files) {
-    const { x, info } = readWav(f.bytes);
+    if (!cache.has(f)) cache.set(f, { wav: readWav(f.bytes), by: new Map() });      // cache: reading and spectra per file
+    const c = cache.get(f), { x, info } = c.wav;
     const [L, why] = frame ? [frame, 'chosen'] : detectFrame(x, info, format);
-    const sp = spectraOf(x, L); sources.push(...sp); lens.add(L);
+    if (!c.by.has(L)) c.by.set(L, spectraOf(x, L));
+    const sp = c.by.get(L); sources.push(...sp); lens.add(L);
     report.push(`${f.name}: frame ${L} (${why}), ${sp.length} frame(s)`);
   }
   if (lens.size > 1) report.push(`note: frame lengths differ (${[...lens].sort((a, b) => a - b)}); each file was read at its own length`);

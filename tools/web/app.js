@@ -6,7 +6,7 @@ import { buildTable, naturalCompare } from './convert.js';
 const $ = (id) => document.getElementById(id);
 const PORT_RE = /fm-1|felucca|ota|composite|sinco|usb-midi/i;     // the same ports the installer would look at
 let access = null, vw = null, dir = [], busy = false, fw = null;
-let files = [], built = null;                                     // built: {img, name, raw, report}
+let files = [], built = null, cache = new Map();                                     // built: {img, name, raw, report}
 
 function status(text, cls = 'mute') { const s = $('status'); s.textContent = text; s.className = cls; }
 function setBusy(b) { busy = b; for (const el of document.querySelectorAll('button')) el.disabled = b || (el.dataset.need === 'built' && !built); $('bar').classList.toggle('hide', !b); }
@@ -119,7 +119,7 @@ async function sendTable() {
 async function loadFiles(list) {
   const arr = [...list].sort((a, b) => naturalCompare(a.name, b.name));
   if (!arr.length) return;
-  files = [];
+  files = []; cache = new Map();
   for (const f of arr) files.push({ name: f.name, bytes: new Uint8Array(await f.arrayBuffer()) });
   const vwt = files.length === 1 && /\.vwt$/i.test(files[0].name);
   for (const id of ['frame', 'format', 'pick']) $(id).disabled = vwt;
@@ -139,7 +139,7 @@ async function rebuild() {
       built = { name: t.name, raw: t.data.slice(), report: [`${files[0].name}: a table file, ${t.frames} frames, crc ${t.crc.toString(16).padStart(8, '0')} (checked)`] };
     } else {
       const frame = +$('frame').value;
-      const r = buildTable(files, { frame, format: $('format').value, pick: $('pick').value });
+      const r = buildTable(files, { frame, format: $('format').value, pick: $('pick').value }, cache);
       built = { name: $('name').value, raw: r.raw, report: [...r.report, `${r.total} frame(s)` + (r.kept !== r.total ? `, ${r.kept} kept` : '') + ' → 32, gain ' + r.gain.toFixed(3)] };
     }
     if (my !== building) return;
