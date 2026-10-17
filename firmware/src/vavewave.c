@@ -94,8 +94,6 @@ static void app_main(void)
         }
 
         while (midi_get(&st, &d1, &d2))
-            if (st == 0xF8u) arp_ext.ticks++;                            /* MIDI clock and start: the arp follows them */
-            else if (st == 0xFAu) arp_ext.start++;
             eng_midi(st, d1, d2);
 
         base = (uint32_t)(KEY0 + 12 * set.oct);
@@ -239,6 +237,8 @@ static void app_main(void)
         while (midi_get(&st, &d1, &d2)) {       /* USB-MIDI in, any channel */
             if ((st & 0xF0u) == 0xB0u && (d1 == 120u || d1 == 123u))     /* all sound / notes off: nothing is latched any more */
                 for (k = 0; k < 16u; k++) lat[k] = 0;
+            if (st == 0xF8u) arp_ext.ticks++;                            /* MIDI clock and start: the arp follows them */
+            else if (st == 0xFAu) arp_ext.start++;
             eng_midi(st, d1, d2);
         }
 

@@ -8,6 +8,7 @@ mkdir -p build/host
 cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/vavewave firmware/src/vavewave.c
 build/host/vavewave build/host/arp tests/scripts/arp.txt > build/host/arp.log
 build/host/vavewave build/host/arp2 tests/scripts/arp2.txt > build/host/arp2.log
+build/host/vavewave build/host/arp3 tests/scripts/arp3.txt > build/host/arp3.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re
@@ -36,6 +37,9 @@ check(any(t < 1400 for t, n in bo) and any(1000 < t < 1400 for t, n in bo), 'lat
 check(len({n for t, n in bo if t < 1400}) == 2, 'two latched notes: both are played')
 check(not any(1500 < t < 1800 and k == 'on' for t, k, n in b), 'PLAY again lets them go: the arp stops')
 check(not any(t > 2700 and k == 'on' for t, k, n in b), 'nothing plays after the arp is switched off again')
+c = [t for t, k, n in load('build/host/arp3.log') if k == 'on']
+g = [c[i + 1] - c[i] for i in range(len(c) - 1)]
+check(len(c) >= 8 and all(140 <= x <= 160 for x in g[2:]), 'MIDI clock at 100 BPM: steps 150 ms apart (%s)' % g[:8])
 print('arp panel: %d failures' % fails)
 raise SystemExit(1 if fails else 0)
 PY

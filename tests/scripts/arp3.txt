@@ -1,0 +1,65 @@
+# MIDI clock drives the arp: 0xF8 every 25 ms = 100 BPM, 1/16 = 150 ms. See tests/run_arp_panel.sh.
+100 btn 10
+200 keys 0x1
+300 midi 0xF8 0 0
+325 midi 0xF8 0 0
+350 midi 0xF8 0 0
+375 midi 0xF8 0 0
+400 midi 0xF8 0 0
+425 midi 0xF8 0 0
+450 midi 0xF8 0 0
+475 midi 0xF8 0 0
+500 midi 0xF8 0 0
+525 midi 0xF8 0 0
+550 midi 0xF8 0 0
+575 midi 0xF8 0 0
+600 midi 0xF8 0 0
+625 midi 0xF8 0 0
+650 midi 0xF8 0 0
+675 midi 0xF8 0 0
+700 midi 0xF8 0 0
+725 midi 0xF8 0 0
+750 midi 0xF8 0 0
+775 midi 0xF8 0 0
+800 midi 0xF8 0 0
+825 midi 0xF8 0 0
+850 midi 0xF8 0 0
+875 midi 0xF8 0 0
+900 midi 0xF8 0 0
+925 midi 0xF8 0 0
+950 midi 0xF8 0 0
+975 midi 0xF8 0 0
+1000 midi 0xF8 0 0
+1025 midi 0xF8 0 0
+1050 midi 0xF8 0 0
+1075 midi 0xF8 0 0
+1100 midi 0xF8 0 0
+1125 midi 0xF8 0 0
+1150 midi 0xF8 0 0
+1175 midi 0xF8 0 0
+1200 midi 0xF8 0 0
+1225 midi 0xF8 0 0
+1250 midi 0xF8 0 0
+1275 midi 0xF8 0 0
+1300 midi 0xF8 0 0
+1325 midi 0xF8 0 0
+1350 midi 0xF8 0 0
+1375 midi 0xF8 0 0
+1400 midi 0xF8 0 0
+1425 midi 0xF8 0 0
+1450 midi 0xF8 0 0
+1475 midi 0xF8 0 0
+1500 midi 0xF8 0 0
+1525 midi 0xF8 0 0
+1550 midi 0xF8 0 0
+1575 midi 0xF8 0 0
+1600 midi 0xF8 0 0
+1625 midi 0xF8 0 0
+1650 midi 0xF8 0 0
+1675 midi 0xF8 0 0
+1700 midi 0xF8 0 0
+1725 midi 0xF8 0 0
+1750 midi 0xF8 0 0
+1775 midi 0xF8 0 0
+1900 keys 0
+2000 end

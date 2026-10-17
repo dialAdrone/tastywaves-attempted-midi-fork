@@ -46,7 +46,7 @@ static int seq_is(const int *want, int n)
     return memcmp(got, want, (size_t)n * sizeof(int)) == 0;
 }
 static void key_on(uint32_t n) { if (arp_on()) arp_in_on(n, 100); else sink(1, n); }     /* what events_drain does */
-static void key_off(uint32_t n) { if (arp_on()) { arp_in_off(n); if (!arp_sounding(n)) sink(0, n); } else sink(0, n); }
+static void key_off(uint32_t n) { if (arp_on() || ar.active) { arp_in_off(n); if (!arp_sounding(n)) sink(0, n); } else sink(0, n); }
 static void hold3(void) { arp_in_on(60, 100); arp_in_on(64, 100); arp_in_on(67, 100); }
 static uint32_t nth_on_time(int k)
 {

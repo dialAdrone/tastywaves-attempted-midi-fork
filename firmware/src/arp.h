@@ -5,7 +5,7 @@
  * The includer defines ARP_NOTE_ON(note, vel) and ARP_NOTE_OFF(note) (the engine's note_on / note_off) before this file.
  *
  * Who writes what:
- *   arp_cfg.*       main loop (panel, later patch)              ISR reads once per block
+ *   arp_cfg.*       ISR (block_control copies the patch parameters once per block)
  *   arp_ext.*       main loop (MIDI clock 0xF8, start 0xFA)     ISR reads once per block
  *   ar.*            ISR only (notes held, what sounds, clock)
  *   arp_tap         ISR writes, main reads (the step shown on the screen)
@@ -167,13 +167,16 @@ static void arp_run(uint32_t frames)            /* once per block, after events_
     uint32_t sub = 0, t, d, bpm;
     if (arp_cfg.mode == ARP_OFF) {
         if (ar.active) arp_deactivate();
+        ar.ext_seen = arp_ext.ticks;            /* clock that came while off is not counted when it goes on */
+        ar.ext_start = arp_ext.start;
+        ar.ext_ever = 0;
         return;
     }
     ar.active = 1;
     t = arp_ext.ticks;                          /* MIDI clock */
     d = t - ar.ext_seen;
     ar.ext_seen = t;
-    if (d) { ar.ext_idle = 0; ar.ext_ever = 1; if (d > 24u) d = 24u; }
+    if (d) { ar.ext_idle = 0; ar.ext_ever = 1; if (d > 6u) d = 6u; }       /* (a burst after a stalled main loop: at most one 1/16) */
     else if (ar.ext_idle < 100000u) ar.ext_idle++;
     t = arp_ext.start;
     if (t != ar.ext_start) { ar.ext_start = t; ar.pos = 0; ar.step_idx = 0; ar.step_left = 0; ar.acc = 0; }

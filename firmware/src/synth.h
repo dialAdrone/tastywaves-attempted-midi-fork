@@ -456,7 +456,7 @@ static void events_drain(void)
         uint32_t e = ev_ring[t % EV_N], ty = e >> 16, note = (e >> 8) & 127u, vel = e & 127u;
         if (ty == EV_ON && vel) { if (arp_on()) arp_in_on(note, vel); else note_on(note, vel); }
         else if (ty == EV_ON || ty == EV_OFF) {
-            if (arp_on()) { arp_in_off(note); if (!arp_sounding(note)) note_off(note); }   /* (a note played before the arp went on still ends) */
+            if (arp_on() || ar.active) { arp_in_off(note); if (!arp_sounding(note)) note_off(note); }   /* (also in the block the arp goes off in) */   /* (a note played before the arp went on still ends) */
             else note_off(note);
         }
         else if (ty == EV_ALLOFF) { arp_clear(); all_off(0); }
