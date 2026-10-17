@@ -1,0 +1,58 @@
+# patch storage, run 1 (empty log): see tests/run_patches.sh. Buttons: 8 HOME 9 SAVE. Encoder 6 = PRESETS.
+# Parameters by id: 15 CUTOFF, 16 RESO, 40 DRIVE. No keys: the engine is quiet. A save waits until 1 s after boot and 1 s
+# after the previous one; its confirmation shows for 0.9 s.
+200 shot a_start
+# edit, SAVE on a factory patch (PRESET 1) -> the first free id: U01
+300 patch 15 40
+400 shot b_modified
+500 btn 9
+1500 shot c_saved_u01
+# change it again and SAVE on the user patch: replaced in place (still U01)
+2200 patch 15 55
+2300 btn 9
+2500 shot d_replaced_u01
+# PRESETS back to factory 6, edit, SAVE -> U02
+3600 enc 6 -3
+4300 shot e_factory6
+4400 patch 16 99
+4500 btn 9
+4700 shot f_saved_u02
+# PRESETS to factory 8, edit, SAVE held + PRESETS +4 from the first free id (U03) picks U07 (empty): saved on release
+5800 enc 6 -2
+6500 shot g_factory8
+6600 patch 40 70
+6700 bdown 9
+6750 enc 6 1
+6800 enc 6 1
+6850 enc 6 1
+6900 enc 6 1
+6950 shot h_pick_u07
+7000 bup 9
+7200 shot i_saved_u07
+# edit, pick an occupied id (U02): the release asks, one more press confirms
+8500 patch 40 20
+8600 bdown 9
+8650 enc 6 -1
+8680 enc 6 -1
+8700 enc 6 -1
+8730 enc 6 -1
+8750 enc 6 -1
+8800 shot j_pick_u02
+8850 bup 9
+8900 shot k_confirm_replace
+8950 btn 9
+9200 shot l_replaced_u02
+# another edit, then SAVE held 2 s: DELETE prompt; any other button cancels
+10500 patch 15 70
+10600 bdown 9
+12800 shot m_delete_prompt
+12850 bup 9
+12900 btn 8
+13000 shot n_cancelled
+# hold SAVE again, confirm: U02 is deleted, the patch before it (U01) loads
+13100 bdown 9
+15300 shot o_delete_prompt
+15350 bup 9
+15400 btn 9
+15700 shot p_deleted
+17000 end

@@ -130,10 +130,10 @@ typedef struct {
     uint8_t ver;                                /* SET_VER (panel.h): another version = the defaults */
     int8_t oct;                                 /* -2..2 */
     uint8_t look;                               /* HOME look UI_H_*: 0 waterfall, 1 spectrum (default), 2 minimal */
-    uint8_t slot;                               /* the patch last loaded, 0..7 */
-    uint8_t uslot;                              /* the factory slot the saved user patch replaces, 0xFF none */
+    uint8_t slot;                               /* the entry last loaded: 0..7 factory, 8..39 user patch U01..U32 (panel.h) */
+    uint8_t uslot;                              /* the old single-patch overlay: the factory slot it replaced, 0xFF none; migrated to U01 at boot */
     uint8_t pad[3];
-    int16_t uval[P_COUNT];                      /* SAVE stub (T17 does real slots): patch values of that user patch */
+    int16_t uval[P_COUNT];                      /* the old overlay's values (read once for the migration, never written again) */
 } app_set_t;
 typedef char app_set_fits[sizeof(app_set_t) <= 256u ? 1 : -1];
 
@@ -155,7 +155,11 @@ static void app_main(void)
     memset(&set, 0, sizeof set);
     if (settings_load(&set, sizeof set)) set.ver = 0;       /* nothing (or another size): the defaults */
     pn_validate(&set);
+    pl_init();                                  /* the patch log: a scan, no write */
+    pn_migrate(&set, &dirty);                   /* the old single saved patch becomes U01 */
+    if (dirty) { settings_save(&set, sizeof set); dirty = 0; }      /* now: the overlay must not outlive its copy (boot is quiet) */
     pn_init(&set);
+    if (set.slot != pn.slot) { set.slot = pn.slot; dirty = 1; t_change = fm1_ms; }   /* a user patch that is gone: patch 1 */
 
     for (;;) {
         uint32_t keys, down, up, rel, b, hb, lit, base, edit_held, m, save_shown;
@@ -213,7 +217,7 @@ static void app_main(void)
             if (set.slot != pn.slot) { set.slot = pn.slot; dirty = 1; t_change = fm1_ms; }
         }
         save_shown = pn_save_poll(&set, &dirty);
-        (void)save_shown;
+        if (save_shown) t_change = fm1_ms;      /* (a changed last patch is written to the settings 2 s later) */
 
         while (midi_get(&st, &d1, &d2))         /* USB-MIDI in, any channel */
             eng_midi(st, d1, d2);

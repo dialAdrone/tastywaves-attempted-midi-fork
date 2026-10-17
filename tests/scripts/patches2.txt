@@ -1,0 +1,13 @@
+# patch storage, run 2: the log from run 1 (power-cycled): browse the list, load a user patch
+300 shot a_boot
+400 enc 6 3
+1000 shot b_browse
+1100 enc 6 4
+1700 shot c_browse_end
+1800 enc 6 1
+2400 shot d_u01
+2500 enc 6 1
+3100 shot e_u07
+3200 enc 6 1
+3800 shot f_still_u07
+4500 end

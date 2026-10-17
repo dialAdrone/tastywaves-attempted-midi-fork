@@ -104,6 +104,44 @@ static int settings_save(const void *p, uint32_t n)
     return 0;
 }
 
+/* the user patch log (patchlog.h) on a NOR mock: erase sets 0xFF, program only clears bits. DINGHY_PATCHES=file keeps the
+ * 16 KiB window between runs (read at start, written at the end), so a script can start with saved patches. */
+static uint8_t host_flash[0x100000], flash_ok = 1;
+#define PL_W_LO 0x000E5000u
+#define PL_W_HI 0x000E9000u
+static void fm1_wdt_feed(void) {}
+static uint32_t crc32(const uint8_t *p, uint32_t n)
+{
+    uint32_t c = 0xFFFFFFFFu, k;
+    while (n--) { c ^= *p++; for (k = 0; k < 8u; k++) c = c & 1u ? (c >> 1) ^ 0xEDB88320u : c >> 1; }
+    return ~c;
+}
+static int st_read(uint32_t off, void *dst, uint32_t n) { if (off + n > sizeof host_flash) return -2; memcpy(dst, host_flash + off, n); return 0; }
+static int fl_erase4k(uint32_t off, uint32_t *took)
+{
+    if (off < PL_W_LO || off + 0x1000u > PL_W_HI || (off & 0xFFFu)) { fprintf(stderr, "host: erase outside the patch log window\n"); exit(1); }
+    memset(host_flash + off, 0xFF, 0x1000);
+    *took = 17000u;
+    return 0;
+}
+static int fl_write(uint32_t off, const uint8_t *s, uint32_t n)
+{
+    uint32_t i;
+    if (off < PL_W_LO || off + n > PL_W_HI) { fprintf(stderr, "host: write outside the patch log window\n"); exit(1); }
+    for (i = 0; i < n; i++) {
+        if ((host_flash[off + i] & s[i]) != s[i]) { fprintf(stderr, "host: program over a 0 bit at %#x\n", off + i); exit(1); }
+        host_flash[off + i] &= s[i];
+    }
+    return 0;
+}
+#include "patchlog.h"
+static const char *host_patches_file;
+static void host_patches_save(void)
+{
+    FILE *f = host_patches_file ? fopen(host_patches_file, "wb") : 0;
+    if (f) { fwrite(host_flash + PL_W_LO, 1, PL_W_HI - PL_W_LO, f); fclose(f); }
+}
+
 static uint8_t mq[64][3];
 static uint32_t mq_w, mq_r;
 static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)
@@ -313,6 +351,12 @@ int main(int argc, char **argv)
     if (argc > 1) host_out = argv[1];
     if (argc > 2) read_script(argv[2]);
     if (argc > 3) frame_fps = (uint32_t)atoi(argv[3]);
+    memset(host_flash, 0xFF, sizeof host_flash);
+    if ((host_patches_file = getenv("DINGHY_PATCHES")) != 0) {
+        FILE *f = fopen(host_patches_file, "rb");
+        if (f) { if (fread(host_flash + PL_W_LO, 1, PL_W_HI - PL_W_LO, f)) {} fclose(f); }
+        atexit(host_patches_save);
+    }
     if (getenv("DINGHY_USERTAB")) host_usertab(getenv("DINGHY_USERTAB"));
     {   /* host has no boot scan: fake values for the BOOT KEYS page (GLO, third set): OCT- held, 80 frames */
         uint32_t i;

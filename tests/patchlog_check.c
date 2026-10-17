@@ -67,13 +67,14 @@ static int fl_write(uint32_t off, const uint8_t *s, uint32_t n)
         m.op++;
         if (m.dead) return -9;
         if (m.op == m.cut_at) {
-            uint8_t tmp[256];
+            uint8_t tmp[1];
             if (m.mode == 1) k = chunk / 2;
             else if (m.mode == 2) k = chunk - 1;
-            else if (m.mode == 3) k = chunk;
+            else if (m.mode == 3) k = chunk - 1;
             else k = 0;
             prog_page(off, s, k);
-            if (m.mode == 3) { memcpy(tmp, s + chunk - 1, 1); tmp[0] |= (uint8_t)rnd(); prog_page(off + chunk - 1, tmp, 1); }
+            if (m.mode == 3) flash[off + chunk - 1] &= (uint8_t)(s[chunk - 1] | rnd());   /* the last byte half programmed */
+            (void)tmp;
             if (m.mode == 4) prog_page(off, s, chunk);   /* all of it, then the lights go out */
             m.dead = 1;
             return -9;
@@ -112,8 +113,8 @@ static void model_put(model_t *md, uint32_t id, const pl_patch_t *p)
     strncpy(md->p[id].name, p->name, 12);
     memcpy(md->p[id].v, p->v, 2u * p->n);
 }
-static uint32_t tot_erases, tot_gcs, tot_progs;
-static void reboot(void) { tot_erases += pl.erases; tot_gcs += pl.gcs; tot_progs += pl.progs; m.dead = 0; m.cut_at = m.fault_at = -1; pl_init(); }
+static uint32_t tot_erases, tot_gcs, tot_progs, tot_evacs;
+static void reboot(void) { tot_erases += pl.erases; tot_gcs += pl.gcs; tot_progs += pl.progs; tot_evacs += pl.evacs; m.dead = 0; m.cut_at = m.fault_at = -1; pl_init(); }
 static void observe(model_t *md)
 {
     uint32_t id;
@@ -227,7 +228,7 @@ int main(void)
         reboot();
         printf("      workload: %u steps, %u refused as full, %u erases, %u compactions, %u programs\n", 2000u, full, tot_erases, tot_gcs, tot_progs);
         CHECK(tot_gcs >= 5, "compaction ran (%u)", tot_gcs);
-        CHECK(tot_erases < 2000u / 8u, "erase count stays low (%u for 2000 steps)", tot_erases);
+        CHECK(tot_erases < 2000u / 4u, "erase count stays low (%u for 2000 steps)", tot_erases);
     }
     CHECK(m.oob == 0 && m.over == 0, "workload: no out-of-window calls (%u), no program over a 0 bit (%u)", m.oob, m.over);
 
@@ -313,6 +314,101 @@ int main(void)
         }
         printf("      cut sweep: %u cuts survived, %u problems\n", runs, bad);
         CHECK(m.over == 0, "cut sweep: no program over a 0 bit (%u)", m.over);
+    }
+
+    /* ---- a storm of power cuts, also inside compactions, over long workloads: every cut leaves the old or the new state,
+     * no put or delete ever fails without an injected fault, a deleted patch never comes back (the reviewer's two cases) ---- */
+    {
+        uint32_t runs = 0, bad = 0, cuts = 0, ram_cuts = 0;
+        for (uint32_t run = 0; run < 150 && bad < 6; run++) {
+            uint32_t s, rate = 4 + run % 12;
+            make_steps(steps, 800, 5000 + run, 70);
+            wipe();
+            memset(&md, 0, sizeof md);
+            for (s = 0; s < 800; s++) {
+                model_t before = md, after, got;
+                int rc;
+                uint32_t ram0;
+                if (rnd() % rate == 0) { m.cut_at = m.op + 1 + rnd() % 10; m.mode = (int)(rnd() % 5); }
+                ram0 = pl.evac_ram;
+                rc = do_step(&steps[s], &md);
+                if (m.dead) {
+                    cuts++;
+                    if (pl.evac_ram != ram0) {            /* the documented last-resort window: records of one sector may go, nothing else may change */
+                        uint32_t q;
+                        ram_cuts++; after = before; apply_model(&steps[s], &after); reboot(); observe(&got);
+                        for (q = 0; q < PL_IDS; q++)
+                            if (got.p[q].have && memcmp(&got.p[q], &before.p[q], sizeof got.p[q]) && memcmp(&got.p[q], &after.p[q], sizeof got.p[q])) { bad++; CHECK(0, "storm run %u step %u: id %u holds something that was never saved", run, s, q); }
+                        md = got; continue;
+                    }
+                    after = before; apply_model(&steps[s], &after);
+                    reboot();
+                    observe(&got);
+                    if (!same(&got, &before) && !same(&got, &after)) { bad++; CHECK(0, "storm run %u step %u: neither the old nor the new state", run, s); }
+                    md = got;
+                } else if (rc != 0 && rc != PL_E_FULL) { bad++; CHECK(0, "storm run %u step %u: returned %d without a fault", run, s, rc); md = before; }
+                if (bad >= 6) break;
+            }
+            reboot();
+            { model_t got; observe(&got); if (!same(&got, &md)) { bad++; CHECK(0, "storm run %u: final state differs", run); } }
+            runs++;
+        }
+        printf("      storm: %u runs, %u cuts, %u problems; %u cuts landed inside the through-RAM compaction (accepted)\n", runs, cuts, bad, ram_cuts);
+        CHECK(m.over == 0, "storm: no program over a 0 bit (%u)", m.over);
+    }
+
+    /* ---- no erased sector and live data in every sector (what cuts in successive compactions leave): saves must go on ---- */
+    {
+        uint32_t k, s;
+        pl_patch_t p;
+        wipe();
+        memset(&md, 0, sizeof md);
+        for (s = 0; s < PL_SECT; s++) {
+            pl.head = (uint8_t)s;                        /* fill each sector with versions of one id; the last one is live */
+            for (k = 0; k < 28; k++) { mk(&p, 47, "STUCK"); CHECK(pl_put(s, &p) == 0, "stuck setup"); model_put(&md, s, &p); }
+        }
+        reboot();
+        CHECK(pl_erased() == 0 && pl.head != PL_NONE, "setup: every sector in use");
+        expect(&md, "stuck state reads back");
+        make_steps(steps, 1500, 8080, 60);
+        for (k = 0; k < 1500; k++) {
+            int rc = do_step(&steps[k], &md);
+            if (rc != 0 && rc != PL_E_FULL) { CHECK(0, "stuck: step %u returned %d", k, rc); break; }
+            if (k % 100 == 0) { reboot(); expect(&md, "stuck workload"); }
+        }
+        reboot();
+        expect(&md, "stuck workload end");
+        CHECK(tot_evacs > 0, "the in-place compaction ran (%u)", tot_evacs);
+        CHECK(m.over == 0, "stuck: no program over a 0 bit (%u)", m.over);
+    }
+
+    /* ---- a program fault inside the through-RAM compaction: the index must stay true (every id listed loads) ---- */
+    {
+        uint32_t s, k, id2, bad = 0, ran = 0;
+        for (k = 1; k < 60 && bad < 4; k++) {
+            pl_patch_t p;
+            wipe();
+            memset(&md, 0, sizeof md);
+            for (s = 0; s < PL_SECT; s++) {          /* 8 live ids per sector, filled up with dead versions: no room anywhere */
+                uint32_t j;
+                pl.head = (uint8_t)s;
+                for (j = 0; j < 33u; j++) { mk(&p, 47, "RAMPATH"); id2 = s * 8u + j % 8u; CHECK(pl_put(id2, &p) == 0, "ram setup"); model_put(&md, id2, &p); }
+            }
+            reboot();
+            m.fault_at = m.op + (long)k; m.fmode = (int)(k % 3);
+            mk(&p, 47, "NEW");
+            (void)pl_put(1, &p);
+            if (pl.evac_ram) ran++;
+            m.fault_at = -1;
+            for (id2 = 0; id2 < PL_IDS; id2++)
+                if ((pl_present() >> id2 & 1u) && pl_get(id2, &p) != PL_OK) { bad++; CHECK(0, "ram path fault at op +%u: id %u is listed but does not load", k, id2); break; }
+            {   /* and the byte count: a full set of fresh saves still fits what is left */
+                uint32_t live = 0, q;
+                for (q = 0; q < PL_IDS; q++) if (pl.ent[q].type == PL_T_PATCH) live += pl.ent[q].len;
+                CHECK(live == pl.live_bytes, "ram path fault at op +%u: live_bytes %u but entries add up to %u", k, pl.live_bytes, live);
+            }
+        }
+        CHECK(ran > 10, "the through-RAM path ran in the fault test (%u)", ran);
     }
 
     /* ---- a failing flash operation (error return, with no / full / half effect) at every operation ---- */

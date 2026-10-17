@@ -132,3 +132,24 @@ Tables in the slots: `build` them with `tools/fm1_wavetable.py` (see its --help)
 | 9.7 | Preset with a user table (edit, SAVE), `erase` that slot, power-cycle, load the patch | plays table 0 (never silence), the name shows EMPTY; no crash |
 | 9.8 | Power-cycle with tables in all 8 slots, wait, play | normal boot, no delay (CRC checks run only for slots a patch uses) |
 | 9.9 | Pull the cable / switch off in the middle of a `put` into the slot that is sounding (keys up), power-cycle | that slot is empty (EMPTY), the others intact |
+
+## 10. User patches (T17 stage P1, docs/PATCH-STORAGE-DESIGN.md)
+
+Keys up and no sound for every SAVE (it waits until the sound has died away). Before flashing: a patch you saved with the old
+SAVE (one patch in the settings sector) is copied to U01 at the first boot.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 10.1 | Flash, boot. If the old SAVE had a patch: PRESETS past 008 | a `U01` entry with that patch's name and sound (the migration); otherwise the list ends at 008 |
+| 10.2 | On factory patch 1: turn CUTOFF, press SAVE (short) | `SAVED U01` (or the next free id), the "edited" mark disappears, the SAVE LED stops |
+| 10.3 | Edit again, SAVE | `SAVED U01`, replaced in place |
+| 10.4 | PRESETS back to a factory patch, edit, SAVE | `SAVED U02` (first free id); the list now has U01, U02 after 008 |
+| 10.5 | Edit a factory patch, hold SAVE and turn PRESETS two clicks, release | `SAVE TO Unn` while held (a `*` marks an occupied id); on release an empty id is saved at once |
+| 10.6 | Same, but pick an occupied id | on release `REPLACE Unn?`; pressing SAVE again replaces it; pressing any other button or waiting 5 s cancels |
+| 10.7 | On a user patch hold SAVE for 2 s | `DELETE Unn?`; SAVE again deletes it (`DELETED Unn`, the patch before it in the list loads); another button cancels |
+| 10.8 | Power-cycle | all saved patches are listed and load exactly (sound, name); the last patch used comes up |
+| 10.9 | Fill all 32 ids (hold SAVE + PRESETS), keep saving over them 100+ times | always `SAVED`; at some save the screen stalls up to about 0.3 s (compaction), no sound is cut (the save waits for quiet) |
+| 10.10 | Patch that uses a user table: SAVE, `erase` that table slot, load the patch | plays table 0 and shows EMPTY (as 9.7), no crash |
+| 10.11 | Switch off during a SAVE (press SAVE and cut power within a second) several times | after power-on every previous patch is intact; the patch being saved is either its old or its new version |
+| 10.12 | Firmware update over the top (`fm1_install.py` with this build again) | all patches still there |
+| 10.13 | Wavetable `put` and patch SAVE do not disturb each other: upload a table, then SAVE, `info` | both fine |

@@ -1,7 +1,8 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Patch storage (T17): design note
 
-Status: **proposal, waiting for the user's decisions A-F (section 9)**. No code yet. Written 2026-10-16.
+Status: decisions A-F accepted as recommended (2026-10-16). P0 (the log) and P1 (the panel) are written; see section 10 for the stages.
+Details settled while building P1: holding SAVE and turning PRESETS starts from the id a short press would use (the patch's own id, or the first free one) and moves one id per click, clamped to U01..U32; `*` marks an occupied id; a short press with nothing changed since load shows the confirmation only; the saved record is named after the patch it was made from (factory name, or the loaded user patch's name); a deleted patch loads the patch before it in the list. Messages: SAVED Unn, DELETED Unn, STORE FULL, SAVE FAILED, DEL FAILED.
 
 ## 1. Today
 
@@ -73,13 +74,18 @@ audio interrupt for about 17 ms; programming a record is 1-2 pages, about 2-4 ms
 - **Save**: append a record (sequence + 1) at the head; update the index only after the write returned success and a
   read-back compare matched. A failed write leaves the index and the patch "modified"; press SAVE again (as today).
 - **Delete**: append a tombstone for the id.
-- **Space**: when the head sector cannot hold the next record, move on to the next sector of the ring, which must be
-  erased. After a move, if fewer than 2 sectors are erased, **compact**: copy every live record (newest per id, not
-  deleted), with its original sequence number, into erased sectors at the head; verify each copy by read-back; only
-  then erase the sectors that now hold nothing live. Live data is at most 4 KiB (32 patches), so a ring of 4 always
-  has room: 1 sector live + the head + 2 erased.
+- **Space**: when the head sector cannot hold the next record, move on to an erased sector. A new head is taken only
+  while at least 3 erased sectors remain; otherwise **compact** first: copy every live record (newest per id, not
+  deleted, with a fresh sequence number) into an erased sector, verify each copy by read-back, and only then erase the
+  sectors that hold nothing live, **strictly oldest first, stopping at the first sector that still holds live data or
+  whose erase failed** (so a tombstone is never erased before an older record of its id). Live data is capped at one
+  sector (3,968 B for 32 patches of 124 B), so the copy always fits, and two erased sectors stay in reserve so that one
+  power cut inside a compaction still leaves one. If no erased sector is left anyway (cuts in two successive
+  compactions), the oldest sector's live records are copied into the head's free space and the sector erased; when the
+  head has no room they go through RAM (erase, then rewrite), the one step where a power cut or a program fault can
+  cost the records of that one sector.
 - **Power cut anywhere**: a torn record fails its CRC; a cut during compaction leaves the old records in place and at
-  worst duplicates (same id, same sequence, same bytes), which resolve to the same patch; the old sectors are erased
+  worst duplicates (same id, same bytes, newer sequence), which resolve to the same patch; the old sectors are erased
   only after every copy verified; a cut during that erase leaves a sector of garbage that fails CRC record by record
   (an erased-then-half-programmed sector is not a risk: nothing is programmed into a sector before its erase finished).
   In every case the user sees the last patch version that was completely written.

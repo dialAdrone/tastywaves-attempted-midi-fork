@@ -18,10 +18,15 @@
  * Flash writer: pl_erase / pl_prog are the ONLY calls to fl_erase4k / fl_write in this file, limited to the window
  * PL_AT .. PL_HI (platform.c FL_RANGE_OK allows exactly that much for this file).
  *
- * Space: the head sector takes appends. When a new sector is needed and fewer than 2 erased ones remain, compaction
+ * Space: the head sector takes appends. When a new sector is needed and fewer than 3 erased ones remain, compaction
  * copies every live record (fresh sequence numbers) into an erased sector, verifies each copy, and only then erases
- * the sectors that hold nothing live, oldest first and stopping at a failed erase (so a deleted patch can never come back). Live data is
- * capped at one sector (PL_SSZ bytes of records), so the copy always fits.
+ * the sectors that hold nothing live, strictly oldest first and stopping at the first sector that still holds live
+ * data or whose erase failed (so a deleted patch cannot come back: its tombstone is never erased before an older
+ * record of that id). Two erased sectors are kept in reserve so that one power cut inside a compaction still leaves one;
+ * if none is left anyway (cuts in successive compactions) the oldest sector's live records are copied into the head's
+ * free space and the sector erased, or, when the head has no room, compacted in place through RAM (the one step that a
+ * power cut or a program fault can cost records: it is the usual way out after cuts in two successive compactions).
+ * Live data is capped at one sector (PL_SSZ bytes of records), so a copy always fits.
  * Needs from the platform: st_read, fl_erase4k, fl_write, flash_ok, crc32, fm1_wdt_feed. */
 #pragma once
 #include <stdint.h>
@@ -39,6 +44,9 @@
 #define PL_T_DEL 2u
 #define PL_VER 1u
 #define PL_NONE 0xFFu
+#ifdef PL_W_LO                                     /* platform.c's FL_RANGE_OK window must be exactly the log */
+typedef char pl_window_matches[(PL_W_LO == PL_AT && PL_W_HI == PL_HI) ? 1 : -1];
+#endif
 
 enum { PL_OK = 0, PL_E_ARGS = -1, PL_E_NONE = -2, PL_E_BAD = -3, PL_E_FULL = -4, PL_E_FLASH = -5, PL_E_NOFLASH = -6 };
 
@@ -55,9 +63,10 @@ static struct {
     uint32_t maxseq[PL_SECT];                    /* highest sequence of a valid record in the sector (0 = none) */
     uint32_t seq, live_bytes;
     uint8_t head, ready;                         /* sector taking appends, or PL_NONE */
-    uint32_t erases, progs, gcs;                 /* counters (tests, diagnostics) */
+    uint32_t erases, progs, gcs, evacs, evac_ram;   /* counters (tests, diagnostics) */
 } pl;
 static uint8_t pl_rec[PL_MAXREC], pl_chk[PL_MAXREC];
+static uint8_t pl_ram[PL_SSZ];                    /* the live records of one sector, only for pl_evacuate (the last resort) */
 
 static uint32_t pl_u32(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
 static void pl_p32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
@@ -99,6 +108,9 @@ static int pl_valid(const uint8_t *r, uint32_t avail, uint32_t *len)
     *len = l;
     return 1;
 }
+
+/* a record read back for an index entry must also be that id's (a stale offset must never copy another id's record) */
+static int pl_valid_id(const uint8_t *r, uint32_t avail, uint32_t id, uint32_t *len) { return pl_valid(r, avail, len) && r[2] == PL_T_PATCH && r[3] == id; }
 
 static void pl_note(uint32_t s, uint32_t off, const uint8_t *r, uint32_t len)   /* a valid record was found / written */
 {
@@ -224,20 +236,89 @@ static int pl_has_live(uint32_t s)
     return 0;
 }
 
-/* erase every sector except `keep` that holds nothing live, oldest (lowest highest-sequence) first */
+/* erase the sectors except `keep` that hold nothing live, strictly oldest (lowest highest-sequence) first; stop at the
+ * first non-erased sector that still holds live data (a barrier: nothing newer may go before it) or whose erase fails */
 static void pl_reclaim(uint32_t keep)
 {
-    uint32_t tried = 1u << keep, s, best, bs;
+    uint32_t tried = keep < PL_SECT ? 1u << keep : 0u, s, best, bs;
     for (;;) {
         best = 0xFFFFFFFFu;
         bs = PL_SECT;
         for (s = 0; s < PL_SECT; s++)
-            if (!(tried >> s & 1u) && pl.free_from[s] != 0u && !pl_has_live(s) && pl.maxseq[s] < best) { best = pl.maxseq[s]; bs = s; }
-        if (bs == PL_SECT) break;
+            if (!(tried >> s & 1u) && pl.free_from[s] != 0u && pl.maxseq[s] < best) { best = pl.maxseq[s]; bs = s; }
+        if (bs == PL_SECT || pl_has_live(bs)) break;
         tried |= 1u << bs;
         fm1_wdt_feed();
-        if (pl_erase(bs)) break;                 /* stop at a failure: never erase a newer sector (a tombstone) past an older one */
+        if (pl_erase(bs)) break;
     }
+}
+
+static void pl_drop_tombstones(void)             /* a tombstone whose sector was erased is gone */
+{
+    uint32_t id;
+    for (id = 0; id < PL_IDS; id++)
+        if (pl.ent[id].type == PL_T_DEL && pl.free_from[(pl.ent[id].off - PL_AT) / PL_SSZ] == 0u) pl.ent[id].type = 0;
+}
+
+/* the last resort (no erased sector, nothing dead to reclaim: cuts inside successive compactions): read the live records
+ * of the OLDEST sector into RAM, erase it and write them back at its start, which makes it the head with room again.
+ * Oldest, so no older record can be shadowed by a tombstone that goes with it. */
+static int pl_evacuate(void)
+{
+    uint32_t v = PL_SECT, best = 0xFFFFFFFFu, s, id, used = 0, cnt = 0, len, k;
+    int rc0;
+    uint8_t ids[PL_IDS];
+    uint16_t lens[PL_IDS];
+    pl.evacs++;
+    for (s = 0; s < PL_SECT; s++)
+        if (s != pl.head && pl.maxseq[s] < best) { best = pl.maxseq[s]; v = s; }
+    if (v == PL_SECT) return PL_E_FLASH;
+    for (id = 0; id < PL_IDS; id++) {
+        if (pl.ent[id].type != PL_T_PATCH || pl.ent[id].off < PL_AT + v * PL_SSZ || pl.ent[id].off >= PL_AT + (v + 1u) * PL_SSZ) continue;
+        if (used + pl.ent[id].len > PL_SSZ || st_read(pl.ent[id].off, pl_ram + used, pl.ent[id].len)) return PL_E_FLASH;
+        if (!pl_valid_id(pl_ram + used, pl.ent[id].len, id, &len)) { pl.live_bytes -= pl.ent[id].len; pl.ent[id].type = 0; continue; }
+        ids[cnt] = (uint8_t)id; lens[cnt] = (uint16_t)len; used += len; cnt++;
+    }
+    if (pl.head != PL_NONE && pl.free_from[pl.head] + used <= PL_SSZ) {   /* the head has room: copy there first, then erase */
+        for (k = 0, used = 0; k < cnt; k++) {
+            int rc;
+            pl_ent_t old = pl.ent[ids[k]];
+            for (len = 0; len < lens[k]; len++) pl_rec[len] = pl_ram[used + len];
+            used += lens[k];
+            pl.ent[ids[k]].type = 0;
+            rc = pl_append(pl_rec, lens[k]);
+            if (rc) { pl.ent[ids[k]] = old; return rc; }
+            fm1_wdt_feed();
+        }
+        rc0 = pl_erase(v);
+        pl_drop_tombstones();
+        return rc0;
+    }
+    pl.evac_ram++;                               /* no room anywhere: through RAM; a power cut now loses the records not yet back */
+    if (pl_erase(v)) {                           /* it failed, but the part may have erased anyway: the index must say what is there */
+        for (k = 0; k < cnt; k++)
+            if (st_read(pl.ent[ids[k]].off, pl_chk, lens[k]) || !pl_valid_id(pl_chk, lens[k], ids[k], &len)) { pl.ent[ids[k]].type = 0; pl.live_bytes -= lens[k]; }
+        pl_drop_tombstones();
+        return PL_E_FLASH;
+    }
+    pl.head = (uint8_t)v;
+    for (k = 0, used = 0; k < cnt; k++) {
+        int rc;
+        pl_ent_t old = pl.ent[ids[k]];
+        for (len = 0; len < lens[k]; len++) pl_rec[len] = pl_ram[used + len];
+        used += lens[k];
+        pl.ent[ids[k]].type = 0;
+        rc = pl_append(pl_rec, lens[k]);
+        if (rc) {                                /* the sector is erased: the records not yet back are gone, and the index says so */
+            for (; k < cnt; k++) { pl.ent[ids[k]].type = 0; pl.live_bytes -= lens[k]; }
+            (void)old;
+            pl_drop_tombstones();
+            return rc;
+        }
+        fm1_wdt_feed();
+    }
+    pl_drop_tombstones();
+    return PL_OK;
 }
 
 static int pl_gc(void)
@@ -248,7 +329,7 @@ static int pl_gc(void)
     if (e < 0) {                                 /* no erased sector (a cut during an earlier compaction): free a dead one */
         pl_reclaim(pl.head == PL_NONE ? PL_SECT : pl.head);
         e = pl_first_erased();
-        if (e < 0) return PL_E_FLASH;
+        if (e < 0) return pl_evacuate();
     }
     d = (uint32_t)e;
     pl.head = (uint8_t)d;
@@ -257,7 +338,7 @@ static int pl_gc(void)
         n = pl.ent[id].len;
         fm1_wdt_feed();
         if (st_read(pl.ent[id].off, pl_rec, n)) return PL_E_FLASH;
-        if (!pl_valid(pl_rec, n, &len)) {        /* a live record that no longer checks out is lost either way */
+        if (!pl_valid_id(pl_rec, n, id, &len)) { /* a live record that no longer checks out is lost either way */
             pl.live_bytes -= n;
             pl.ent[id].type = 0;
             continue;
@@ -272,8 +353,7 @@ static int pl_gc(void)
         }
     }
     pl_reclaim(d);
-    for (id = 0; id < PL_IDS; id++)              /* a tombstone whose sector was erased is gone */
-        if (pl.ent[id].type == PL_T_DEL && pl.free_from[(pl.ent[id].off - PL_AT) / PL_SSZ] == 0u) pl.ent[id].type = 0;
+    pl_drop_tombstones();
     return PL_OK;
 }
 
@@ -281,7 +361,7 @@ static int pl_reserve(uint32_t len)
 {
     int e, rc;
     if (pl.head != PL_NONE && pl.free_from[pl.head] + len <= PL_SSZ) return PL_OK;
-    if (pl_erased() < 2u) {
+    if (pl_erased() < 3u) {
         rc = pl_gc();
         if (rc) return rc;
         if (pl.free_from[pl.head] + len <= PL_SSZ) return PL_OK;
@@ -329,6 +409,7 @@ static int pl_del(uint32_t id)
     if (id >= PL_IDS) return PL_E_ARGS;
     if (pl.ent[id].type != PL_T_PATCH) return PL_OK;  /* nothing to delete */
     if ((rc = pl_reserve(len)) != 0) return rc;
+    if (pl.ent[id].type != PL_T_PATCH) return PL_OK;  /* a compaction found the record unreadable and dropped it */
     for (i = 0; i < len; i++) pl_rec[i] = 0;
     pl_rec[0] = (uint8_t)len;
     pl_rec[2] = PL_T_DEL; pl_rec[3] = (uint8_t)id; pl_rec[8] = PL_VER;

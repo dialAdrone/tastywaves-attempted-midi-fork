@@ -33,7 +33,7 @@ typedef struct {
     uint8_t voices, voices_max, cpu, modified;  /* voices sounding / available, CPU % of the block, patch edited */
     uint8_t table, frame, nframes;              /* table index, nearest frame 0..nframes-1, frames in the table */
     uint16_t pos;                               /* 12-bit wavetable position 0..4095 */
-    char patch[16], tname[9];
+    char patch[16], tname[9], fmsg[12];         /* fmsg: what the confirmation says while `flash` is set (empty: SAVED) */
     const char *klabel[4];                      /* <= 7 characters */
     char kval[4][8];                            /* what to print: <= 3 characters big, 4..7 small */
     uint8_t kfrac[4];                           /* bar fill 0..255 */
@@ -59,7 +59,7 @@ typedef struct {
 typedef struct {
     uint8_t valid, page, variant, sub, touched, voices, cpu, modified, table, frame, kbip, ksmall;
     uint16_t pos;
-    char patch[16], tname[9], linea[48], kval[4][8];
+    char patch[16], tname[9], fmsg[12], linea[48], kval[4][8];
     const char *klabel[4];
     uint8_t kfrac[4], env[2][4], harm[16];
     uint8_t flash, nsets, set;
@@ -353,7 +353,8 @@ static void ui_patch(uint32_t y, const ui_view_t *v, uint16_t col)
 {
     cv_begin(240, 32, C_BLACK);
     if (v->flash) {
-        cv_text((240 - text_w(&FONT_L, "SAVED")) / 2, 0, &FONT_L, "SAVED", UI_ACC);
+        const char *m = v->fmsg[0] ? v->fmsg : "SAVED";
+        cv_text((240 - text_w(&FONT_L, m)) / 2, 0, &FONT_L, m, UI_ACC);
         cv_blit(0, y);
         return;
     }
@@ -595,7 +596,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         }
         if (full || s->pos != v->pos) ui_posbar(112, 12, v->pos);
     } else if (home3) {
-        if (full || !ui_eq(s->patch, v->patch) || s->flash != v->flash || s->modified != v->modified) ui_patch(58, v, C_WHITE);
+        if (full || !ui_eq(s->patch, v->patch) || s->flash != v->flash || !ui_eq(s->fmsg, v->fmsg) || s->modified != v->modified) ui_patch(58, v, C_WHITE);
         if (frame_new) {
             draw_text_box(0, 92, 240, &FONT_L, v->tname, UI_ACC, 1);
             ui_wave(156, 40, v->frames + (uint32_t)v->frame * v->stride, UI_ACC2);
@@ -651,7 +652,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         ui_linea(left_y, left, v);
         ui_copy(s->linea, left, 48);
     }
-    if (!home3 && (full || !ui_eq(s->patch, v->patch) || s->modified != v->modified || s->flash != v->flash))
+    if (!home3 && (full || !ui_eq(s->patch, v->patch) || s->modified != v->modified || s->flash != v->flash || !ui_eq(s->fmsg, v->fmsg)))
         ui_patch(UI_Y_PATCH, v, C_WHITE);
 
     s->page = v->page; s->variant = v->variant; s->sub = v->sub;
@@ -659,6 +660,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
     s->table = v->table; s->frame = v->frame; s->pos = v->pos;
     s->flash = v->flash; s->wave_key = v->wave_key;
     ui_copy(s->patch, v->patch, 16);
+    ui_copy(s->fmsg, v->fmsg, 12);
     ui_copy(s->tname, v->tname, 9);
     for (i = 0; i < 8u; i++) s->env[i >> 2][i & 3u] = v->env[i >> 2][i & 3u];
 }

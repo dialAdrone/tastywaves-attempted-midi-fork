@@ -10,7 +10,8 @@
  * ENV (amp / filter), LFO, SEL (voices), GLO (global). The four knobs are fixed per page and set (PG below). */
 #pragma once
 
-#define PN_PRESETS 8u
+#define PN_PRESETS 8u                           /* factory patches: entries 0..7 */
+#define PN_ENTRIES (PN_PRESETS + PL_IDS)         /* + the user patches of the log (patchlog.h): entries 8..39 = U01..U32 */
 #define PN_NONE 0xFFu
 #define SET_VER 1u
 
@@ -102,9 +103,12 @@ static const char *const TXT[TX_N][5] = {
 /* ---- panel state (main loop only) */
 static struct {
     uint8_t page, look, sub, touched;
-    uint8_t slot, browse, browse_pend;          /* patch loaded; patch shown in the name line; load pending */
+    uint8_t slot, browse, browse_pend;          /* entry loaded (0..7 factory, 8.. user); entry shown in the name line; load pending */
     uint8_t save_req, home_arm;                 /* HOME pressed and not yet decided: short press or hold */
-    uint32_t t_browse, t_flash, t_save, t_home;
+    uint8_t sv, act, act_id, tgt;               /* SAVE gesture (SV_*), the request for pn_save_poll (ACT_*, user id), the chosen target id */
+    uint32_t t_browse, t_flash, t_save, t_home, t_sv;
+    char fmsg[12];                              /* the confirmation shown while t_flash runs */
+    char uname[PL_IDS][PL_NAME + 1];            /* names of the user patches in the log */
     int16_t base[P_COUNT];                      /* the patch as loaded / saved: "modified" = differs */
     int16_t wave[256];                          /* EDIT: the frame as the engine reads it */
     uint32_t wave_key;
@@ -128,10 +132,35 @@ static int pn_modified(void)
     return 0;
 }
 
-/* load patch i (factory values, then the user's saved overlay when it replaces this slot) */
+enum { SV_IDLE, SV_ARMED, SV_PICK, SV_CONFIRM, SV_DEL };       /* the SAVE gesture */
+enum { ACT_NONE, ACT_SAVE, ACT_DEL };
+
+typedef char pn_params_fit[P_COUNT <= PL_MAXP ? 1 : -1];     /* a patch must fit a log record (more: raise PL_MAXP; and PL_IDS * record size must stay under one sector, else STORE FULL comes early: widen the window, docs/PATCH-STORAGE-DESIGN.md) */
+static pl_patch_t pn_tmp;                       /* one patch record in RAM (loading, saving) */
+static void pn_ucache(uint32_t id)              /* the name of user patch id from the log (empty when none) */
+{
+    pn.uname[id][0] = 0;
+    if (id < PL_IDS && pl_get(id, &pn_tmp) == PL_OK) { uint32_t i; for (i = 0; i <= PL_NAME; i++) pn.uname[id][i] = pn_tmp.name[i]; }
+}
+static uint32_t pn_entry_ok(uint32_t e) { return e < PN_PRESETS || (e < PN_ENTRIES && (pl_present() >> (e - PN_PRESETS) & 1u)); }
+
+/* load entry i: a factory patch (then the user's old settings overlay when it replaces this slot) or a user patch of the
+ * log; a user patch that is gone or damaged loads patch 1 */
 static void pn_load(uint32_t i, const app_set_t *st)
 {
     uint32_t p;
+    if (i >= PN_PRESETS) {
+        if (i < PN_ENTRIES && pl_get(i - PN_PRESETS, &pn_tmp) == PL_OK) {
+            patch_reset();                      /* parameters a record does not have (older firmware) keep their defaults */
+            for (p = 0; p < pn_tmp.n && p < P_COUNT; p++) patch_set(p, pn_tmp.v[p]);
+            pn_snapshot();
+            pn.slot = pn.browse = (uint8_t)i;
+            pn.browse_pend = 0;
+            pn.save_req = 0;
+            return;
+        }
+        i = 0;
+    }
     preset_apply(i);
     if (st->uslot == i)
         for (p = 0; p < P_COUNT; p++) patch_set(p, st->uval[p]);
@@ -144,7 +173,7 @@ static void pn_load(uint32_t i, const app_set_t *st)
 /* the settings read back from flash: a bad one is the defaults (version byte, ranges) */
 static void pn_validate(app_set_t *st)
 {
-    uint32_t i, bad = st->ver != SET_VER || st->oct < -2 || st->oct > 2 || st->look >= UI_H_N || st->slot >= PN_PRESETS;
+    uint32_t i, bad = st->ver != SET_VER || st->oct < -2 || st->oct > 2 || st->look >= UI_H_N || st->slot >= PN_ENTRIES;
     if (!bad && st->uslot != PN_NONE) {
         bad = st->uslot >= PN_PRESETS;
         for (i = 0; i < P_COUNT && !bad; i++)
@@ -162,14 +191,33 @@ static void pn_validate(app_set_t *st)
     }
 }
 
+/* the single patch the old SAVE kept in the settings sector (an overlay on a factory patch) becomes user patch U01, once,
+ * when the log is empty; the overlay is cleared only after the log took it */
+static void pn_migrate(app_set_t *st, uint32_t *dirty)
+{
+    uint32_t i;
+    if (!pl.ready || st->uslot >= PN_PRESETS || pl_present()) return;
+    for (i = 0; i < PL_NAME && PRESET[st->uslot].name[i]; i++) pn_tmp.name[i] = PRESET[st->uslot].name[i];
+    pn_tmp.name[i] = 0;
+    pn_tmp.n = P_COUNT;
+    for (i = 0; i < P_COUNT; i++) pn_tmp.v[i] = st->uval[i];
+    if (pl_put(0, &pn_tmp) != PL_OK) return;     /* the overlay stays and keeps working */
+    if (st->slot == st->uslot) st->slot = (uint8_t)PN_PRESETS;    /* the patch in use was that one: it is U01 now */
+    st->uslot = PN_NONE;
+    *dirty = 1;
+}
+
 static void pn_init(app_set_t *st)
 {
+    uint32_t i;
+    for (i = 0; i < PL_IDS; i++) pn_ucache(i);
     pn.page = UI_P_HOME;
     pn.look = st->look;
     pn.sub = 0;
     pn.touched = 4;
     pn_load(st->slot, st);
 }
+
 
 /* ---- one value as text (<= 7 characters) */
 static void pn_fmt(char *d, const kdef_t *k, int32_t v)
@@ -257,6 +305,54 @@ static void pn_page(uint32_t page)              /* a page button: the page, or i
     pn.touched = 4;
 }
 
+/* ---- SAVE: a short press saves to the patch's own user id (or the first free one, from a factory patch); holding SAVE and
+ * turning PRESETS picks another id (an occupied one asks again: press SAVE once more); holding SAVE for 2 s on a user patch
+ * asks to delete it (press SAVE once more). Any other button or a PRESETS turn cancels a question, as do 5 s. */
+static int pn_default_target(void)               /* user id 0..31, or -1 when the log is full of ids */
+{
+    uint32_t id, have = pl_present();
+    if (pn.slot >= PN_PRESETS) return (int)(pn.slot - PN_PRESETS);
+    for (id = 0; id < PL_IDS; id++)
+        if (!(have >> id & 1u)) return (int)id;
+    return -1;
+}
+static void pn_msg(const char *m, uint32_t id, uint32_t with_id)
+{
+    char *d = pn.fmsg;
+    uint32_t n = 0;
+    while (m[n] && n < (with_id ? 7u : 11u)) *d++ = m[n++];
+    if (with_id) { *d++ = ' '; *d++ = 'U'; *d++ = (char)('0' + (id + 1u) / 10u); *d++ = (char)('0' + (id + 1u) % 10u); }
+    *d = 0;
+    pn.t_flash = fm1_ms + 900u;
+}
+static void pn_save_buttons(uint32_t b, uint32_t held)
+{
+    uint32_t down = held >> BTN_SAVE & 1u;
+    if (b & ~(1u << BTN_SAVE) && (pn.sv == SV_CONFIRM || pn.sv == SV_DEL)) pn.sv = SV_IDLE;
+    if (b & 1u << BTN_SAVE) {
+        if (pn.sv == SV_CONFIRM) { pn.act = ACT_SAVE; pn.act_id = pn.tgt; pn.save_req = 1; pn.sv = SV_IDLE; return; }
+        if (pn.sv == SV_DEL) { pn.act = ACT_DEL; pn.act_id = (uint8_t)(pn.slot - PN_PRESETS); pn.save_req = 1; pn.sv = SV_IDLE; return; }
+        pn.sv = SV_ARMED;
+        pn.t_sv = fm1_ms;
+    }
+    if ((pn.sv == SV_CONFIRM || pn.sv == SV_DEL) && fm1_ms - pn.t_sv > 5000u) pn.sv = SV_IDLE;
+    if (pn.sv == SV_ARMED || pn.sv == SV_PICK) {
+        if (!down) {                                            /* released */
+            if (pn.sv == SV_ARMED) {
+                int t = pn_default_target();
+                if (!pn_modified()) { pn.act = ACT_NONE; pn.save_req = 1; }          /* nothing to save: the confirmation only */
+                else if (t < 0) { pn_msg("STORE FULL", 0, 0); }
+                else { pn.act = ACT_SAVE; pn.act_id = (uint8_t)t; pn.save_req = 1; }
+                pn.sv = SV_IDLE;
+            } else if (pl_present() >> pn.tgt & 1u) { pn.sv = SV_CONFIRM; pn.t_sv = fm1_ms; }
+            else { pn.act = ACT_SAVE; pn.act_id = pn.tgt; pn.save_req = 1; pn.sv = SV_IDLE; }
+        } else if (pn.sv == SV_ARMED && fm1_ms - pn.t_sv >= 2000u && pn.slot >= PN_PRESETS) {
+            pn.sv = SV_DEL;                                     /* still held: delete this user patch? */
+            pn.t_sv = fm1_ms;
+        }
+    }
+}
+
 /* buttons pressed (bits) and held; returns the SAVE request through pn.save_req. EDIT held + HOME resets the CPU max
  * and leaves the page alone. */
 static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty)
@@ -296,7 +392,7 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
             pn.touched = 4;
         }
     }
-    if (b & 1u << BTN_SAVE) pn.save_req = 1;
+    pn_save_buttons(b, held);
 }
 
 /* ALGORITHM steps through the 12 factory tables, then the user tables that exist (empty slots and damaged ones are skipped) */
@@ -335,20 +431,42 @@ static void pn_encoders(void)
         patch_add(k->id, (k->fmt == F_TXT ? d : pn_accel(d)) * k->step);
         pn.touched = (uint8_t)i;
     }
-    if ((d = fm1_enc_take(ENC_PRESETS)) != 0) {      /* browse: the name now, the sound after 400 ms of quiet */
-        int32_t n = (int32_t)pn.browse + (d > 4 ? 4 : d < -4 ? -4 : d);
-        if (n < 0) n = 0;
-        if (n >= (int32_t)PN_PRESETS) n = (int32_t)PN_PRESETS - 1;
-        if (n != (int32_t)pn.browse) { pn.browse = (uint8_t)n; pn.browse_pend = 1; }
-        pn.t_browse = fm1_ms;
+    if ((d = fm1_enc_take(ENC_PRESETS)) != 0) {
+        if ((pn.sv == SV_ARMED || pn.sv == SV_PICK || pn.sv == SV_DEL) && (fm1_in.buttons >> BTN_SAVE & 1u)) {   /* SAVE held: choose the target id */
+            int32_t t = pn.sv == SV_PICK ? (int32_t)pn.tgt : pn_default_target() < 0 ? 0 : pn_default_target();
+            t += d > 0 ? 1 : -1;
+            pn.tgt = (uint8_t)(t < 0 ? 0 : t >= (int32_t)PL_IDS ? (int32_t)PL_IDS - 1 : t);
+            pn.sv = SV_PICK;
+        } else {                                     /* browse: the name now, the sound after 400 ms of quiet */
+            int32_t n = (int32_t)pn.browse, step = d > 0 ? 1 : -1, k = d > 4 ? 4 : d < -4 ? 4 : d < 0 ? -d : d;
+            if (pn.sv == SV_CONFIRM || pn.sv == SV_DEL) pn.sv = SV_IDLE;
+            while (k--) {                            /* factory patches, then the user patches that exist; the ends stop */
+                int32_t u = n;
+                do u += step; while (u >= 0 && u < (int32_t)PN_ENTRIES && !pn_entry_ok((uint32_t)u));
+                if (u < 0 || u >= (int32_t)PN_ENTRIES) break;
+                n = u;
+            }
+            if (n != (int32_t)pn.browse) { pn.browse = (uint8_t)n; pn.browse_pend = 1; }
+            pn.t_browse = fm1_ms;
+        }
     }
 }
 
 /* the patch the name line shows */
-static void pn_name(char *d, uint32_t i)
+static void pn_uid(char *d, uint32_t id)         /* "U05" */
 {
-    *d++ = '0'; *d++ = '0'; *d++ = (char)('1' + i); *d++ = ' ';
-    ui_copy(d, PRESET[i].name, 12);
+    *d++ = 'U'; *d++ = (char)('0' + (id + 1u) / 10u); *d++ = (char)('0' + (id + 1u) % 10u); *d = 0;
+}
+static void pn_name(char *d, uint32_t e)
+{
+    if (e >= PN_PRESETS) {                      /* "U05 NAME" */
+        pn_uid(d, e - PN_PRESETS);
+        d[3] = ' ';
+        ui_copy(d + 4, pn.uname[(e - PN_PRESETS) % PL_IDS], 12);
+        return;
+    }
+    *d++ = '0'; *d++ = '0'; *d++ = (char)('1' + e); *d++ = ' ';
+    ui_copy(d, PRESET[e].name, 12);
 }
 
 /* ---- the view (ui_screens.h reads it): everything the screen shows, from the patch and the page */
@@ -380,7 +498,11 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
     v->frames = fr;
     v->wave2 = fr + (uint32_t)v->frame * stride + WTG_LEVEL_OFF[2];
     ui_copy(v->tname, pn_tname(t), 9);
-    pn_name(v->patch, pn.browse);
+    if (pn.sv == SV_PICK) { char *d = ui_cat(v->patch, "SAVE TO "); pn_uid(d, pn.tgt); if (pl_present() >> pn.tgt & 1u) ui_cat(d + 3, "*"); }
+    else if (pn.sv == SV_CONFIRM) { char *d = ui_cat(v->patch, "REPLACE "); d = ui_cat(d, "") ; pn_uid(d, pn.tgt); ui_cat(d + 3, "?"); }
+    else if (pn.sv == SV_DEL) { char *d = ui_cat(v->patch, "DELETE "); pn_uid(d, pn.slot - PN_PRESETS); ui_cat(d + 3, "?"); }
+    else pn_name(v->patch, pn.browse);
+    ui_copy(v->fmsg, pn.fmsg, 12);
 
     for (i = 0; i < 4u; i++) {
         const kdef_t *k = &PG[pn.page][pn.sub][i];
@@ -446,31 +568,50 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
     }
 }
 
-/* ---- SAVE (v1 stub; real slots are T17): the working patch is kept in the settings sector as an overlay on the
- * factory patch it was edited from (app_set_t.uval / uslot: 94 B + 8 B of the 256 B). One user patch at a time: a
- * SAVE on another slot replaces it. The write waits for quiet() (an erase stops the sound) and at most one a second;
- * nothing to save (patch equals what was loaded / saved) only shows the confirmation. Returns 1 when SAVED is shown; a failed
- * settings_save shows nothing, keeps the patch modified and drops the request (no retry loop). */
+/* ---- SAVE and DELETE, as pn_save_buttons decided (docs/PATCH-STORAGE-DESIGN.md section 7): the record goes into the
+ * patch log (patchlog.h). The write waits for quiet() (compaction erases stop the sound) and at most one a second;
+ * ACT_NONE (nothing changed since loaded / saved) only shows the confirmation. Returns 1 when a message is shown. A failed
+ * write shows SAVE FAILED, keeps the patch modified and drops the request (no retry loop). */
 static int pn_save_poll(app_set_t *st, uint32_t *dirty)
 {
-    uint32_t i;
+    uint32_t i, id;
     if (!pn.save_req) return 0;
-    if (pn_modified()) {
+    if (pn.act != ACT_NONE) {
         if (!quiet() || fm1_ms - pn.t_save < 1000u) return 0;      /* try again in a later pass; the LED keeps blinking */
-        app_set_t t = *st;                      /* the overlay goes into a copy: a failed write changes nothing */
-        for (i = 0; i < P_COUNT; i++) t.uval[i] = (int16_t)patch.p[i];
-        t.uslot = pn.slot;
-        t.slot = pn.slot;
         pn.t_save = fm1_ms;
-        if (settings_save(&t, sizeof t)) {      /* failed (0 = saved): no SAVED, the patch stays modified; press SAVE again */
+        id = pn.act_id % PL_IDS;
+        if (pn.act == ACT_SAVE) {
+            int rc;
+            const char *src = pn.slot >= PN_PRESETS ? pn.uname[(pn.slot - PN_PRESETS) % PL_IDS] : PRESET[pn.slot % PN_PRESETS].name;
+            for (i = 0; i < PL_NAME && src[i]; i++) pn_tmp.name[i] = src[i];       /* named after the patch it was made from */
+            pn_tmp.name[i] = 0;
+            pn_tmp.n = P_COUNT;
+            for (i = 0; i < P_COUNT; i++) pn_tmp.v[i] = (int16_t)patch.p[i];
+            rc = pl_put(id, &pn_tmp);
             pn.save_req = 0;
-            return 0;
+            if (rc != PL_OK) { pn_msg(rc == PL_E_FULL ? "STORE FULL" : "SAVE FAILED", 0, 0); return 1; }
+            pn_ucache(id);
+            pn_snapshot();
+            pn.slot = pn.browse = (uint8_t)(PN_PRESETS + id);
+            pn.browse_pend = 0;
+            st->slot = pn.slot;
+            *dirty = 1;
+            pn_msg("SAVED", id, 1);
+            return 1;
+        } else {
+            int32_t e = (int32_t)(PN_PRESETS + id);
+            pn.save_req = 0;
+            if (pl_del(id) != PL_OK) { pn_msg("DEL FAILED", 0, 0); return 1; }
+            pn_ucache(id);
+            do e--; while (e > 0 && !pn_entry_ok((uint32_t)e));      /* the patch before it in the list */
+            pn_load((uint32_t)e, st);
+            st->slot = pn.slot;
+            *dirty = 1;
+            pn_msg("DELETED", id, 1);
+            return 1;
         }
-        *st = t;
-        *dirty = 0;
-        pn_snapshot();
     }
     pn.save_req = 0;
-    pn.t_flash = fm1_ms + 900u;
+    pn_msg("SAVED", 0, 0);
     return 1;
 }
