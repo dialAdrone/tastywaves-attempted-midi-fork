@@ -11,6 +11,7 @@ build/host/vavewave build/host/arp2 tests/scripts/arp2.txt > build/host/arp2.log
 build/host/vavewave build/host/arp3 tests/scripts/arp3.txt > build/host/arp3.log
 build/host/vavewave build/host/arp4 tests/scripts/arp4.txt > build/host/arp4.log
 build/host/vavewave build/host/arp5 tests/scripts/arp5.txt > build/host/arp5.log
+build/host/vavewave build/host/arp6 tests/scripts/arp6.txt > build/host/arp6.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re
@@ -47,6 +48,11 @@ check(any(1000 < t < 1500 for t in d) and any(2000 < t < 2500 for t in d) and an
 e = load('build/host/arp5.log')
 check(not any(1300 < t < 2000 and k == 'on' for t, k, n in e if n), 'ARP off over latched notes: no arp steps after the handover')
 check(sum(1 for t, k, n in e if 2050 < t < 3000 and k == 'on') >= 5, 'ARP on again: the latched notes arpeggiate again')
+h = load('build/host/arp6.log')
+check(sum(1 for t, k, n in h if 350 < t < 1200 and k == 'on') >= 5, 'held keys + ARP: arpeggio')
+check(not any(1300 < t < 2000 and k == 'on' for t, k, n in h), 'ARP off: the held keys are plain notes')
+check(sum(1 for t, k, n in h if 2050 < t < 2900 and k == 'on') >= 4, 'ARP on again with the keys still down: arpeggio again')
+check(not any(t > 3000 and k == 'on' for t, k, n in h), 'keys up: silence')
 print('arp panel: %d failures' % fails)
 raise SystemExit(1 if fails else 0)
 PY

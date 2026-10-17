@@ -1,0 +1,7 @@
+# A key held down: ARP on (arpeggio), off (plain note), on (arpeggio again). See tests/run_arp_panel.sh.
+100 keys 0x91
+300 btn 10
+1200 btn 10
+2000 btn 10
+2900 keys 0
+3300 end

@@ -223,13 +223,16 @@ static void app_main(void)
             if (look != set.look || dirty != d0) t_change = fm1_ms;
         }
         {   uint32_t am = (uint32_t)patch_get(P_ARP);
-            if (am && !arp_prev && latch) t_rejoin = fm1_ms + 15u;      /* the arp came on over latched notes: after a block or two they become its notes */
+            if (am && !arp_prev) t_rejoin = fm1_ms + 15u;      /* the arp came on over sounding notes (held keys, latched): after a block or two they become its notes */
             arp_prev = am;
             if (t_rejoin && fm1_ms >= t_rejoin) {
                 t_rejoin = 0;
-                if (latch && am)
+                if (am) {
                     for (k = 0; k < 128u; k++)
-                        if (lat[k >> 3] >> (k & 7u) & 1u) { stop((uint8_t)k); play((uint8_t)k, 100); }   /* (the plain voice ends, the arp takes the note) */
+                        if (latch && lat[k >> 3] >> (k & 7u) & 1u) { stop((uint8_t)k); play((uint8_t)k, 100); }   /* (the plain voice ends, the arp takes the note) */
+                    for (k = 0; k < 27u; k++)
+                        if (started >> k & 1u) { stop(held[k]); play(held[k], 100); }       /* keys still down */
+                }
             }
         }
 
