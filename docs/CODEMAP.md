@@ -22,6 +22,9 @@ headers). Static functions everywhere, no linking between .c files. Target: JieL
 | `firmware/loader/*` | | the RAM update loader packed into the .fwsc | no |
 | `tools/build.py` | 311 | compile, link, post-build checks, package. `PRODUCT` = identity | release only |
 | `tools/fm1_install.py` | 528 | USB-MIDI SysEx installer (`--info`, asks before writing) | no |
+| `firmware/src/wtlink.h`, `usertab.h` | | user wavetables: the VW link (SysEx, flash writes to the 8 slots only: `docs/UPLOAD-DESIGN.md`), slot directory and the engine's table pointers. **Flash-write path: never break** | with reviewer |
+| `tools/fm1_wavetable.py` | | WAV / Surge .wt -> table file; `info get put erase selftest xipcheck` over USB-MIDI | no |
+| `tools/web/` (`index.html`, `app.js`, `convert.js`, `vwlink.js`) | | the same in the browser (Web MIDI, Chrome / Edge): drop files, preview, send, save, erase. `convert.js` is byte-identical to the Python converter (`tests/run_webtool.sh`, `tests/web_smoke.sh`) | no |
 | `firmware/src/ui_screens.h` | the screens (T18, `docs/UI-DESIGN.md`): drawn from a plain `ui_view_t`, redraw only what differs from `ui_shadow_t` | yes |
 | `tests/ui_demo.c`, `tests/run_ui.sh` | the phase-1 demo (fake values) -> `build/host/ui-*.png` | |
 | `tests/run_panel.sh`, `tests/scripts/panel_ui.txt` | the real app on the fake FM-1 -> `build/host/panel-*.png` (HOME looks, EDIT with BEND, ENV, FX, LFO, SEL, GLO, SAVE) | |

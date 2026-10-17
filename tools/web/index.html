@@ -1,0 +1,92 @@
+<!doctype html>
+<!-- SPDX-License-Identifier: GPL-3.0-only -->
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VAVEWave Tables</title>
+<style>
+  :root { --bg:#f6f5f2; --fg:#1d1d1b; --mute:#6b6a66; --card:#fff; --line:#d9d6cf; --accent:#0b6e4f; --accent-fg:#fff; --warn:#a4400d; --bad:#b3261e; }
+  @media (prefers-color-scheme: dark) { :root { --bg:#161614; --fg:#ecebe6; --mute:#9a988f; --card:#1f1f1c; --line:#38372f; --accent:#4cc38a; --accent-fg:#06281b; --warn:#f0a15f; --bad:#ff8a80; } }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--fg); font:15px/1.45 system-ui, sans-serif; }
+  main { max-width: 880px; margin: 0 auto; padding: 20px 16px 60px; }
+  h1 { font-size: 22px; margin: 0 0 4px; } h2 { font-size: 16px; margin: 28px 0 10px; }
+  p.sub { margin: 0 0 16px; color: var(--mute); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
+  .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
+  button, select, input { font:inherit; color:inherit; }
+  button { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:7px 13px; cursor:pointer; }
+  button.primary { background:var(--accent); color:var(--accent-fg); border-color:var(--accent); font-weight:600; }
+  button:disabled { opacity:.45; cursor:default; }
+  select, input[type=text] { background:var(--card); border:1px solid var(--line); border-radius:8px; padding:7px 9px; }
+  label { color:var(--mute); font-size:13px; display:flex; flex-direction:column; gap:3px; }
+  #status { margin:10px 0 0; min-height:1.4em; } .bad { color:var(--bad); } .warn { color:var(--warn); } .mute { color:var(--mute); }
+  #slots { display:grid; grid-template-columns:repeat(auto-fill, minmax(190px, 1fr)); gap:10px; }
+  .slot { display:flex; flex-direction:column; gap:6px; } .slot h3 { margin:0; font-size:13px; color:var(--mute); font-weight:600; }
+  .slot .name { font-size:18px; font-weight:700; letter-spacing:.04em; font-family: ui-monospace, Menlo, monospace; } .slot .name.empty { color:var(--mute); font-weight:400; }
+  .slot .crc { font-size:12px; color:var(--mute); font-family: ui-monospace, Menlo, monospace; }
+  .slot .row { gap:6px; } .slot button { padding:4px 9px; font-size:13px; }
+  .slot.pick { outline:2px solid var(--accent); }
+  #drop { border:2px dashed var(--line); border-radius:10px; padding:22px; text-align:center; color:var(--mute); }
+  #drop.over { border-color:var(--accent); color:var(--fg); }
+  canvas { width:100%; height:190px; background:var(--bg); border:1px solid var(--line); border-radius:8px; display:block; }
+  progress { width:100%; height:10px; accent-color:var(--accent); }
+  pre { margin:8px 0 0; white-space:pre-wrap; font-size:12px; color:var(--mute); }
+  details { margin-top:16px; color:var(--mute); } details p { margin:6px 0; }
+  .hide { display:none; }
+</style>
+</head>
+<body>
+<main>
+  <h1>VAVEWave Tables</h1>
+  <p class="sub">Send wavetables (Serum, WaveEdit, Ableton, Surge) to the 8 user slots of your FM-1. The conversion runs in this page; nothing is uploaded to a server.</p>
+
+  <div class="card">
+    <div class="row">
+      <button id="btnAccess" class="primary">Connect to MIDI</button>
+      <label class="hide" id="portLab">MIDI port<select id="port"></select></label>
+      <button id="btnConnect" class="hide">Connect FM-1</button>
+    </div>
+    <div id="status" class="mute">Use Chrome or Edge (Safari has no Web MIDI). Plug the FM-1 in by USB with VAVEWave running.</div>
+  </div>
+
+  <div id="main" class="hide">
+    <h2>Slots on the FM-1</h2>
+    <div id="slots"></div>
+    <div class="row" style="margin-top:10px"><button id="btnRefresh">Refresh</button><span id="fw" class="mute"></span></div>
+
+    <h2>Add a table</h2>
+    <div class="card">
+      <div id="drop">Drop WAV or Surge .wt files here (several files are joined in name order), or a .vwt table file<br>
+        <button id="btnFiles" style="margin-top:8px">Choose files…</button><input id="files" type="file" multiple accept=".wav,.wt,.vwt" class="hide"></div>
+      <div id="conv" class="hide">
+        <div class="row" style="margin:14px 0 10px">
+          <label>Name (8 characters)<input id="name" type="text" maxlength="8" size="10" style="text-transform:uppercase"></label>
+          <label>Frame length<select id="frame"><option value="0">automatic</option><option>2048</option><option>1024</option><option>512</option><option>256</option><option>128</option></select></label>
+          <label>Format<select id="format"><option>auto</option><option>serum</option><option>waveedit</option><option>ableton</option><option>surge</option></select></label>
+          <label>Which frames<select id="pick"><option value="even">all, spread evenly</option><option value="first">first 32</option><option value="last">last 32</option><option value="odd">every second</option></select></label>
+        </div>
+        <canvas id="wave" width="1600" height="380"></canvas>
+        <pre id="report"></pre>
+        <div class="row" style="margin-top:12px">
+          <label>Into slot<select id="target"></select></label>
+          <button id="btnSend" class="primary" style="align-self:flex-end">Send to the FM-1</button>
+          <button id="btnSave" style="align-self:flex-end">Save as .vwt file</button>
+        </div>
+      </div>
+    </div>
+    <progress id="bar" class="hide" max="1" value="0" style="margin-top:12px"></progress>
+  </div>
+
+  <details>
+    <summary>Notes</summary>
+    <p>Sending takes about 5 seconds. Keys up and no sound; do not unplug the FM-1 meanwhile. If the cable is pulled or power is lost the slot simply stays empty; nothing else is touched.</p>
+    <p>Sending into a slot that holds a table replaces it. Use Save on that slot first to keep a copy as a .vwt file; the same file can be sent back later.</p>
+    <p>Only harmonics 1 to 64 of each cycle are kept (the engine's limit). A file with more than 32 frames is spread evenly over 32; with fewer, frames are blended.</p>
+    <p>The tables are your own files; this page and the firmware ship none.</p>
+  </details>
+</main>
+<script type="module" src="app.js"></script>
+</body>
+</html>
