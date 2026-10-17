@@ -10,6 +10,7 @@ build/host/vavewave build/host/arp tests/scripts/arp.txt > build/host/arp.log
 build/host/vavewave build/host/arp2 tests/scripts/arp2.txt > build/host/arp2.log
 build/host/vavewave build/host/arp3 tests/scripts/arp3.txt > build/host/arp3.log
 build/host/vavewave build/host/arp4 tests/scripts/arp4.txt > build/host/arp4.log
+build/host/vavewave build/host/arp5 tests/scripts/arp5.txt > build/host/arp5.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re
@@ -43,6 +44,9 @@ g = [c[i + 1] - c[i] for i in range(len(c) - 1)]
 check(len(c) >= 8 and all(140 <= x <= 160 for x in g[2:]), 'MIDI clock at 100 BPM: steps 150 ms apart (%s)' % g[:8])
 d = [t for t, k, n in load('build/host/arp4.log') if k == 'on']
 check(any(1000 < t < 1500 for t in d) and any(2000 < t < 2500 for t in d) and any(3000 < t < 3500 for t in d), 'arp + latch: the arp goes on playing through two patch changes')
+e = load('build/host/arp5.log')
+check(not any(1300 < t < 2000 and k == 'on' for t, k, n in e if n), 'ARP off over latched notes: no arp steps after the handover')
+check(sum(1 for t, k, n in e if 2050 < t < 3000 and k == 'on') >= 5, 'ARP on again: the latched notes arpeggiate again')
 print('arp panel: %d failures' % fails)
 raise SystemExit(1 if fails else 0)
 PY

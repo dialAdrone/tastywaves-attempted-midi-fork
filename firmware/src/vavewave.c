@@ -148,6 +148,7 @@ static void app_main(void)
     app_set_t set;
     uint32_t prev = 0, started = 0, k, t_change = 0, dirty = 0, t_cpu = 0, cpu = 0, cpu_mx = 0, gen_seen = 0;
     uint8_t held[27] = {0};                     /* the note each key plays */
+    uint32_t arp_prev = 0, t_rejoin = 0;       /* the arp mode last pass; when latched notes join a newly started arp (0 = not pending) */
     uint8_t latch = 0, lat[16] = {0};           /* LATCH (the PLAY button): notes kept sounding after the key is up, 1 bit per note */
 
     boot_btn = fm1_in.buttons;                  /* before anything else */
@@ -220,6 +221,16 @@ static void app_main(void)
             uint32_t d0 = dirty;
             pn_buttons(b, hb, &set, &dirty);
             if (look != set.look || dirty != d0) t_change = fm1_ms;
+        }
+        {   uint32_t am = (uint32_t)patch_get(P_ARP);
+            if (am && !arp_prev && latch) t_rejoin = fm1_ms + 15u;      /* the arp came on over latched notes: after a block or two they become its notes */
+            arp_prev = am;
+            if (t_rejoin && fm1_ms >= t_rejoin) {
+                t_rejoin = 0;
+                if (latch && am)
+                    for (k = 0; k < 128u; k++)
+                        if (lat[k >> 3] >> (k & 7u) & 1u) { stop((uint8_t)k); play((uint8_t)k, 100); }   /* (the plain voice ends, the arp takes the note) */
+            }
         }
 
         keys = fm1_in.notes;                    /* bit k: key k (0 = F3 .. 26 = G5) */
