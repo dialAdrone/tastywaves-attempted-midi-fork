@@ -65,7 +65,7 @@ typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 3, 2};   /* ... GLO, ARP, SEQ, HELP */   /* HELP: two text pages (PG[HELP] stays empty) */
+static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 2, 2};   /* ... GLO, ARP, SEQ, HELP */   /* HELP: two text pages (PG[HELP] stays empty) */
 static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
@@ -99,8 +99,7 @@ static const kdef_t PG[UI_P_N][4][4] = {
                   {K("SWING", P_ARP_SWING, F_INT, 1, 0), K("TEMPO", P_TEMPO, F_INT, 1, 0), KN, KN}},
     [UI_P_SEQ] = {{K("RATE", P_ARP_RATE, F_TXT, 1, TX_ARATE), K("GATE", P_ARP_GATE, F_PCT, 1, 0), K("SWING", P_ARP_SWING, F_INT, 1, 0),
                    K("TEMPO", P_TEMPO, F_INT, 1, 0)},
-                  {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), KN, KN},       /* set 2: the modulation lane (STEP and VALUE are drawn and edited by hand: pn_encoders) */
-                  {K("GLIDE", P_MOD_GLIDE, F_TXT, 1, TX_ONOFF), KN, KN, KN}},
+                  {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), K("GLIDE", P_MOD_GLIDE, F_TXT, 1, TX_ONOFF), KN}},       /* set 2: the modulation lane (SELECT picks the step, VALUE is drawn and edited by hand: pn_encoders) */
 };
 
 static const char *const TXT[TX_N][8] = {
@@ -468,10 +467,9 @@ static void pn_encoders(void)
     uint32_t i, o = pn_osc();
     int32_t d;
     if ((d = fm1_enc_take(ENC_ALGORITHM)) != 0) pn_table_step(o ? P_TABLE2 : P_TABLE1, d);
-    if ((d = fm1_enc_take(ENC_SELECT)) != 0) patch_add(o ? P_POS2 : P_POS1, pn_accel(d) * 32);
-    if (pn.page == UI_P_SEQ && pn.sub == 1u) {  /* the modulation lane: STEP picks, VALUE sets (RAM only until patterns are saved) */
+    if (pn.page == UI_P_SEQ && pn.sub == 1u) {  /* the modulation lane: SELECT picks the step, VALUE sets it (RAM only until patterns are saved) */
         int32_t n = sq.len ? (int32_t)sq.len : 32, m = (int32_t)pn.mstep, x;
-        if ((d = fm1_enc_take(ENC_KNOB3)) != 0) { m += d > 0 ? 1 : -1; pn.touched = 2; }
+        if ((d = fm1_enc_take(ENC_SELECT)) != 0) m += d > 0 ? 1 : -1;
         m = m < 0 ? 0 : m >= n ? n - 1 : m;
         pn.mstep = (uint8_t)m;
         if ((d = fm1_enc_take(ENC_KNOB4)) != 0) {
@@ -480,6 +478,7 @@ static void pn_encoders(void)
             pn.touched = 3;
         }
     }
+    if ((d = fm1_enc_take(ENC_SELECT)) != 0) patch_add(o ? P_POS2 : P_POS1, pn_accel(d) * 32);
     for (i = 0; i < 4u; i++) {
         const kdef_t *k = &PG[pn.page][pn.sub][i];
         d = fm1_enc_take(ENC_KNOB1 + i);
@@ -588,11 +587,11 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
     }
     if (pn.page == UI_P_SEQ && pn.sub == 1u) {          /* STEP and VALUE of the lane */
         uint32_t m = pn.mstep < 32u ? pn.mstep : 31u;
-        v->klabel[2] = "STEP"; v->klabel[3] = "VALUE";
-        ui_num(v->kval[2], (int32_t)m + 1); ui_num(v->kval[3], (int32_t)ml[m] + 64);
-        v->kfrac[2] = (uint8_t)(m * 255u / 31u); v->kfrac[3] = (uint8_t)(((int32_t)ml[m] + 64) * 2);
+        v->klabel[3] = "VALUE";
+        ui_num(v->kval[3], (int32_t)ml[m] + 64);
+        v->kfrac[3] = (uint8_t)(((int32_t)ml[m] + 64) * 2);
     }
-    v->seq_set = (uint8_t)(pn.page == UI_P_SEQ ? pn.sub : 0u);       /* 1: lane being edited, 2: lane glide (bars, no edit frame) */
+    v->seq_set = (uint8_t)(pn.page == UI_P_SEQ ? pn.sub : 0u);       /* 1: the lane is shown and edited */
     v->seq_cur = pn.mstep;
     for (i = 0; i < 32u; i++) v->seq_mod[i] = (uint8_t)((int32_t)ml[i] + 64);
     v->kbip = (uint8_t)kbip;
@@ -637,9 +636,8 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             char *d = v->info;
             ui_copy(v->ptxt, sq.rec ? "RECORD" : patch_get(P_SEQ) ? (sq_run || !sq.len ? "PLAY" : "STOP") : "OFF", 8);
             if (pn.sub == 1u) ui_copy(v->ptxt, TXT[TX_MOD][patch_get(P_MOD)], 8);           /* the lane: its target, big */
-            else if (pn.sub == 2u) ui_copy(v->ptxt, "GLIDE", 8);
-            if (pn.sub == 1u) { d = ui_cat(d, "MOD LANE  TARGET "); d = ui_cat(d, TXT[TX_MOD][patch_get(P_MOD)]); }
-            else if (pn.sub == 2u) d = ui_cat(d, patch_get(P_MOD_GLIDE) ? "LANE GLIDE ON: STEPS SLIDE" : "LANE GLIDE OFF: STEPS JUMP");
+
+            if (pn.sub == 1u) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)(pn.mstep < 32u ? pn.mstep : 31u) + 1); d = ui_cat(d, "  SELECT KNOB MOVES"); }
             else if (sq.rec) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, " OF 32  PLAY=REST SEQ=TIE"); }
             else if (!sq.len) ui_cat(d, "NO PATTERN  REC TO ENTER STEPS");
             else { d = ui_cat(d, "LEN "); d = ui_num(d, sq.len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); } }

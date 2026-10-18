@@ -146,3 +146,4 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 
 - 2026-10-18 S3 review fixes: the SEQ grid drew only 64 of its 84 rows (canvas limit 240x64 on the device): steps 25-32 were invisible, now two canvases; PLAY turns latch off first when latch is on, else it is the transport; lane step reset on start; MIDI Start restarts a stopped sequencer; no negative shift in the lane scaling.
 - 2026-10-18 SEQ page sets 2 and 3 read as such: the big text is the lane target / GLIDE, the info line says what it is, the bars show in set 3.
+- 2026-10-18 SEQ page: the lane's GLIDE moved into set 2 (TARGET / DEPTH / GLIDE / VALUE), the SELECT knob picks the step; the third set is gone.

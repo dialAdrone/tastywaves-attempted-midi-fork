@@ -219,8 +219,8 @@ Flash `build/vavewave.fwsc`. The lane is one value a step (shown 0..127, 64 = ne
 
 | # | Do | Expect |
 | --- | --- | --- |
-| 14.1 | On the SEQ page press SEQ (hold) or the SEQ page button again | second set: TARGET, DEPTH, STEP, VALUE; the grid shows a bar per step (middle line = 64) |
-| 14.2 | TARGET = POS, DEPTH 100, turn STEP and VALUE; SEQ on | the table position moves with each step's value; the edited step has a yellow frame |
+| 14.1 | On the SEQ page press SEQ (hold) or the SEQ page button again | second set: TARGET, DEPTH, GLIDE, VALUE (the SELECT knob picks the step); the grid shows a bar per step (middle line = 64) |
+| 14.2 | TARGET = POS, DEPTH 100, turn SELECT (step) and VALUE; SEQ on | the table position moves with each step's value; the edited step has a yellow frame |
 | 14.3 | Value 64 on every step | no change in the sound (neutral) |
 | 14.4 | TARGET = CUTOFF, then BEND, then DRIVE | each step moves that parameter; the knob on its own page is not changed |
 | 14.5 | DEPTH negative | the movement is inverted |
@@ -228,4 +228,4 @@ Flash `build/vavewave.fwsc`. The lane is one value a step (shown 0..127, 64 = ne
 | 14.7 | PLAY (stop) | the modulation stops with the sequence (the parameter returns to the knob value) |
 | 14.8 | Hold REC | pattern and lane cleared (all values 64) |
 | 14.9 | CPU | note the percentage |
-| 14.10 | Press the SEQ page button again for the third set: GLIDE ON, different values on neighbouring steps | the target slides from each step's value to the next over the step instead of jumping |
+| 14.10 | GLIDE ON, different values on neighbouring steps | the target slides from each step's value to the next over the step instead of jumping |
