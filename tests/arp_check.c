@@ -160,7 +160,7 @@ int main(void)
         for (k = 0; k < nev; k++) { if (ev[k].on && ev[k].note == 60) n60++; if (!ev[k].on && ev[k].note == 60 && off60 < 0 && ev[k].t > 0) off60 = (int)ev[k].t; if (ev[k].on && ev[k].note == 64 && on64 < 0) on64 = (int)ev[k].t; }
         check(n60 == 1 && off60 > 7800 && off60 < 8800 && on64 > 0, "SEQ: a tie keeps the note going through two steps (one note-on, off after the second step)"); }
     {   reset(); arp_cfg.seq = 1; arp_cfg.mode = ARP_UP; sq.len = 0; key_on(60); key_on(64); run(60);
-        check(ev[0].on && nev > 2 && arp_tap.step > 1u, "SEQ on with no pattern: the arp (or the keys) work as usual"); }
+        check(ons(got, 64) >= 3 && arp_tap.step > 1u, "SEQ on with no pattern: the arp (or the keys) work as usual"); }
     {   int p[] = {60, 64}; int before;
         reset(); set_pat(p, 2); arp_cfg.seq = 1; run(40); sq.rec = 1; run(2); before = nev; run(100);
         hung = 0; for (i = 0; i < 128; i++) hung += snd[i];
