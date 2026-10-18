@@ -189,7 +189,8 @@ static void pn_load(uint32_t i, const app_set_t *st)
 {
     int32_t arp = patch_get(P_ARP), seq = patch_get(P_SEQ);
     pn_load_raw(i, st);
-    if (arp && !patch_get(P_ARP)) { patch_set(P_ARP, arp); pn.base[P_ARP] = (int16_t)arp; }
+    if (seq && patch_get(P_ARP) != arp) { patch_set(P_ARP, arp); pn.base[P_ARP] = (int16_t)arp; }       /* the sequencer plays: the arp stays as it was (a patch's own arp does not come on under it) */
+    else if (arp && !patch_get(P_ARP)) { patch_set(P_ARP, arp); pn.base[P_ARP] = (int16_t)arp; }
     if (seq && !patch_get(P_SEQ)) { patch_set(P_SEQ, seq); pn.base[P_SEQ] = (int16_t)seq; }
 }
 
