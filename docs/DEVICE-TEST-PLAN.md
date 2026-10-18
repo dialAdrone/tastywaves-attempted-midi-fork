@@ -228,3 +228,4 @@ Flash `build/vavewave.fwsc`. The lane is one value a step (shown 0..127, 64 = ne
 | 14.7 | PLAY (stop) | the modulation stops with the sequence (the parameter returns to the knob value) |
 | 14.8 | Hold REC | pattern and lane cleared (all values 64) |
 | 14.9 | CPU | note the percentage |
+| 14.10 | Press the SEQ page button again for the third set: GLIDE ON, different values on neighbouring steps | the target slides from each step's value to the next over the step instead of jumping |

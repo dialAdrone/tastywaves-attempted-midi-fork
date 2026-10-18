@@ -60,12 +60,12 @@ static void preset_apply(uint32_t i)
 
 /* ---- pages: four fixed knobs per page and set. NSUB[page] sets (EDIT: the four oscillators). */
 enum { F_NONE, F_PCT, F_TIME, F_BIP, F_CENTS, F_FRAMES, F_RATE, F_POS, F_TXT, F_INT };
-enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_MOD, TX_N };
+enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_MOD, TX_ONOFF, TX_N };
 typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 2, 2};   /* ... GLO, ARP, SEQ, HELP */   /* HELP: two text pages (PG[HELP] stays empty) */
+static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 3, 2};   /* ... GLO, ARP, SEQ, HELP */   /* HELP: two text pages (PG[HELP] stays empty) */
 static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
@@ -99,14 +99,15 @@ static const kdef_t PG[UI_P_N][4][4] = {
                   {K("SWING", P_ARP_SWING, F_INT, 1, 0), K("TEMPO", P_TEMPO, F_INT, 1, 0), KN, KN}},
     [UI_P_SEQ] = {{K("RATE", P_ARP_RATE, F_TXT, 1, TX_ARATE), K("GATE", P_ARP_GATE, F_PCT, 1, 0), K("SWING", P_ARP_SWING, F_INT, 1, 0),
                    K("TEMPO", P_TEMPO, F_INT, 1, 0)},
-                  {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), KN, KN}},       /* set 2: the modulation lane (STEP and VALUE are drawn and edited by hand: pn_mod) */
+                  {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), KN, KN},       /* set 2: the modulation lane (STEP and VALUE are drawn and edited by hand: pn_encoders) */
+                  {K("GLIDE", P_MOD_GLIDE, F_TXT, 1, TX_ONOFF), KN, KN, KN}},
 };
 
 static const char *const TXT[TX_N][8] = {
     {"LP", "BP", "HP"}, {"POLY", "MONO", "LEGATO"}, {"BOTH", "OSC1", "OSC2"}, {"HI", "ECO"}, {"LIN", "EXP"},
     {"SINE", "TRI", "SAW", "SQUARE", "S&H"},
     {"OFF", "UP", "DOWN", "UP-DN", "UP-DN2", "RANDOM", "PLAYED", "CHORD"}, {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"},
-    {"OFF", "POS", "CUTOFF", "BEND", "DRIVE"}};
+    {"OFF", "POS", "CUTOFF", "BEND", "DRIVE"}, {"OFF", "ON"}};
 
 /* ---- panel state (main loop only) */
 static struct {
