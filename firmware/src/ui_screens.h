@@ -58,6 +58,8 @@ typedef struct {
     uint32_t seq_mask;                          /* SEQ picture: bit i = step i has a note (else a rest) */
     uint32_t seq_tie;                           /* SEQ picture: bit i = step i is tied to the step before */
     uint8_t seq_note[32];                       /* SEQ picture: the note each step plays now (transposition included) + 1; 0 = rest / out of range */
+    uint8_t seq_mod[32];                        /* SEQ picture, MOD set: the lane, 0..127 (64 = neutral) */
+    uint8_t seq_set, seq_cur;                   /* SEQ picture: the MOD set is shown; the lane step being edited */
     uint8_t seq_tr;                             /* SEQ picture: a key is held, the notes shown are transposed */
     char list[8][16];                           /* FX / LFO / SEL / GLO: 4 rows x 2 columns of "LABEL VALUE" (14 chars) */
     char boot[2][32];                           /* GLO set 3 (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
@@ -482,8 +484,8 @@ static void ui_boot_pic(uint32_t y, const ui_view_t *v)       /* GLO set 3: what
 static uint32_t ui_seq_h(const ui_view_t *v)               /* a hash of the notes shown, for the redraw check */
 {
     uint32_t i, h = 2166136261u;
-    for (i = 0; i < 32u; i++) h = (h ^ v->seq_note[i]) * 16777619u;
-    return h;
+    for (i = 0; i < 32u; i++) h = (h ^ (v->seq_set ? v->seq_mod[i] : v->seq_note[i])) * 16777619u;
+    return h ^ (uint32_t)v->seq_set << 5 ^ (uint32_t)v->seq_cur << 12;
 }
 
 static void ui_seq_grid(uint32_t y, const ui_view_t *v)       /* the pattern: 4 rows of 8 tiles with the note each plays; white = playing / being recorded, yellow = transposed */
@@ -494,7 +496,15 @@ static void ui_seq_grid(uint32_t y, const ui_view_t *v)       /* the pattern: 4 
     for (i = 0; i < 32u; i++) {
         int32_t x = (int32_t)(i & 7u) * 30, ty = (int32_t)(i >> 3) * 21;
         uint32_t cur = i == v->seq_pos && (v->seq_on || v->seq_rec);
-        if (i < v->seq_len) {
+        if (v->seq_set) {                       /* the lane: a bar a step from the middle line, the step being edited framed */
+            int32_t mv = (int32_t)v->seq_mod[i] - 64, h = (mv < 0 ? -mv : mv) * 9 / 64;
+            uint32_t on = i < v->seq_len || !v->seq_len;
+            uint16_t c = i == v->seq_pos && v->seq_on ? C_WHITE : UI_ACC;
+            cv_rect(x, ty, 29, 20, on ? UI_ACC3 : C_BLACK);
+            cv_rect(x + 3, ty + 10, 23, 1, UI_DIM);
+            if (h) cv_rect(x + 3, mv > 0 ? ty + 10 - h : ty + 11, 23, h, c);
+            if (i == v->seq_cur) { cv_rect(x, ty, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty + 19, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty, 1, 20, RGB(255, 200, 90)); cv_rect(x + 28, ty, 1, 20, RGB(255, 200, 90)); }
+        } else if (i < v->seq_len) {
             uint32_t nt = v->seq_note[i];
             uint16_t bg = cur ? C_WHITE : (v->seq_mask >> i & 1u) ? UI_ACC3 : C_BLACK;
             uint16_t fg = cur ? C_BLACK : v->seq_tr ? RGB(255, 200, 90) : UI_ACC;

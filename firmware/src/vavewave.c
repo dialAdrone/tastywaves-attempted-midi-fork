@@ -216,7 +216,7 @@ static void app_main(void)
             } else if (fm1_ms - t_rec >= 700u) {    /* held: clear the pattern */
                 rec_arm = 0;
                 sq.len = 0; sq.cur = 0;
-                for (k = 0; k < SEQ_MAXN; k++) { sq.note[k] = 0; sq.vel[k] = 0; sq.tie[k] = 0; }
+                for (k = 0; k < SEQ_MAXN; k++) { sq.note[k] = 0; sq.vel[k] = 0; sq.tie[k] = 0; ml[k] = 0; }
             }
         }
         rec_pass = sq.rec;                      /* (a button that ends or enters the last step does nothing else in this pass) */

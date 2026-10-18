@@ -170,6 +170,21 @@ int main(void)
         reset(); set_pat(p, 2); arp_cfg.seq = 1; key_on(67); run(40); arp_cfg.seq = 0; run(2);
         check(snd[67], "sequencer off with a key held: the key sounds as a plain note");
         key_off(67); hung = 0; for (i = 0; i < 128; i++) hung += snd[i]; check(hung == 0, "(and ends with the key)"); }
+    {   int p[] = {60, 62, 64, 65}; int8_t lane[4] = {-64, 0, 63, 32}; int bad_v = 0, k, mono = 1; int32_t last = -99999, lo = 0, hi = 0, first = 1;
+        reset(); set_pat(p, 4); arp_cfg.seq = 1; arp_cfg.mglide = 0;
+        for (k = 0; k < 4; k++) ml[k] = lane[k];
+        for (k = 0; k < 200; k++) { run(1); if (qs.active && seq_mod_q8() != (int32_t)lane[sq_tap.step] * 256) bad_v++; }
+        check(bad_v == 0, "mod lane, no glide: the value is the step's");
+        arp_cfg.mglide = 1; run(2);
+        for (k = 0; k < 300; k++) {
+            int32_t v; run(1); v = seq_mod_q8();
+            if (sq_tap.step == 0u) { if (first) { lo = v; first = 0; } if (v < last) mono = 0; last = v; hi = v; } else last = -99999;
+        }
+        check(mono && hi > lo && lo >= -64 * 256 && hi <= 0, "mod lane, glide: rises from step 1's value toward step 2's through the step");
+        { int in_range = 1; for (k = 0; k < 300; k++) { int32_t v; run(1); v = seq_mod_q8(); if (v < -64 * 256 || v > 63 * 256) in_range = 0; } check(in_range, "mod lane glide stays inside -64..63"); }
+        sq_run = 0; run(3); check(seq_mod_q8() == 0, "sequencer stopped: no modulation"); sq_run = 1;
+        arp_cfg.seq = 0; run(3); check(seq_mod_q8() == 0, "sequencer off: no modulation");
+        for (k = 0; k < 4; k++) ml[k] = 0; }
     {   uint32_t seed = 99u; int step;
         reset(); arp_cfg.mode = ARP_UP;
         for (step = 0; step < 20000; step++) {

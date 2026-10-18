@@ -212,3 +212,19 @@ Flash `build/vavewave.fwsc`. One pattern of up to 32 steps lives in RAM (it is l
 | 13.14 | Change patch (PRESETS) while it plays | it keeps playing (the pattern is not part of the patch yet) |
 | 13.15 | CPU with the sequencer running | note the percentage |
 
+
+## 14. Modulation lane (SEQ page, second knob set)
+
+Flash `build/vavewave.fwsc`. The lane is one value a step (shown 0..127, 64 = neutral), as long as the note pattern, and moves one parameter while the sequencer plays. Like the pattern it is RAM only (lost at power-off, not in the patch; TARGET, DEPTH and GLIDE are in the patch). Record a pattern first (section 13). PLAY starts / stops the sequencer while SEQ is on.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 14.1 | On the SEQ page press SEQ (hold) or the SEQ page button again | second set: TARGET, DEPTH, STEP, VALUE; the grid shows a bar per step (middle line = 64) |
+| 14.2 | TARGET = POS, DEPTH 100, turn STEP and VALUE; SEQ on | the table position moves with each step's value; the edited step has a yellow frame |
+| 14.3 | Value 64 on every step | no change in the sound (neutral) |
+| 14.4 | TARGET = CUTOFF, then BEND, then DRIVE | each step moves that parameter; the knob on its own page is not changed |
+| 14.5 | DEPTH negative | the movement is inverted |
+| 14.6 | TARGET = OFF | no modulation; nothing else changes |
+| 14.7 | PLAY (stop) | the modulation stops with the sequence (the parameter returns to the knob value) |
+| 14.8 | Hold REC | pattern and lane cleared (all values 64) |
+| 14.9 | CPU | note the percentage |

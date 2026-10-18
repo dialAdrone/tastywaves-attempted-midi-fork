@@ -69,6 +69,9 @@ enum {
     P_ARP_SWING,    /* 0..50 % of a step: the odd steps are late */
     P_TEMPO,        /* BPM 40..240 (the arp and the sequencers; follows MIDI clock when there is one) */
     P_SEQ,          /* 0 off, 1 the note sequencer plays (the arp is bypassed) */
+    P_MOD,          /* modulation lane target: 0 off, 1 table position, 2 cutoff, 3 BEND, 4 drive */
+    P_MOD_DEPTH,    /* -100..100 % of the target's range for a lane value at its extreme */
+    P_MOD_GLIDE,    /* 1: the value slides to the next step's over the step (else it jumps; the smoother rounds the edge) */
     P_COUNT
 };
 
@@ -90,6 +93,7 @@ static const pdesc_t PDESC[P_COUNT] = {
     {"DRIVE", 0, 127, 0}, {"VOL", 0, 127, 100},
     {"ARP", 0, 7, 0},     {"RATE", 0, 5, 3},     {"OCT", 1, 4, 1},      {"GATE", 1, 127, 64},  {"SWING", 0, 50, 0},
     {"TEMPO", 40, 240, 120}, {"SEQ", 0, 1, 0},
+    {"MOD", 0, 4, 0},     {"MDEPTH", -100, 100, 50}, {"MGLIDE", 0, 1, 0},
 };
 
 static struct { volatile int32_t p[P_COUNT]; } patch;                       /* main writes */

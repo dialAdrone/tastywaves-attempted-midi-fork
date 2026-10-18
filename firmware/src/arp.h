@@ -31,7 +31,8 @@ static struct {
     volatile int32_t swing;                     /* 0..50: percent of a step the odd steps are late */
     volatile int32_t bpm;                       /* 40..240 */
     volatile int32_t seq;                       /* 1: the note sequencer plays (the arp is bypassed) */
-} arp_cfg = { ARP_OFF, ARP_R16, 1, 64, 0, 120, 0 };
+    volatile int32_t mglide;                    /* the modulation lane slides between steps */
+} arp_cfg = { ARP_OFF, ARP_R16, 1, 64, 0, 120, 0, 0 };
 
 /* ---- the note sequencer (T28 stage S2): one pattern of up to 32 steps in RAM, written by the main loop only while sq.rec is
  * set (step input), read by the ISR. A step is a note (0..127), a velocity (0 = rest) and a tie flag (the previous note goes on
@@ -44,6 +45,7 @@ static struct {
     volatile uint8_t rec;                       /* main loop: step input is on (the ISR plays nothing and keys sound as plain notes) */
     volatile uint8_t cur;                       /* main loop: the step input writes next */
 } sq;
+static volatile int8_t ml[SEQ_MAXN];             /* the modulation lane: a value -64..63 a step (0 = neutral), as long as the pattern */
 static volatile uint8_t sq_run = 1;           /* the sequencer's transport (PLAY while it is on): 0 = stopped, the keys only transpose */
 static struct { volatile uint32_t step, on; } sq_tap;           /* the step playing (ISR writes) and whether the sequencer is running */
 static struct { volatile uint32_t ticks, start; } arp_ext;      /* counters, main increments */
@@ -53,6 +55,7 @@ static struct {
     uint8_t n, note[ARP_MAXN], vel[ARP_MAXN];   /* held, in the order pressed */
     uint8_t on_n, on[ARP_MAXN];                 /* sounding because of the arp */
     uint8_t active;
+    uint32_t step_len;
     uint32_t gate_left, step_left, step_idx, pos, acc, rnd;
     uint32_t ext_seen, ext_start, ext_idle, ext_ever, blk, mark, tk_acc;
 } ar = { .rnd = 12345u };
@@ -234,6 +237,7 @@ static void seq_step(void)
         ar.gate_left = ar.on_n ? ((sq.tie[nx] && sq.vel[nx] && len > 1u) ? iv + 1u : gl) : 0u;      /* the next step is tied: no gap */
     }
     ar.step_left = iv;
+    ar.step_len = iv;
     ar.step_idx++;
     qs.pos = nx;
     sq_tap.step = i;
@@ -243,6 +247,21 @@ static void seq_sub(void)
     if (ar.gate_left && --ar.gate_left == 0u) arp_release_on();
     if (ar.step_left) ar.step_left--;
     if (!ar.step_left && sq.len) seq_step();
+}
+
+static int32_t seq_mod_q8(void)                 /* the lane's value now, Q8, -64..63 (0 when the sequencer is not playing); once per block, 32-bit division only */
+{
+    uint32_t len = sq.len > SEQ_MAXN ? SEQ_MAXN : sq.len, i = sq_tap.step, nx;
+    int32_t v;
+    if (!qs.active || !sq_run || !len) return 0;
+    if (i >= len) i = 0;
+    v = (int32_t)ml[i] * 256;
+    if (arp_cfg.mglide && ar.step_len) {
+        int32_t prog = (int32_t)(ar.step_len - (ar.step_left < ar.step_len ? ar.step_left : ar.step_len));
+        nx = i + 1u >= len ? 0u : i + 1u;
+        v += ((int32_t)ml[nx] - (int32_t)ml[i]) * 256 * prog / (int32_t)ar.step_len;
+    }
+    return v;
 }
 
 static void arp_run(uint32_t frames)            /* once per block, after events_drain */

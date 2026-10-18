@@ -141,3 +141,5 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - 2026-10-18 SEQ page redesign: removed the RATE/GATE/SWING/TEMPO list (the knob row shows them). The pattern is now 4 rows of 8 tiles (29 x 20 px) with the note each step plays (transposition by a held key included, shown in yellow), a dash for a rest, a small mark for a tie, white for the step playing or being recorded. Host-checked only; needs a look on the device.
 
 - 2026-10-18 SEQ transport: with SEQ on and a pattern, PLAY starts / stops the sequencer (it stays on, the SEQ page reads STOP; a start begins at step 1, REC end or SEQ on starts it). Latch is not available while the sequencer is on. Test: tests/scripts/seq2.txt.
+
+- 2026-10-18 T28 stage S3 (modulation lane): SEQ page set 2 (TARGET / DEPTH / STEP / VALUE), patch params P_MOD, P_MOD_DEPTH, P_MOD_GLIDE (P_COUNT 57; records drop trailing defaults), lane `ml[32]` in RAM (neutral 0), applied in block_control to es.p (POS both oscs, cutoff, BEND, drive) from seq_mod_q8() (once a block, 32-bit divide). Glide parameter exists (P_MOD_GLIDE) but has no knob yet. Tests: arp_check lane cases. Device test: section 14.

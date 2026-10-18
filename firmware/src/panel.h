@@ -60,12 +60,12 @@ static void preset_apply(uint32_t i)
 
 /* ---- pages: four fixed knobs per page and set. NSUB[page] sets (EDIT: the four oscillators). */
 enum { F_NONE, F_PCT, F_TIME, F_BIP, F_CENTS, F_FRAMES, F_RATE, F_POS, F_TXT, F_INT };
-enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_N };
+enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_MOD, TX_N };
 typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 1, 2};   /* ... GLO, ARP, SEQ, HELP */   /* HELP: two text pages (PG[HELP] stays empty) */
+static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 2, 2};   /* ... GLO, ARP, SEQ, HELP */   /* HELP: two text pages (PG[HELP] stays empty) */
 static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
@@ -98,19 +98,22 @@ static const kdef_t PG[UI_P_N][4][4] = {
                    K("GATE", P_ARP_GATE, F_PCT, 1, 0)},
                   {K("SWING", P_ARP_SWING, F_INT, 1, 0), K("TEMPO", P_TEMPO, F_INT, 1, 0), KN, KN}},
     [UI_P_SEQ] = {{K("RATE", P_ARP_RATE, F_TXT, 1, TX_ARATE), K("GATE", P_ARP_GATE, F_PCT, 1, 0), K("SWING", P_ARP_SWING, F_INT, 1, 0),
-                   K("TEMPO", P_TEMPO, F_INT, 1, 0)}},
+                   K("TEMPO", P_TEMPO, F_INT, 1, 0)},
+                  {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), KN, KN}},       /* set 2: the modulation lane (STEP and VALUE are drawn and edited by hand: pn_mod) */
 };
 
 static const char *const TXT[TX_N][8] = {
     {"LP", "BP", "HP"}, {"POLY", "MONO", "LEGATO"}, {"BOTH", "OSC1", "OSC2"}, {"HI", "ECO"}, {"LIN", "EXP"},
     {"SINE", "TRI", "SAW", "SQUARE", "S&H"},
-    {"OFF", "UP", "DOWN", "UP-DN", "UP-DN2", "RANDOM", "PLAYED", "CHORD"}, {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"}};
+    {"OFF", "UP", "DOWN", "UP-DN", "UP-DN2", "RANDOM", "PLAYED", "CHORD"}, {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"},
+    {"OFF", "POS", "CUTOFF", "BEND", "DRIVE"}};
 
 /* ---- panel state (main loop only) */
 static struct {
     uint8_t page, look, sub, touched;
     uint8_t slot, browse, browse_pend;          /* entry loaded (0..7 factory, 8.. user); entry shown in the name line; load pending */
     uint8_t save_req, home_arm;                 /* HOME pressed and not yet decided: short press or hold */
+    uint8_t mstep;                              /* SEQ set 2: the lane step the VALUE knob edits (0..31) */
     uint8_t seq_arm;                            /* SEQ pressed and not yet decided (short: on / off, hold: the page) */
     uint32_t t_seq, t_seq_tog;
     uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: on / off, hold: the page); the mode it switches back to */
@@ -465,6 +468,17 @@ static void pn_encoders(void)
     int32_t d;
     if ((d = fm1_enc_take(ENC_ALGORITHM)) != 0) pn_table_step(o ? P_TABLE2 : P_TABLE1, d);
     if ((d = fm1_enc_take(ENC_SELECT)) != 0) patch_add(o ? P_POS2 : P_POS1, pn_accel(d) * 32);
+    if (pn.page == UI_P_SEQ && pn.sub == 1u) {  /* the modulation lane: STEP picks, VALUE sets (RAM only until patterns are saved) */
+        int32_t n = sq.len ? (int32_t)sq.len : 32, m = (int32_t)pn.mstep, x;
+        if ((d = fm1_enc_take(ENC_KNOB3)) != 0) { m += d > 0 ? 1 : -1; pn.touched = 2; }
+        m = m < 0 ? 0 : m >= n ? n - 1 : m;
+        pn.mstep = (uint8_t)m;
+        if ((d = fm1_enc_take(ENC_KNOB4)) != 0) {
+            x = (int32_t)ml[m] + pn_accel(d);
+            ml[m] = (int8_t)(x < -64 ? -64 : x > 63 ? 63 : x);
+            pn.touched = 3;
+        }
+    }
     for (i = 0; i < 4u; i++) {
         const kdef_t *k = &PG[pn.page][pn.sub][i];
         d = fm1_enc_take(ENC_KNOB1 + i);
@@ -571,6 +585,15 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             v->seq_tie = tm; v->seq_tr = (uint8_t)(tr != 0 && !sq.rec);
         }
     }
+    if (pn.page == UI_P_SEQ && pn.sub == 1u) {          /* STEP and VALUE of the lane */
+        uint32_t m = pn.mstep < 32u ? pn.mstep : 31u;
+        v->klabel[2] = "STEP"; v->klabel[3] = "VALUE";
+        ui_num(v->kval[2], (int32_t)m + 1); ui_num(v->kval[3], (int32_t)ml[m] + 64);
+        v->kfrac[2] = (uint8_t)(m * 255u / 31u); v->kfrac[3] = (uint8_t)(((int32_t)ml[m] + 64) * 2);
+    }
+    v->seq_set = (uint8_t)(pn.page == UI_P_SEQ && pn.sub == 1u);
+    v->seq_cur = pn.mstep;
+    for (i = 0; i < 32u; i++) v->seq_mod[i] = (uint8_t)((int32_t)ml[i] + 64);
     v->kbip = (uint8_t)kbip;
     v->ksmall = (uint8_t)ksmall;
 
