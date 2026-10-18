@@ -32,14 +32,14 @@ static struct {
     volatile int32_t bpm;                       /* 40..240 */
 } arp_cfg = { ARP_OFF, ARP_R16, 1, 64, 0, 120 };
 static struct { volatile uint32_t ticks, start; } arp_ext;      /* counters, main increments */
-static struct { volatile uint32_t step, ext; } arp_tap;         /* steps played so far; 1 = following the MIDI clock */
+static struct { volatile uint32_t step, ext, beat_blocks; } arp_tap;   /* steps played so far; 1 = following the MIDI clock; blocks (256 frames) the last 24 clock ticks took (the screen: 10336 / this = BPM) */
 
 static struct {
     uint8_t n, note[ARP_MAXN], vel[ARP_MAXN];   /* held, in the order pressed */
     uint8_t on_n, on[ARP_MAXN];                 /* sounding because of the arp */
     uint8_t active;
     uint32_t gate_left, step_left, step_idx, pos, acc, rnd;
-    uint32_t ext_seen, ext_start, ext_idle, ext_ever;
+    uint32_t ext_seen, ext_start, ext_idle, ext_ever, blk, mark, tk_acc;
 } ar = { .rnd = 12345u };
 
 static int arp_on(void) { return arp_cfg.mode != ARP_OFF; }
@@ -168,6 +168,11 @@ static void arp_run(uint32_t frames)            /* once per block, after events_
     t = arp_ext.ticks;                          /* MIDI clock */
     d = t - ar.ext_seen;
     ar.ext_seen = t;
+    ar.blk++;
+    if (d) {
+        ar.tk_acc += d;
+        while (ar.tk_acc >= 24u) { ar.tk_acc -= 24u; arp_tap.beat_blocks = ar.blk - ar.mark; ar.mark = ar.blk; }     /* one quarter note of clock */
+    }
     if (d) { ar.ext_idle = 0; ar.ext_ever = 1; if (d > 6u) d = 6u; }       /* (a burst after a stalled main loop: at most one 1/16) */
     else if (ar.ext_idle < 100000u) ar.ext_idle++;
     t = arp_ext.start;

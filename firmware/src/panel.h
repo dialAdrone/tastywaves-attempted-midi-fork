@@ -579,7 +579,13 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         ui_copy(v->ptxt, pn.page == UI_P_ARP ? TXT[TX_ARP][patch_get(P_ARP)] : TXT[TX_VMODE][patch_get(P_VMODE)], 8);
         if (pn.page == UI_P_ARP) {
             char *d = v->info;
-            if (arp_tap.ext) d = ui_cat(d, "EXT CLOCK");
+            if (arp_tap.ext) {                  /* the clock's tempo, measured over the last quarter note */
+                uint32_t bb = arp_tap.beat_blocks;
+                d = ui_cat(d, "EXT ");
+                if (bb >= 20u && bb < 400u) d = ui_num(d, (int32_t)((10336u + bb / 2u) / bb));
+                else d = ui_cat(d, "--");
+                d = ui_cat(d, " BPM");
+            }
             else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }
             d = ui_cat(d, "  ");
             d = ui_cat(d, TXT[TX_ARATE][patch_get(P_ARP_RATE)]);

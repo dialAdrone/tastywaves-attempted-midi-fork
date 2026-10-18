@@ -126,6 +126,10 @@ int main(void)
         check(nev > base, "a step comes every 6 clock ticks");
         { int c0 = ons(got, 64); for (i = 0; i < 12; i++) { arp_ext.ticks++; run(4); }
           check(ons(got, 64) - c0 == 2, "12 ticks = 2 steps of 1/16"); }
+        { uint32_t k, bb;
+          for (k = 0; k < 48; k++) { arp_ext.ticks++; run(4); }
+          bb = arp_tap.beat_blocks;
+          check(bb == 96, "external tempo: 24 ticks of 4 blocks = a quarter of 96 blocks (10336 / 96 = 108 BPM)"); }
         run(200); check(arp_tap.ext == 0, "no clock for 0.5 s: back to the internal tempo"); }
     {   uint32_t seed = 99u; int step;
         reset(); arp_cfg.mode = ARP_UP;
