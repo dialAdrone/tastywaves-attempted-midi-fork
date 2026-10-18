@@ -3,7 +3,7 @@
  * the soft clip). A slot has a TYPE and three values (A, B, MIX) in the patch (P_FXn_*). Included by synth.h before
  * engine_render. The audio ISR runs fx_slot_run for a slot whose `on` is set; the main loop (fx_sync) changes a slot's type
  * while `on` is 0: the ISR always finishes a block before the main loop runs, so it never sees a half-cleared slot.
- * Types so far: 1 CHORUS, 2 FLANGER (one delay line, two taps; the right tap's LFO is a quarter cycle behind).
+ * Types so far: 1 CHORUS, 2 FLANGER (one delay line, two taps; the right tap's LFO is a quarter cycle ahead).
  * Bus samples are Q15 x 32 (+-2^20 full scale): the delay line stores them >> 5 as int16. */
 #pragma once
 
@@ -34,16 +34,16 @@ static void fx_slot_run(int32_t *lr, uint32_t n, void *state)
     uint32_t type = s->type, inc, i, w = s->w, ph = s->ph;
     int32_t a = p[1], b = p[2], mt = p[3] + (p[3] >> 6), ms = s->mix_s, fbk = 0, d0, dq;
     if (!type) return;
-    if (type == FXT_CHORUS) {                   /* A rate 0.02 .. 4.4 Hz, B depth +-0..254 samples around 15 ms */
-        inc = LFO_INC[(a * 90) >> 7] >> 5;
-        d0 = 661; dq = b * 2;
+    if (type == FXT_CHORUS) {                   /* A rate 0.02 .. 1.7 Hz, B depth +-0..127 samples around 15 ms (up to about half a semitone of wobble) */
+        inc = LFO_INC[(a * 75) >> 7] >> 5;
+        d0 = 661; dq = b;
     } else {                                    /* flanger: A rate, B feedback up to 0.79; delay 1.5 ms +- 60 samples */
         inc = LFO_INC[(a * 90) >> 7] >> 5;
         d0 = 70; dq = 60; fbk = (b * 205) >> 7;
     }
     for (i = 0; i < n; i++) {
         int32_t inl = lr[2u * i], inr = lr[2u * i + 1u], mono = (inl + inr) >> 1, wet[2], k, dl, x;
-        ms += (mt * 256 - ms) >> 10;
+        ms += (mt * 256 - ms + 512) >> 10;       /* (rounded: a rising mix reaches its target) */
         ph += inc;
         for (k = 0; k < 2; k++) {
             int32_t lfo = sine(ph + (k ? 0x40000000u : 0u)), pos, fr, i0, i1;
@@ -52,7 +52,7 @@ static void fx_slot_run(int32_t *lr, uint32_t n, void *state)
             pos &= (int32_t)(FX_DLEN << 8) - 1;
             i0 = pos >> 8; fr = pos & 255;
             i1 = (i0 + 1) & (int32_t)(FX_DLEN - 1u);
-            wet[k] = (((int32_t)s->buf[i0] * (256 - fr) + (int32_t)s->buf[i1] * fr) >> 8) << 5;
+            wet[k] = (((int32_t)s->buf[i0] * (256 - fr) + (int32_t)s->buf[i1] * fr) >> 8) * 32;
         }
         x = (mono + (type == FXT_FLANGER ? (s->fb * fbk) >> 8 : 0)) >> 5;
         s->buf[w] = (int16_t)(x > 32767 ? 32767 : x < -32768 ? -32768 : x);
@@ -75,11 +75,13 @@ static void fx_sync(void)
         fx_slot_t *s = &fxs[i];
         if (want == s->type && fx_chain[i].fn) continue;
         fx_chain[i].on = 0;
+        __asm__ volatile("" ::: "memory");        /* the plain stores below stay between the volatile ones */
         s->type = FXT_NONE;
         { uint32_t j; for (j = 0; j < FX_DLEN; j++) s->buf[j] = 0; }
         s->w = 0; s->ph = 0; s->mix_s = 0; s->fb = 0; s->idx = (uint8_t)i;
         fx_chain[i].fn = fx_slot_run;
         fx_chain[i].state = s;
+        __asm__ volatile("" ::: "memory");
         s->type = (uint8_t)want;
         fx_chain[i].on = want != FXT_NONE;
     }

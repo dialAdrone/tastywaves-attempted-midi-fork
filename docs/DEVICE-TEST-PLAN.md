@@ -243,4 +243,5 @@ Flash `build/vavewave.fwsc`. Press FX: set 1 and 2 are the filter, sets 3..6 are
 | 15.5 | Chorus in slot 1, flanger in slot 2 | both are heard; swap them (the order changes the sound a little) |
 | 15.6 | SAVE a patch with an effect, change patch, come back | the effect settings return with the patch |
 | 15.7 | Effects while the arp / sequencer plays | still in time, no dropouts |
+| 15.9 | Worst case: hold a 12-note chord (or latch it) with all 4 slots on (two chorus, two flanger) | no dropouts or crackle; note the CPU (the effects are not part of the voice-shedding budget) |
 | 15.8 | CPU with one chorus and one flanger running (HOME / GLO page reading) | note the percentage |

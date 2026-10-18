@@ -151,3 +151,4 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - 2026-10-18 S3 device-passed (user: MOD SEQ working, CPU 5%, preset change keeps SEQ running).
 
 - 2026-10-18 T26 stage E1 (effects chain framework + CHORUS + FLANGER): fx.h, 16 patch parameters (P_COUNT 73), FX page sets 3..6, fx_sync in the main loop, tests/run_fx.sh. Pool 30720 to 47184 B. Device test: section 15. The chain runs before the drive/clip (the existing hook).
+- 2026-10-18 E1 review fixes: compiler barriers in fx_sync (the ISR could see a half-set slot), rising mix reaches its target, chorus depth/rate range tamed (about half a semitone at most), no negative left shift. Known: a type change cuts the wet signal at once (the mix ramps in only); effects are outside the voice-shedding budget (test 15.9).
