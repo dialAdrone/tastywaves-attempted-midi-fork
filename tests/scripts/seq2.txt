@@ -1,0 +1,11 @@
+# SEQ on, steps entered, REC ends: it plays; PLAY stops it (silence), PLAY starts it again.
+100 btn 11
+200 btn 13
+300 keys 0x1
+400 keys 0
+500 keys 0x10
+600 keys 0
+700 btn 13
+2000 btn 12
+3000 btn 12
+4000 end

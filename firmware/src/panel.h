@@ -611,7 +611,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         ui_copy(v->ptxt, pn.page == UI_P_ARP ? TXT[TX_ARP][patch_get(P_ARP)] : TXT[TX_VMODE][patch_get(P_VMODE)], 8);
         if (pn.page == UI_P_SEQ) {
             char *d = v->info;
-            ui_copy(v->ptxt, sq.rec ? "RECORD" : patch_get(P_SEQ) ? "PLAY" : "OFF", 8);
+            ui_copy(v->ptxt, sq.rec ? "RECORD" : patch_get(P_SEQ) ? (sq_run || !sq.len ? "PLAY" : "STOP") : "OFF", 8);
             if (sq.rec) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, " OF 32  PLAY=REST SEQ=TIE"); }
             else if (!sq.len) ui_cat(d, "NO PATTERN  REC TO ENTER STEPS");
             else { d = ui_cat(d, "LEN "); d = ui_num(d, sq.len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); } }

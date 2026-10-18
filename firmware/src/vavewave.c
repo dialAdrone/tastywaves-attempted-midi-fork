@@ -212,7 +212,7 @@ static void app_main(void)
             if (!(hb >> BTN_REC & 1u)) {        /* a short press: step input on / off (off keeps what was entered as the pattern) */
                 rec_arm = 0;
                 if (!sq.rec) { sq.cur = 0; sq.rec = 1; pn.page = UI_P_SEQ; pn.sub = 0; pn.touched = 4; }   /* (and its page shows the steps) */
-                else { if (sq.cur) sq.len = sq.cur; sq.rec = 0; }
+                else { if (sq.cur) sq.len = sq.cur; sq.rec = 0; sq_run = 1; }
             } else if (fm1_ms - t_rec >= 700u) {    /* held: clear the pattern */
                 rec_arm = 0;
                 sq.len = 0; sq.cur = 0;
@@ -229,7 +229,8 @@ static void app_main(void)
             sq.cur++;
         }
         if (sq.rec && sq.cur >= SEQ_MAXN) { sq.len = SEQ_MAXN; sq.rec = 0; }  /* 32 steps: full */
-        if (!rec_pass && (b & (1u << BTN_PLAY))) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
+        if (!rec_pass && (b & (1u << BTN_PLAY)) && patch_get(P_SEQ) && sq.len) sq_run ^= 1u;      /* the sequencer is on: PLAY starts / stops it (latch is for the arp and plain playing) */
+        else if (!rec_pass && (b & (1u << BTN_PLAY))) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
             latch ^= 1u;
             for (k = 0; k < 27u; k++)
                 if (latch && (started >> k & 1u)) { lat[held[k] >> 3] |= (uint8_t)(1u << (held[k] & 7u)); started &= ~(1u << k); }
@@ -246,6 +247,7 @@ static void app_main(void)
             if (look != set.look || dirty != d0) t_change = fm1_ms;
         }
         {   uint32_t am = sq.rec ? 0u : patch_get(P_SEQ) && sq.len ? 2u : patch_get(P_ARP) ? 1u : 0u;
+            if (am == 2u && route_prev != 2u) sq_run = 1;
             if (am && am != route_prev) t_rejoin = fm1_ms + 15u;   /* the arp or the sequencer came on over sounding notes (held keys, latched): after a block or two they become its notes */
             route_prev = am;
             if (t_rejoin && fm1_ms >= t_rejoin) {

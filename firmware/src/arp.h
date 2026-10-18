@@ -44,6 +44,7 @@ static struct {
     volatile uint8_t rec;                       /* main loop: step input is on (the ISR plays nothing and keys sound as plain notes) */
     volatile uint8_t cur;                       /* main loop: the step input writes next */
 } sq;
+static volatile uint8_t sq_run = 1;           /* the sequencer's transport (PLAY while it is on): 0 = stopped, the keys only transpose */
 static struct { volatile uint32_t step, on; } sq_tap;           /* the step playing (ISR writes) and whether the sequencer is running */
 static struct { volatile uint32_t ticks, start; } arp_ext;      /* counters, main increments */
 static struct { volatile uint32_t step, ext, beat_blocks; } arp_tap;   /* steps played so far; 1 = following the MIDI clock; blocks (256 frames) the last 24 clock ticks took (the screen: 10336 / this = BPM) */
@@ -282,6 +283,13 @@ static void arp_run(uint32_t frames)            /* once per block, after events_
         }
         ar.active = 1;
     }
+    if (qs.active && !sq_run) {                 /* stopped: silent, the next start begins at step 1 */
+        arp_release_on();
+        qs.pos = 0; ar.step_left = 0; ar.step_idx = 0; ar.gate_left = 0; ar.acc = 0;
+        sq_tap.on = 0;
+        return;
+    }
+    if (qs.active) sq_tap.on = 1;
     if (arp_tap.ext) {
         sub = d * 4u;
         ar.acc = 0;

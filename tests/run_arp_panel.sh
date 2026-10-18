@@ -13,6 +13,7 @@ build/host/vavewave build/host/arp4 tests/scripts/arp4.txt > build/host/arp4.log
 build/host/vavewave build/host/arp5 tests/scripts/arp5.txt > build/host/arp5.log
 build/host/vavewave build/host/arp6 tests/scripts/arp6.txt > build/host/arp6.log
 build/host/vavewave build/host/seq tests/scripts/seq.txt > build/host/seq.log
+build/host/vavewave build/host/seq2 tests/scripts/seq2.txt > build/host/seq2.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re
@@ -69,6 +70,10 @@ d = n0 + 1 - 60
 check(len(tr) >= 4 and all(n - d in (n0, n4, n7) for t, n in tr[:4]), 'a held key transposes the pattern by (key - 60 = %d)' % d)
 check(not any(t > 4500 and t < 5100 and False for t, k, n in q) and any(4400 < t < 5200 and k == 'on' and n in (n0, n4, n7) for t, k, n in q), 'key released: the pattern plays as recorded again')
 check(not any(t > 6300 and k == 'on' for t, k, n in q), 'REC held clears the pattern: silence')
+q2 = load('build/host/seq2.log')
+check(any(800 < t < 1900 and k == 'on' for t, k, n in q2), 'sequencer plays after REC ends')
+check(not any(2150 < t < 2950 and k == 'on' for t, k, n in q2), 'PLAY stops the sequencer (SEQ still on)')
+check(any(t > 3000 and k == 'on' for t, k, n in q2), 'PLAY starts it again')
 print('arp panel: %d failures' % fails)
 raise SystemExit(1 if fails else 0)
 PY
