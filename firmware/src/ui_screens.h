@@ -56,6 +56,9 @@ typedef struct {
     char info[40];                              /* ARP and SEQ pictures: tempo and rate; steps */
     uint8_t seq_len, seq_pos, seq_rec, seq_on;  /* SEQ picture: steps, the step playing / being recorded, step input on, running */
     uint32_t seq_mask;                          /* SEQ picture: bit i = step i has a note (else a rest) */
+    uint32_t seq_tie;                           /* SEQ picture: bit i = step i is tied to the step before */
+    uint8_t seq_note[32];                       /* SEQ picture: the note each step plays now (transposition included) + 1; 0 = rest / out of range */
+    uint8_t seq_tr;                             /* SEQ picture: a key is held, the notes shown are transposed */
     char list[8][16];                           /* FX / LFO / SEL / GLO: 4 rows x 2 columns of "LABEL VALUE" (14 chars) */
     char boot[2][32];                           /* GLO set 3 (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
 } ui_view_t;
@@ -476,15 +479,38 @@ static void ui_boot_pic(uint32_t y, const ui_view_t *v)       /* GLO set 3: what
     cv_blit(0, y);
 }
 
-static void ui_seq_grid(uint32_t y, const ui_view_t *v)       /* the pattern: one cell a step, white = playing / being recorded */
+static uint32_t ui_seq_h(const ui_view_t *v)               /* a hash of the notes shown, for the redraw check */
 {
+    uint32_t i, h = 2166136261u;
+    for (i = 0; i < 32u; i++) h = (h ^ v->seq_note[i]) * 16777619u;
+    return h;
+}
+
+static void ui_seq_grid(uint32_t y, const ui_view_t *v)       /* the pattern: 4 rows of 8 tiles with the note each plays; white = playing / being recorded, yellow = transposed */
+{
+    static const char NN[12][3] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     uint32_t i;
-    cv_begin(240, 14, C_BLACK);
+    cv_begin(240, 84, C_BLACK);
     for (i = 0; i < 32u; i++) {
-        int32_t x = 8 + (int32_t)i * 7;
-        if (i < v->seq_len) cv_rect(x, 1, 5, 12, i == v->seq_pos && (v->seq_on || v->seq_rec) ? C_WHITE : (v->seq_mask >> i & 1u) ? UI_ACC : UI_DIM);
-        else if (v->seq_rec && i == v->seq_pos) cv_rect(x, 1, 5, 12, C_WHITE);
-        else cv_rect(x, 6, 5, 2, UI_ACC3);
+        int32_t x = (int32_t)(i & 7u) * 30, ty = (int32_t)(i >> 3) * 21;
+        uint32_t cur = i == v->seq_pos && (v->seq_on || v->seq_rec);
+        if (i < v->seq_len) {
+            uint32_t nt = v->seq_note[i];
+            uint16_t bg = cur ? C_WHITE : (v->seq_mask >> i & 1u) ? UI_ACC3 : C_BLACK;
+            uint16_t fg = cur ? C_BLACK : v->seq_tr ? RGB(255, 200, 90) : UI_ACC;
+            cv_rect(x, ty, 29, 20, bg);
+            if (!(v->seq_mask >> i & 1u)) cv_rect(x + 11, ty + 9, 7, 2, cur ? C_BLACK : UI_DIM);       /* a rest: a dash */
+            else if (nt) {
+                char t[6], *d = t;
+                int32_t m = (int32_t)nt - 1, o = m / 12 - 1;
+                d = ui_cat(d, NN[m % 12]);
+                if (o < 0) *d++ = '-'; else *d++ = (char)('0' + o);
+                *d = 0;
+                cv_text(x + (29 - text_w(&FONT_S, t)) / 2, ty + 4, &FONT_S, t, fg);
+                if (v->seq_tie >> i & 1u) cv_rect(x, ty + 9, 2, 2, fg);                                  /* tied to the step before */
+            }
+        } else if (v->seq_rec && i == v->seq_pos) cv_rect(x, ty, 29, 20, C_WHITE);
+        else cv_rect(x + 12, ty + 9, 5, 2, UI_ACC3);
     }
     cv_blit(0, y);
 }
@@ -640,7 +666,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
                 ui_env(UI_Y_MID + i * 64u, i ? "FILTER ENV" : "AMP ENV", v->env[i], v->sub == i);
     } else if (v->page != UI_P_HOME) {          /* FX, LFO, SEL, GLO */
         uint32_t pk = v->page == UI_P_FX ? (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16
-                    : v->page == UI_P_LFO ? v->lfo_shape : v->page == UI_P_ARP ? 0x20000000u : v->page == UI_P_SEQ ? (v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ 0x40000000u) : v->page == UI_P_SEL ? v->voices | (uint32_t)v->voices_max << 8
+                    : v->page == UI_P_LFO ? v->lfo_shape : v->page == UI_P_ARP ? 0x20000000u : v->page == UI_P_SEQ ? (v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ v->seq_tie * 2654435761u ^ (uint32_t)v->seq_tr << 8 ^ ui_seq_h(v) ^ 0x40000000u) : v->page == UI_P_SEL ? v->voices | (uint32_t)v->voices_max << 8
                     : v->sub == 2u ? 0x40000000u : (uint32_t)v->drive | (uint32_t)v->cpu_max << 8;
         uint32_t lch = full || s->set != v->set;
         for (i = 0; i < 8u && !lch; i++) lch = !ui_eq(s->list[i], v->list[i]);
@@ -671,7 +697,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             ui_copy(s->info, v->info, 40);
         }
         if (lch) {
-            ui_list(116, v);
+            if (v->page != UI_P_SEQ) ui_list(116, v);
             for (i = 0; i < 8u; i++) ui_copy(s->list[i], v->list[i], 16);
             s->set = v->set;
         }
