@@ -456,7 +456,7 @@ static void events_drain(void)
         uint32_t e = ev_ring[t % EV_N], ty = e >> 16, note = (e >> 8) & 127u, vel = e & 127u;
         if (ty == EV_ON && vel) {               /* step input: plain notes; else the sequencer (its transposition keys), the arp, or plain */
             if (sq.rec) note_on(note, vel);
-            else if (arp_cfg.seq) seq_in_on(note);
+            else if (arp_cfg.seq && sq.len) seq_in_on(note);
             else if (arp_on()) arp_in_on(note, vel);
             else note_on(note, vel);
         }
@@ -481,7 +481,7 @@ static void block_control(void)
     arp_cfg.mode = p[P_ARP]; arp_cfg.rate = p[P_ARP_RATE]; arp_cfg.oct = p[P_ARP_OCT];
     arp_cfg.gate = p[P_ARP_GATE]; arp_cfg.swing = p[P_ARP_SWING]; arp_cfg.bpm = p[P_TEMPO]; arp_cfg.seq = p[P_SEQ];
     if (p[P_VMODE] != es.vmode) {               /* a new voice mode: release everything */
-        if (es.vmode >= 0) all_off(0);
+        if (es.vmode >= 0) { all_off(0); ar.on_n = 0; ar.gate_left = 0; }   /* (the arp's and the sequencer's notes ended too) */
         es.vmode = p[P_VMODE];
     }
     {   /* smoothing: one-pole per block (~20 ms), interpolated per control step below */

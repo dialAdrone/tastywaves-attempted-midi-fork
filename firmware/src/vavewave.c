@@ -149,7 +149,6 @@ static void app_main(void)
     uint32_t prev = 0, started = 0, k, t_change = 0, dirty = 0, t_cpu = 0, cpu = 0, cpu_mx = 0, gen_seen = 0;
     uint8_t held[27] = {0};                     /* the note each key plays */
     uint32_t route_prev = 0, t_rejoin = 0, t_rec = 0, rec_arm = 0;   /* where keys go (1 arp, 2 sequencer, 0 plain), last pass; REC pressed and not yet decided */
-      /* the arp mode last pass; when latched notes join a newly started arp (0 = not pending) */
     uint8_t latch = 0, lat[16] = {0};           /* LATCH (the PLAY button): notes kept sounding after the key is up, 1 bit per note */
 
     boot_btn = fm1_in.buttons;                  /* before anything else */
@@ -165,7 +164,7 @@ static void app_main(void)
     if (set.slot != pn.slot) { set.slot = pn.slot; dirty = 1; t_change = fm1_ms; }   /* a user patch that is gone: patch 1 */
 
     for (;;) {
-        uint32_t keys, down, up, rel, b, hb, lit, base, edit_held, m, save_shown;
+        uint32_t keys, down, up, rel, b, hb, lit, base, edit_held, m, save_shown, rec_pass;
         uint8_t st, d1, d2;
         platform_poll();
 
@@ -220,6 +219,7 @@ static void app_main(void)
                 for (k = 0; k < SEQ_MAXN; k++) { sq.note[k] = 0; sq.vel[k] = 0; sq.tie[k] = 0; }
             }
         }
+        rec_pass = sq.rec;                      /* (a button that ends or enters the last step does nothing else in this pass) */
         if (sq.rec && b & (1u << BTN_PLAY) && sq.cur < SEQ_MAXN) {         /* step input: PLAY is a rest */
             sq.note[sq.cur] = 0; sq.vel[sq.cur] = 0; sq.tie[sq.cur] = 0;
             sq.cur++;
@@ -229,7 +229,7 @@ static void app_main(void)
             sq.cur++;
         }
         if (sq.rec && sq.cur >= SEQ_MAXN) { sq.len = SEQ_MAXN; sq.rec = 0; }  /* 32 steps: full */
-        if (!sq.rec && (b & (1u << BTN_PLAY))) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
+        if (!rec_pass && (b & (1u << BTN_PLAY))) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
             latch ^= 1u;
             for (k = 0; k < 27u; k++)
                 if (latch && (started >> k & 1u)) { lat[held[k] >> 3] |= (uint8_t)(1u << (held[k] & 7u)); started &= ~(1u << k); }
@@ -241,10 +241,11 @@ static void app_main(void)
         {
             uint8_t look = set.look;
             uint32_t d0 = dirty;
-            pn_buttons(sq.rec ? b & ~(1u << BTN_SEQ) : b, hb, &set, &dirty);
+            if (rec_pass) pn.seq_arm = 0;
+            pn_buttons(rec_pass ? b & ~(1u << BTN_SEQ) : b, hb, &set, &dirty);
             if (look != set.look || dirty != d0) t_change = fm1_ms;
         }
-        {   uint32_t am = sq.rec ? 0u : patch_get(P_SEQ) ? 2u : patch_get(P_ARP) ? 1u : 0u;
+        {   uint32_t am = sq.rec ? 0u : patch_get(P_SEQ) && sq.len ? 2u : patch_get(P_ARP) ? 1u : 0u;
             if (am && am != route_prev) t_rejoin = fm1_ms + 15u;   /* the arp or the sequencer came on over sounding notes (held keys, latched): after a block or two they become its notes */
             route_prev = am;
             if (t_rejoin && fm1_ms >= t_rejoin) {
@@ -267,13 +268,14 @@ static void app_main(void)
             if (down >> k & 1u) {
                 int chip = k == 1u ? 0 : k == 3u ? 1 : k == 5u ? 2 : k == 8u ? 3 : -1;   /* the OP1..OP4 black keys */
                 if (edit_held && chip >= 0) { pn.page = UI_P_EDIT; pn.sub = (uint8_t)chip; pn.touched = 4; }
-                else if (latch && !sq.rec) {    /* latched: the same note again lets it go; the key's release does nothing */
+                else if (latch && !rec_pass) {    /* latched: the same note again lets it go; the key's release does nothing */
                     uint32_t n = base + k;
                     if (lat[n >> 3] >> (n & 7u) & 1u) { lat[n >> 3] &= (uint8_t)~(1u << (n & 7u)); stop((uint8_t)n); midi_send(0x80, n, 0); }
                     else { lat[n >> 3] |= (uint8_t)(1u << (n & 7u)); play((uint8_t)n, 100); midi_send(0x90, n, 100); }
                 }
                 else {
                     started |= 1u << k; held[k] = (uint8_t)(base + k); play(held[k], 100); midi_send(0x90, held[k], 100);
+                    if (rec_pass) lat[held[k] >> 3] &= (uint8_t)~(1u << (held[k] & 7u));     /* (a latched note played again as a step is not latched any more) */
                     if (sq.rec && sq.cur < SEQ_MAXN) { sq.note[sq.cur] = held[k]; sq.vel[sq.cur] = 100; sq.tie[sq.cur] = 0; sq.cur++; }    /* step input */
                 }
             }
@@ -313,7 +315,7 @@ static void app_main(void)
         if (sq.rec) {                           /* step input: the steps entered, the next one blinking */
             lit = sq.cur >= 27u ? 0x7FFFFFFu : (1u << sq.cur) - 1u;
             if (sq.cur < 27u && fm1_ms >> 8 & 1u) lit |= 1u << sq.cur;
-        } else if (pn.page == UI_P_SEQ && sq_tap.on && sq_tap.step < 27u) lit = 1u << sq_tap.step;      /* the SEQ page: the step playing */
+        } else if (pn.page == UI_P_SEQ && sq_tap.on && sq.len && sq_tap.step < 27u) lit = 1u << sq_tap.step;      /* the SEQ page: the step playing */
         for (k = 0; k < 27u; k++) {
             uint32_t on = lit >> k & 1u;
             if (edit_held && (k == 1u || k == 3u || k == 5u || k == 8u))     /* the oscillator chips */
@@ -324,7 +326,7 @@ static void app_main(void)
         if (fm1_ms < pn.t_flash) m |= 1u << BTN_SAVE;
         if (latch) m |= 1u << BTN_PLAY;
         if (patch_get(P_ARP)) m |= 1u << BTN_ARP;
-        if (patch_get(P_SEQ)) m |= 1u << BTN_SEQ;
+        if (patch_get(P_SEQ)) m |= 1u << BTN_SEQ;      /* (lit with no pattern too: nothing plays until REC has entered steps) */
         if (sq.rec) m |= 1u << BTN_REC;
         if (set.oct < 0) m |= 1u << BTN_OCT_DOWN;
         if (set.oct > 0) m |= 1u << BTN_OCT_UP;

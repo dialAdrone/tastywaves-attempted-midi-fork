@@ -265,7 +265,7 @@ static void arp_run(uint32_t frames)            /* once per block, after events_
         if (qs.active) seq_deactivate();
         return;
     }
-    if (arp_cfg.seq) {                          /* the sequencer: the arp's held notes become its transposition keys */
+    if (arp_cfg.seq && sq.len) {                /* the sequencer (a pattern with no steps plays nothing: the keys and the arp work as usual): the arp's held notes become its transposition keys */
         if (!qs.active) {
             uint32_t i;
             arp_release_on();

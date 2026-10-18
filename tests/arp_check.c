@@ -47,7 +47,7 @@ static int seq_is(const int *want, int n)
 }
 static void key_on(uint32_t n)                  /* what events_drain does */
 {
-    if (sq.rec) sink(1, n); else if (arp_cfg.seq) seq_in_on(n); else if (arp_on()) arp_in_on(n, 100); else sink(1, n);
+    if (sq.rec) sink(1, n); else if (arp_cfg.seq && sq.len) seq_in_on(n); else if (arp_on()) arp_in_on(n, 100); else sink(1, n);
 }
 static void key_off(uint32_t n) { arp_in_off(n); seq_in_off(n); if (!arp_sounding(n)) sink(0, n); }
 static void set_pat(const int *notes, int n)    /* note >= 0: a step; -1: a rest; -2: a tie to the step before */
@@ -159,6 +159,8 @@ int main(void)
         reset(); set_pat(p, 3); arp_cfg.seq = 1; arp_cfg.gate = 64; run(60);
         for (k = 0; k < nev; k++) { if (ev[k].on && ev[k].note == 60) n60++; if (!ev[k].on && ev[k].note == 60 && off60 < 0 && ev[k].t > 0) off60 = (int)ev[k].t; if (ev[k].on && ev[k].note == 64 && on64 < 0) on64 = (int)ev[k].t; }
         check(n60 == 1 && off60 > 7800 && off60 < 8800 && on64 > 0, "SEQ: a tie keeps the note going through two steps (one note-on, off after the second step)"); }
+    {   reset(); arp_cfg.seq = 1; arp_cfg.mode = ARP_UP; sq.len = 0; key_on(60); key_on(64); run(60);
+        check(ev[0].on && nev > 2 && arp_tap.step > 1u, "SEQ on with no pattern: the arp (or the keys) work as usual"); }
     {   int p[] = {60, 64}; int before;
         reset(); set_pat(p, 2); arp_cfg.seq = 1; run(40); sq.rec = 1; run(2); before = nev; run(100);
         hung = 0; for (i = 0; i < 128; i++) hung += snd[i];

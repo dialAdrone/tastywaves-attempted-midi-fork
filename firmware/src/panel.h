@@ -65,7 +65,7 @@ typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 2, 1};   /* HELP: two text pages (PG[HELP] stays empty) */
+static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 1, 2};   /* ... GLO, ARP, SEQ, HELP */   /* HELP: two text pages (PG[HELP] stays empty) */
 static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
@@ -556,9 +556,9 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         if (PDESC[k->id].min < 0) kbip |= 1u << i;
         if (k->fmt == F_TIME || k->fmt == F_TXT || k->fmt == F_RATE) ksmall |= 1u << i;
     }
-    {   uint32_t m = 0, n = sq.len;
+    {   uint32_t m = 0, n = sq.rec ? sq.cur : sq.len;       /* recording: the steps entered so far */
         for (i = 0; i < n && i < 32u; i++) if (sq.vel[i]) m |= 1u << i;
-        v->seq_mask = m; v->seq_len = (uint8_t)n; v->seq_rec = sq.rec; v->seq_on = (uint8_t)(sq_tap.on != 0u);
+        v->seq_mask = m; v->seq_len = (uint8_t)n; v->seq_rec = sq.rec; v->seq_on = (uint8_t)(sq_tap.on != 0u && sq.len != 0u);
         v->seq_pos = sq.rec ? sq.cur : (uint8_t)sq_tap.step;
     }
     v->kbip = (uint8_t)kbip;
