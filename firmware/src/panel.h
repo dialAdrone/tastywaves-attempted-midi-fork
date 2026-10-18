@@ -582,7 +582,8 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             if (arp_tap.ext) d = ui_cat(d, "EXT CLOCK");
             else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }
             d = ui_cat(d, "  ");
-            ui_cat(d, TXT[TX_ARATE][patch_get(P_ARP_RATE)]);
+            d = ui_cat(d, TXT[TX_ARATE][patch_get(P_ARP_RATE)]);
+            if (arp_ext.ticks) { d = ui_cat(d, "  C"); ui_num(d, (int32_t)(arp_ext.ticks % 10000u)); }   /* clock pulses received (a check that the clock arrives) */
         }
         for (s = 0; s < 2u; s++)
             for (i = 0; i < 4u; i++) {
