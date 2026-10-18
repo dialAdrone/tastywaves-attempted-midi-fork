@@ -229,7 +229,7 @@ static void app_main(void)
             sq.cur++;
         }
         if (sq.rec && sq.cur >= SEQ_MAXN) { sq.len = SEQ_MAXN; sq.rec = 0; }  /* 32 steps: full */
-        if (!rec_pass && (b & (1u << BTN_PLAY)) && patch_get(P_SEQ) && sq.len) sq_run ^= 1u;      /* the sequencer is on: PLAY starts / stops it (latch is for the arp and plain playing) */
+        if (!rec_pass && (b & (1u << BTN_PLAY)) && patch_get(P_SEQ) && sq.len && !latch) sq_run ^= 1u;      /* the sequencer is on: PLAY starts / stops it (with latch on, PLAY turns the latch off first) */
         else if (!rec_pass && (b & (1u << BTN_PLAY))) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
             latch ^= 1u;
             for (k = 0; k < 27u; k++)

@@ -491,18 +491,19 @@ static uint32_t ui_seq_h(const ui_view_t *v)               /* a hash of the note
 static void ui_seq_grid(uint32_t y, const ui_view_t *v)       /* the pattern: 4 rows of 8 tiles with the note each plays; white = playing / being recorded, yellow = transposed */
 {
     static const char NN[12][3] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-    uint32_t i;
-    cv_begin(240, 84, C_BLACK);
-    for (i = 0; i < 32u; i++) {
-        int32_t x = (int32_t)(i & 7u) * 30, ty = (int32_t)(i >> 3) * 21;
+    uint32_t i, h;
+    for (h = 0; h < 2u; h++) {                  /* two canvases of two tile rows (a canvas holds 64 rows at most) */
+    cv_begin(240, 42, C_BLACK);
+    for (i = h * 16u; i < h * 16u + 16u; i++) {
+        int32_t x = (int32_t)(i & 7u) * 30, ty = (int32_t)((i >> 3) & 1u) * 21;
         uint32_t cur = i == v->seq_pos && (v->seq_on || v->seq_rec);
         if (v->seq_set) {                       /* the lane: a bar a step from the middle line, the step being edited framed */
-            int32_t mv = (int32_t)v->seq_mod[i] - 64, h = (mv < 0 ? -mv : mv) * 9 / 64;
+            int32_t mv = (int32_t)v->seq_mod[i] - 64, bh = (mv < 0 ? -mv : mv) * 9 / 64;
             uint32_t on = i < v->seq_len || !v->seq_len;
             uint16_t c = i == v->seq_pos && v->seq_on ? C_WHITE : UI_ACC;
             cv_rect(x, ty, 29, 20, on ? UI_ACC3 : C_BLACK);
             cv_rect(x + 3, ty + 10, 23, 1, UI_DIM);
-            if (h) cv_rect(x + 3, mv > 0 ? ty + 10 - h : ty + 11, 23, h, c);
+            if (bh) cv_rect(x + 3, mv > 0 ? ty + 10 - bh : ty + 11, 23, bh, c);
             if (i == v->seq_cur) { cv_rect(x, ty, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty + 19, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty, 1, 20, RGB(255, 200, 90)); cv_rect(x + 28, ty, 1, 20, RGB(255, 200, 90)); }
         } else if (i < v->seq_len) {
             uint32_t nt = v->seq_note[i];
@@ -522,7 +523,8 @@ static void ui_seq_grid(uint32_t y, const ui_view_t *v)       /* the pattern: 4 
         } else if (v->seq_rec && i == v->seq_pos) cv_rect(x, ty, 29, 20, C_WHITE);
         else cv_rect(x + 12, ty + 9, 5, 2, UI_ACC3);
     }
-    cv_blit(0, y);
+    cv_blit(0, y + h * 42u);
+    }
 }
 
 static void ui_list(uint32_t y, const ui_view_t *v)

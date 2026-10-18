@@ -481,7 +481,7 @@ static void block_control(void)
     arp_cfg.mode = p[P_ARP]; arp_cfg.rate = p[P_ARP_RATE]; arp_cfg.oct = p[P_ARP_OCT];
     arp_cfg.gate = p[P_ARP_GATE]; arp_cfg.swing = p[P_ARP_SWING]; arp_cfg.bpm = p[P_TEMPO]; arp_cfg.seq = p[P_SEQ]; arp_cfg.mglide = p[P_MOD_GLIDE];
     if (p[P_MOD]) {                             /* the modulation lane moves its target (the patch itself is not touched; the smoother below rounds the edges) */
-        int32_t a = (seq_mod_q8() * p[P_MOD_DEPTH]) >> 8;       /* lane value x depth: +-6400 at the extremes */
+        int32_t a = (seq_mod_q8() * p[P_MOD_DEPTH]) / 256;       /* lane value x depth: +-6400 at the extremes */
         switch (p[P_MOD]) {
         case 1: p[P_POS1] = pclamp(P_POS1, p[P_POS1] + a * 4095 / 6400); p[P_POS2] = pclamp(P_POS2, p[P_POS2] + a * 4095 / 6400); break;
         case 2: p[P_CUTOFF] = pclamp(P_CUTOFF, p[P_CUTOFF] + a * 127 / 6400); break;

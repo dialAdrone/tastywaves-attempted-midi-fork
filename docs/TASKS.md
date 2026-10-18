@@ -143,3 +143,5 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - 2026-10-18 SEQ transport: with SEQ on and a pattern, PLAY starts / stops the sequencer (it stays on, the SEQ page reads STOP; a start begins at step 1, REC end or SEQ on starts it). Latch is not available while the sequencer is on. Test: tests/scripts/seq2.txt.
 
 - 2026-10-18 T28 stage S3 (modulation lane): SEQ page set 2 (TARGET / DEPTH / STEP / VALUE), patch params P_MOD, P_MOD_DEPTH, P_MOD_GLIDE (P_COUNT 57; records drop trailing defaults), lane `ml[32]` in RAM (neutral 0), applied in block_control to es.p (POS both oscs, cutoff, BEND, drive) from seq_mod_q8() (once a block, 32-bit divide). GLIDE is knob 1 of set 3 of the SEQ page. Tests: arp_check lane cases. Device test: section 14.
+
+- 2026-10-18 S3 review fixes: the SEQ grid drew only 64 of its 84 rows (canvas limit 240x64 on the device): steps 25-32 were invisible, now two canvases; PLAY turns latch off first when latch is on, else it is the transport; lane step reset on start; MIDI Start restarts a stopped sequencer; no negative shift in the lane scaling.
