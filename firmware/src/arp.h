@@ -30,7 +30,21 @@ static struct {
     volatile int32_t gate;                      /* 1..127: note length, 127 = the whole step */
     volatile int32_t swing;                     /* 0..50: percent of a step the odd steps are late */
     volatile int32_t bpm;                       /* 40..240 */
-} arp_cfg = { ARP_OFF, ARP_R16, 1, 64, 0, 120 };
+    volatile int32_t seq;                       /* 1: the note sequencer plays (the arp is bypassed) */
+} arp_cfg = { ARP_OFF, ARP_R16, 1, 64, 0, 120, 0 };
+
+/* ---- the note sequencer (T28 stage S2): one pattern of up to 32 steps in RAM, written by the main loop only while sq.rec is
+ * set (step input), read by the ISR. A step is a note (0..127), a velocity (0 = rest) and a tie flag (the previous note goes on
+ * through this step). Keys held while it plays transpose it: the newest held key minus C4 (60), so C4 plays the pattern as
+ * recorded; no key held plays it as recorded. It uses the arp's clock, rate, gate, swing and tempo. */
+#define SEQ_MAXN 32u
+static struct {
+    volatile uint8_t note[SEQ_MAXN], vel[SEQ_MAXN], tie[SEQ_MAXN];
+    volatile uint8_t len;                       /* steps 0..32 (0: nothing to play) */
+    volatile uint8_t rec;                       /* main loop: step input is on (the ISR plays nothing and keys sound as plain notes) */
+    volatile uint8_t cur;                       /* main loop: the step input writes next */
+} sq;
+static struct { volatile uint32_t step, on; } sq_tap;           /* the step playing (ISR writes) and whether the sequencer is running */
 static struct { volatile uint32_t ticks, start; } arp_ext;      /* counters, main increments */
 static struct { volatile uint32_t step, ext, beat_blocks; } arp_tap;   /* steps played so far; 1 = following the MIDI clock; blocks (256 frames) the last 24 clock ticks took (the screen: 10336 / this = BPM) */
 
@@ -41,6 +55,7 @@ static struct {
     uint32_t gate_left, step_left, step_idx, pos, acc, rnd;
     uint32_t ext_seen, ext_start, ext_idle, ext_ever, blk, mark, tk_acc;
 } ar = { .rnd = 12345u };
+static struct { uint8_t active, nh, h[ARP_MAXN]; int32_t trans; uint32_t pos; } qs;     /* the sequencer (ISR): running, keys held (for the transposition), pattern position */
 
 static int arp_on(void) { return arp_cfg.mode != ARP_OFF; }
 static int arp_sounding(uint32_t note)
@@ -77,10 +92,12 @@ static void arp_in_off(uint32_t note)
         if (ar.note[i] != note) { ar.note[j] = ar.note[i]; ar.vel[j] = ar.vel[i]; j++; }
     ar.n = (uint8_t)j;
 }
-static void arp_clear(void)                     /* all notes off / panic */
+static void arp_clear(void)                     /* all notes off / panic (the sequencer's held keys too) */
 {
     arp_release_on();
     ar.n = 0;
+    qs.nh = 0;
+    qs.trans = 0;
 }
 
 static void arp_deactivate(void)                /* the arp went off: keys still down (or latched) sound as plain notes */
@@ -162,6 +179,71 @@ static void arp_sub(void)                       /* one sub-tick */
     if (!ar.step_left && ar.n) arp_step();
 }
 
+/* ---- sequencer: keys held (transposition) */
+static int seq_sounding(uint32_t note) { return arp_sounding(note); }      /* (the sequencer plays through the arp's note list ar.on) */
+static void seq_trans(void) { qs.trans = qs.nh ? (int32_t)qs.h[qs.nh - 1u] - 60 : 0; }
+static void seq_in_on(uint32_t note)
+{
+    uint32_t i;
+    for (i = 0; i < qs.nh; i++)                 /* the newest press goes last */
+        if (qs.h[i] == note) { for (; i + 1u < qs.nh; i++) qs.h[i] = qs.h[i + 1u]; qs.nh--; break; }
+    if (qs.nh >= ARP_MAXN) { uint32_t k; for (k = 1; k < qs.nh; k++) qs.h[k - 1u] = qs.h[k]; qs.nh--; }
+    qs.h[qs.nh++] = (uint8_t)note;
+    seq_trans();
+}
+static void seq_in_off(uint32_t note)
+{
+    uint32_t i, j = 0;
+    for (i = 0; i < qs.nh; i++) if (qs.h[i] != note) qs.h[j++] = qs.h[i];
+    qs.nh = (uint8_t)j;
+    seq_trans();
+}
+static void seq_clear(void) { arp_release_on(); qs.nh = 0; seq_trans(); }
+static void seq_deactivate(void)                /* the sequencer went off (or step input began): keys still down sound as plain notes */
+{
+    uint32_t i;
+    arp_release_on();
+    for (i = 0; i < qs.nh; i++) ARP_NOTE_ON(qs.h[i], 100u);
+    qs.nh = 0;
+    qs.trans = 0;
+    qs.active = 0;
+    sq_tap.on = 0;
+}
+
+static void seq_step(void)
+{
+    uint32_t len = sq.len > SEQ_MAXN ? SEQ_MAXN : sq.len, i = qs.pos, nx, rate, rl, sw, iv, gl, vel;
+    int32_t n;
+    if (i >= len) i = 0;
+    nx = i + 1u >= len ? 0u : i + 1u;
+    rate = (uint32_t)arp_cfg.rate < ARP_NRATES ? (uint32_t)arp_cfg.rate : ARP_R16;
+    rl = ARP_RATE_SUB[rate];
+    sw = (rl * (uint32_t)(arp_cfg.swing < 0 ? 0 : arp_cfg.swing > 50 ? 50 : arp_cfg.swing) * 41u) >> 12;
+    iv = (ar.step_idx & 1u) ? rl - sw : rl + sw;
+    gl = (rl * (uint32_t)(arp_cfg.gate < 1 ? 1 : arp_cfg.gate > 127 ? 127 : arp_cfg.gate)) >> 7;
+    if (gl < 1u) gl = 1u;
+    if (gl > iv) gl = iv;
+    vel = sq.vel[i] & 127u;
+    if (sq.tie[i] && ar.on_n && vel) {          /* tied: the note from the step before goes on */
+        ar.gate_left = gl;
+    } else {
+        arp_release_on();
+        n = (int32_t)sq.note[i] + qs.trans;
+        if (vel && n >= 0 && n <= 127) arp_play((uint32_t)n, vel);
+        ar.gate_left = ar.on_n ? ((sq.tie[nx] && sq.vel[nx] && len > 1u) ? iv + 1u : gl) : 0u;      /* the next step is tied: no gap */
+    }
+    ar.step_left = iv;
+    ar.step_idx++;
+    qs.pos = nx;
+    sq_tap.step = i;
+}
+static void seq_sub(void)
+{
+    if (ar.gate_left && --ar.gate_left == 0u) arp_release_on();
+    if (ar.step_left) ar.step_left--;
+    if (!ar.step_left && sq.len) seq_step();
+}
+
 static void arp_run(uint32_t frames)            /* once per block, after events_drain */
 {
     uint32_t sub = 0, t, d, bpm;
@@ -176,13 +258,30 @@ static void arp_run(uint32_t frames)            /* once per block, after events_
     if (d) { ar.ext_idle = 0; ar.ext_ever = 1; if (d > 6u) d = 6u; }       /* (a burst after a stalled main loop: at most one 1/16) */
     else if (ar.ext_idle < 100000u) ar.ext_idle++;
     t = arp_ext.start;
-    if (t != ar.ext_start) { ar.ext_start = t; ar.pos = 0; ar.step_idx = 0; ar.step_left = 0; ar.acc = 0; }
+    if (t != ar.ext_start) { ar.ext_start = t; ar.pos = 0; qs.pos = 0; ar.step_idx = 0; ar.step_left = 0; ar.acc = 0; }
     arp_tap.ext = ar.ext_ever && ar.ext_idle < ARP_EXT_IDLE;      /* (tracked while the arp is off too: the page shows it) */
-    if (arp_cfg.mode == ARP_OFF) {
+    if (sq.rec) {                               /* step input: nothing plays from the clock, keys are plain notes */
         if (ar.active) arp_deactivate();
+        if (qs.active) seq_deactivate();
         return;
     }
-    ar.active = 1;
+    if (arp_cfg.seq) {                          /* the sequencer: the arp's held notes become its transposition keys */
+        if (!qs.active) {
+            uint32_t i;
+            arp_release_on();
+            for (i = 0; i < ar.n; i++) seq_in_on(ar.note[i]);
+            ar.n = 0; ar.active = 0;
+            qs.active = 1; qs.pos = 0; ar.step_left = 0; ar.step_idx = 0;
+            sq_tap.on = 1;
+        }
+    } else {
+        if (qs.active) seq_deactivate();
+        if (arp_cfg.mode == ARP_OFF) {
+            if (ar.active) arp_deactivate();
+            return;
+        }
+        ar.active = 1;
+    }
     if (arp_tap.ext) {
         sub = d * 4u;
         ar.acc = 0;
@@ -191,6 +290,6 @@ static void arp_run(uint32_t frames)            /* once per block, after events_
         ar.acc += frames * bpm * 2u;
         while (ar.acc >= ARP_SUB_Q) { ar.acc -= ARP_SUB_Q; sub++; }
     }
-    if (!sub && ar.n && !ar.step_left && !arp_tap.ext) sub = 1u;       /* the first key does not wait for a sub-tick boundary */
-    while (sub--) arp_sub();
+    if (!sub && !ar.step_left && !arp_tap.ext && (qs.active ? sq.len != 0u : ar.n != 0u)) sub = 1u;       /* the first key (or the start of the sequence) does not wait for a sub-tick boundary */
+    while (sub--) { if (qs.active) seq_sub(); else arp_sub(); }
 }

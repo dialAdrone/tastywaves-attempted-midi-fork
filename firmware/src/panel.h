@@ -65,7 +65,7 @@ typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 2};   /* HELP: two text pages (PG[HELP] stays empty) */
+static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 2, 1};   /* HELP: two text pages (PG[HELP] stays empty) */
 static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
@@ -97,6 +97,8 @@ static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_ARP] = {{K("MODE", P_ARP, F_TXT, 1, TX_ARP), K("RATE", P_ARP_RATE, F_TXT, 1, TX_ARATE), K("OCT", P_ARP_OCT, F_INT, 1, 0),
                    K("GATE", P_ARP_GATE, F_PCT, 1, 0)},
                   {K("SWING", P_ARP_SWING, F_INT, 1, 0), K("TEMPO", P_TEMPO, F_INT, 1, 0), KN, KN}},
+    [UI_P_SEQ] = {{K("RATE", P_ARP_RATE, F_TXT, 1, TX_ARATE), K("GATE", P_ARP_GATE, F_PCT, 1, 0), K("SWING", P_ARP_SWING, F_INT, 1, 0),
+                   K("TEMPO", P_TEMPO, F_INT, 1, 0)}},
 };
 
 static const char *const TXT[TX_N][8] = {
@@ -109,8 +111,10 @@ static struct {
     uint8_t page, look, sub, touched;
     uint8_t slot, browse, browse_pend;          /* entry loaded (0..7 factory, 8.. user); entry shown in the name line; load pending */
     uint8_t save_req, home_arm;                 /* HOME pressed and not yet decided: short press or hold */
+    uint8_t seq_arm;                            /* SEQ pressed and not yet decided (short: on / off, hold: the page) */
+    uint32_t t_seq, t_seq_tog;
     uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: on / off, hold: the page); the mode it switches back to */
-    uint32_t t_arp, t_arp_tog, n_arp_edge, n_arp_tog;   /* press time; time of the last switch; counts of press edges and switches (shown on the ARP page while testing) */
+    uint32_t t_arp, t_arp_tog;                  /* press time; time of the last switch */
     uint8_t sv, act, act_id, tgt;               /* SAVE gesture (SV_*), the request for pn_save_poll (ACT_*, user id), the chosen target id */
     uint32_t t_browse, t_flash, t_save, t_home, t_sv;
     char fmsg[12];                              /* the confirmation shown while t_flash runs */
@@ -180,9 +184,10 @@ static void pn_load_raw(uint32_t i, const app_set_t *st)
  * while an arp plays does not stop it. A patch saved with an arp mode brings its own. */
 static void pn_load(uint32_t i, const app_set_t *st)
 {
-    int32_t arp = patch_get(P_ARP);
+    int32_t arp = patch_get(P_ARP), seq = patch_get(P_SEQ);
     pn_load_raw(i, st);
     if (arp && !patch_get(P_ARP)) { patch_set(P_ARP, arp); pn.base[P_ARP] = (int16_t)arp; }
+    if (seq && !patch_get(P_SEQ)) { patch_set(P_SEQ, seq); pn.base[P_SEQ] = (int16_t)seq; }
 }
 
 /* the settings read back from flash: a bad one is the defaults (version byte, ranges) */
@@ -379,7 +384,6 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
     if (b & 1u << BTN_SEL) pn_page(UI_P_SEL);
     if (b & 1u << BTN_GLO) pn_page(UI_P_GLO);
     if (b & 1u << BTN_ARP) {
-        pn.n_arp_edge++;
         if (!pn.arp_arm && (!pn.t_arp_tog || fm1_ms - pn.t_arp_tog >= 200u)) { pn.arp_arm = 1; pn.t_arp = fm1_ms; }     /* (a bounce right after a switch is not a new press) */
     }
     if (pn.arp_arm) {
@@ -387,9 +391,18 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
             pn.arp_arm = 0;
             if (patch_get(P_ARP)) { pn.arp_last = (uint8_t)patch_get(P_ARP); patch_set(P_ARP, 0); }
             else patch_set(P_ARP, pn.arp_last ? pn.arp_last : 1);
-            pn.t_arp_tog = fm1_ms ? fm1_ms : 1u; pn.n_arp_tog++;
+            pn.t_arp_tog = fm1_ms ? fm1_ms : 1u;
             pn.base[P_ARP] = (int16_t)patch.p[P_ARP];               /* the button is a performance switch, not a patch edit: SAVE does not blink for it */
         } else if (fm1_ms - pn.t_arp >= 500u) { pn.arp_arm = 0; pn_page(UI_P_ARP); }   /* held: its page (again: the next set) */
+    }
+    if (b & 1u << BTN_SEQ && !pn.seq_arm && (!pn.t_seq_tog || fm1_ms - pn.t_seq_tog >= 200u)) { pn.seq_arm = 1; pn.t_seq = fm1_ms; }
+    if (pn.seq_arm) {
+        if (!(held >> BTN_SEQ & 1u)) {                              /* released: a short press switches the sequencer */
+            pn.seq_arm = 0;
+            patch_set(P_SEQ, patch_get(P_SEQ) ? 0 : 1);
+            pn.t_seq_tog = fm1_ms ? fm1_ms : 1u;
+            pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ];
+        } else if (fm1_ms - pn.t_seq >= 500u) { pn.seq_arm = 0; pn_page(UI_P_SEQ); }
     }
     if (b & 1u << BTN_HOME) {
         if (held >> BTN_EDIT & 1u) cpu_reset_req++;                 /* the max starts over */
@@ -543,6 +556,11 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         if (PDESC[k->id].min < 0) kbip |= 1u << i;
         if (k->fmt == F_TIME || k->fmt == F_TXT || k->fmt == F_RATE) ksmall |= 1u << i;
     }
+    {   uint32_t m = 0, n = sq.len;
+        for (i = 0; i < n && i < 32u; i++) if (sq.vel[i]) m |= 1u << i;
+        v->seq_mask = m; v->seq_len = (uint8_t)n; v->seq_rec = sq.rec; v->seq_on = (uint8_t)(sq_tap.on != 0u);
+        v->seq_pos = sq.rec ? sq.cur : (uint8_t)sq_tap.step;
+    }
     v->kbip = (uint8_t)kbip;
     v->ksmall = (uint8_t)ksmall;
 
@@ -571,7 +589,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             *d = 0;
         }
     }
-    if (pn.page == UI_P_FX || pn.page == UI_P_LFO || pn.page == UI_P_SEL || pn.page == UI_P_GLO || pn.page == UI_P_ARP) {
+    if (pn.page == UI_P_FX || pn.page == UI_P_LFO || pn.page == UI_P_SEL || pn.page == UI_P_GLO || pn.page == UI_P_ARP || pn.page == UI_P_SEQ) {
         uint32_t s, n = NSUB[pn.page];
         v->nsets = (uint8_t)n;
         v->set = pn.sub;
@@ -581,6 +599,13 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         v->lfo_shape = (uint8_t)patch_get(P_LFO_SHAPE);
         v->drive = (uint8_t)patch_get(P_DRIVE);
         ui_copy(v->ptxt, pn.page == UI_P_ARP ? TXT[TX_ARP][patch_get(P_ARP)] : TXT[TX_VMODE][patch_get(P_VMODE)], 8);
+        if (pn.page == UI_P_SEQ) {
+            char *d = v->info;
+            ui_copy(v->ptxt, sq.rec ? "RECORD" : patch_get(P_SEQ) ? "PLAY" : "OFF", 8);
+            if (sq.rec) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, " OF 32  PLAY=REST SEQ=TIE"); }
+            else if (!sq.len) ui_cat(d, "NO PATTERN  REC TO ENTER STEPS");
+            else { d = ui_cat(d, "LEN "); d = ui_num(d, sq.len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); } }
+        }
         if (pn.page == UI_P_ARP) {
             char *d = v->info;
             if (arp_tap.ext) {                  /* the clock's tempo, measured over the last quarter note */
@@ -593,9 +618,6 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }
             d = ui_cat(d, "  ");
             d = ui_cat(d, TXT[TX_ARATE][patch_get(P_ARP_RATE)]);
-            d = ui_cat(d, " P"); d = ui_num(d, (int32_t)(pn.n_arp_edge % 1000u));        /* test readout: ARP press edges, switches, clock pulses */
-            d = ui_cat(d, " T"); d = ui_num(d, (int32_t)(pn.n_arp_tog % 1000u));
-            if (arp_ext.ticks) { d = ui_cat(d, " C"); ui_num(d, (int32_t)(arp_ext.ticks % 1000u)); }
         }
         for (s = 0; s < 2u; s++)
             for (i = 0; i < 4u; i++) {

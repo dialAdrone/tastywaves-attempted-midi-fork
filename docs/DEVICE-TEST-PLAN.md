@@ -190,3 +190,25 @@ Flash `build/vavewave.fwsc`. The arp is part of the patch (6 new parameters); ol
 | 12.12 | Timing feel | steps are in time (jitter up to 6 ms is known: the clock runs once per audio block) |
 | 12.13 | Hold keys, change patch (PRESETS) and back | no hung notes, no crash |
 
+## 13. Note sequencer (SEQ and REC buttons)
+
+Flash `build/vavewave.fwsc`. One pattern of up to 32 steps lives in RAM (it is lost at power-off; saving it with the patch is stage S4). It uses the arp's RATE, GATE, SWING and TEMPO (ARP page 1/2 or the SEQ page). The ARP page also still has the clock readout.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 13.1 | Short press REC | REC LED on, the SEQ page opens (step grid, "RECORD STEP 1") |
+| 13.2 | Play 4 keys | each sounds as a plain note and is a step; the key LEDs show the steps entered, the next one blinks |
+| 13.3 | Press PLAY | a rest step (PLAY's latch does nothing while recording) |
+| 13.4 | Press SEQ | a tie: the note before goes on through this step |
+| 13.5 | Short press REC again | recording ends; the pattern length is the steps entered (grid shows it) |
+| 13.6 | Short press SEQ | SEQ LED on; the pattern plays at the tempo, rests are silent, a tied note runs on |
+| 13.7 | RATE, GATE, SWING, TEMPO knobs on the SEQ page | speed, note length and shuffle change live |
+| 13.8 | Hold a key while it plays | the pattern is transposed by (that key minus C4); let go: back as recorded. A latched key (PLAY) keeps it transposed |
+| 13.9 | Short press SEQ again | stops; keys sound as plain notes again |
+| 13.10 | Hold REC (0.7 s) | pattern cleared (LEN 0, NO PATTERN) |
+| 13.11 | Record 32 steps | recording ends by itself at 32 |
+| 13.12 | SEQ on, ARP on | the sequencer plays (the arp waits); SEQ off: the arp comes back |
+| 13.13 | MIDI clock (tools/send_clock.py) | the sequencer follows it like the arp |
+| 13.14 | Change patch (PRESETS) while it plays | it keeps playing (the pattern is not part of the patch yet) |
+| 13.15 | CPU with the sequencer running | note the percentage |
+

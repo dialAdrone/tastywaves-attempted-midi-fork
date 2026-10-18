@@ -454,10 +454,16 @@ static void events_drain(void)
     uint32_t t = ev_tail, h = ev_head;
     while (t != h) {
         uint32_t e = ev_ring[t % EV_N], ty = e >> 16, note = (e >> 8) & 127u, vel = e & 127u;
-        if (ty == EV_ON && vel) { if (arp_on()) arp_in_on(note, vel); else note_on(note, vel); }
-        else if (ty == EV_ON || ty == EV_OFF) {
-            if (arp_on() || ar.active) { arp_in_off(note); if (!arp_sounding(note)) note_off(note); }   /* (also in the block the arp goes off in) */   /* (a note played before the arp went on still ends) */
-            else note_off(note);
+        if (ty == EV_ON && vel) {               /* step input: plain notes; else the sequencer (its transposition keys), the arp, or plain */
+            if (sq.rec) note_on(note, vel);
+            else if (arp_cfg.seq) seq_in_on(note);
+            else if (arp_on()) arp_in_on(note, vel);
+            else note_on(note, vel);
+        }
+        else if (ty == EV_ON || ty == EV_OFF) {   /* taken out of both lists whatever mode it is: the mode may have changed since the key went down */
+            arp_in_off(note);
+            seq_in_off(note);
+            if (!arp_sounding(note)) note_off(note);
         }
         else if (ty == EV_ALLOFF) { arp_clear(); all_off(0); }
         else if (ty == EV_PANIC) { arp_clear(); all_off(1); }
@@ -473,7 +479,7 @@ static void block_control(void)
     int32_t *p = es.p;
     for (i = 0; i < P_COUNT; i++) p[i] = pclamp(i, patch.p[i]);
     arp_cfg.mode = p[P_ARP]; arp_cfg.rate = p[P_ARP_RATE]; arp_cfg.oct = p[P_ARP_OCT];
-    arp_cfg.gate = p[P_ARP_GATE]; arp_cfg.swing = p[P_ARP_SWING]; arp_cfg.bpm = p[P_TEMPO];
+    arp_cfg.gate = p[P_ARP_GATE]; arp_cfg.swing = p[P_ARP_SWING]; arp_cfg.bpm = p[P_TEMPO]; arp_cfg.seq = p[P_SEQ];
     if (p[P_VMODE] != es.vmode) {               /* a new voice mode: release everything */
         if (es.vmode >= 0) all_off(0);
         es.vmode = p[P_VMODE];

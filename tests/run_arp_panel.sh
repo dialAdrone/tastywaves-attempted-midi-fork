@@ -12,6 +12,7 @@ build/host/vavewave build/host/arp3 tests/scripts/arp3.txt > build/host/arp3.log
 build/host/vavewave build/host/arp4 tests/scripts/arp4.txt > build/host/arp4.log
 build/host/vavewave build/host/arp5 tests/scripts/arp5.txt > build/host/arp5.log
 build/host/vavewave build/host/arp6 tests/scripts/arp6.txt > build/host/arp6.log
+build/host/vavewave build/host/seq tests/scripts/seq.txt > build/host/seq.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re
@@ -53,6 +54,21 @@ check(sum(1 for t, k, n in h if 350 < t < 1200 and k == 'on') >= 5, 'held keys +
 check(not any(1300 < t < 2000 and k == 'on' for t, k, n in h), 'ARP off: the held keys are plain notes')
 check(sum(1 for t, k, n in h if 2050 < t < 2900 and k == 'on') >= 4, 'ARP on again with the keys still down: arpeggio again')
 check(not any(t > 3000 and k == 'on' for t, k, n in h), 'keys up: silence')
+sl = open('build/host/seq.log').read().splitlines()
+mo = [int(re.match(r'\s*\d+ ms  MIDI out 90 (\d+)', l)[1]) for l in sl if re.match(r'\s*\d+ ms  MIDI out 90 ', l)]
+n0, n4, n7 = mo[0], mo[1], mo[2]
+q = load('build/host/seq.log')
+qo = [(t, n) for t, k, n in q if k == 'on' and 1090 < t < 3000]
+check(len(mo) >= 3 and (n4 - n0, n7 - n0) == (4, 7), 'step input: the keys sound as plain notes while recording')
+check([n for t, n in qo[:6]] == [n0, n4, n7, n0, n4, n7], 'SEQ plays the 5 steps: note note (rest) note (tie): %s' % [n for t, n in qo[:7]])
+gp = [qo[i + 1][0] - qo[i][0] for i in range(5)]
+check(all(abs(a - b) <= 8 for a, b in zip(gp, [125, 250, 250, 125, 250])), 'timing: 125 / 250 (rest) / 250 (tie) ms (%s)' % gp)
+off7 = [t for t, k, n in q if k == 'off' and n == n7 and t > 1150 and t not in [x for x, y in qo]]
+tr = [(t, n) for t, k, n in q if k == 'on' and 3200 < t < 4300]
+d = n0 + 1 - 60
+check(len(tr) >= 4 and all(n - d in (n0, n4, n7) for t, n in tr[:4]), 'a held key transposes the pattern by (key - 60 = %d)' % d)
+check(not any(t > 4500 and t < 5100 and False for t, k, n in q) and any(4400 < t < 5200 and k == 'on' and n in (n0, n4, n7) for t, k, n in q), 'key released: the pattern plays as recorded again')
+check(not any(t > 6300 and k == 'on' for t, k, n in q), 'REC held clears the pattern: silence')
 print('arp panel: %d failures' % fails)
 raise SystemExit(1 if fails else 0)
 PY

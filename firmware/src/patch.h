@@ -68,6 +68,7 @@ enum {
     P_ARP_GATE,     /* note length 1..127 of 128 of a step */
     P_ARP_SWING,    /* 0..50 % of a step: the odd steps are late */
     P_TEMPO,        /* BPM 40..240 (the arp and the sequencers; follows MIDI clock when there is one) */
+    P_SEQ,          /* 0 off, 1 the note sequencer plays (the arp is bypassed) */
     P_COUNT
 };
 
@@ -88,7 +89,7 @@ static const pdesc_t PDESC[P_COUNT] = {
     {"MODE", 0, 2, 0},    {"GLIDE", 0, 127, 0},
     {"DRIVE", 0, 127, 0}, {"VOL", 0, 127, 100},
     {"ARP", 0, 7, 0},     {"RATE", 0, 5, 3},     {"OCT", 1, 4, 1},      {"GATE", 1, 127, 64},  {"SWING", 0, 50, 0},
-    {"TEMPO", 40, 240, 120},
+    {"TEMPO", 40, 240, 120}, {"SEQ", 0, 1, 0},
 };
 
 static struct { volatile int32_t p[P_COUNT]; } patch;                       /* main writes */

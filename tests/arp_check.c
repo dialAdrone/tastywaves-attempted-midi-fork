@@ -26,7 +26,7 @@ static void sink(int on, uint32_t n)
 static void run(uint32_t blocks) { while (blocks--) { arp_run(256); now += 256; } }
 static void reset(void)
 {
-    memset(&ar, 0, sizeof ar); ar.rnd = 12345u; memset(snd, 0, sizeof snd);
+    memset(&ar, 0, sizeof ar); ar.rnd = 12345u; memset(snd, 0, sizeof snd); memset((void *)&sq, 0, sizeof sq); memset(&qs, 0, sizeof qs); arp_cfg.seq = 0; sq_tap.on = 0;
     arp_cfg.mode = ARP_OFF; arp_cfg.rate = ARP_R16; arp_cfg.oct = 1; arp_cfg.gate = 64; arp_cfg.swing = 0; arp_cfg.bpm = 120;
     arp_ext.ticks = arp_ext.start = 0;
     nev = 0; now = 0;
@@ -45,8 +45,21 @@ static int seq_is(const int *want, int n)
     if (k < n) return 0;
     return memcmp(got, want, (size_t)n * sizeof(int)) == 0;
 }
-static void key_on(uint32_t n) { if (arp_on()) arp_in_on(n, 100); else sink(1, n); }     /* what events_drain does */
-static void key_off(uint32_t n) { if (arp_on() || ar.active) { arp_in_off(n); if (!arp_sounding(n)) sink(0, n); } else sink(0, n); }
+static void key_on(uint32_t n)                  /* what events_drain does */
+{
+    if (sq.rec) sink(1, n); else if (arp_cfg.seq) seq_in_on(n); else if (arp_on()) arp_in_on(n, 100); else sink(1, n);
+}
+static void key_off(uint32_t n) { arp_in_off(n); seq_in_off(n); if (!arp_sounding(n)) sink(0, n); }
+static void set_pat(const int *notes, int n)    /* note >= 0: a step; -1: a rest; -2: a tie to the step before */
+{
+    int i;
+    for (i = 0; i < n; i++) {
+        sq.note[i] = (uint8_t)(notes[i] >= 0 ? notes[i] : i ? sq.note[i - 1] : 0);
+        sq.vel[i] = (uint8_t)(notes[i] == -1 ? 0 : i && notes[i] == -2 ? sq.vel[i - 1] : 100);
+        sq.tie[i] = notes[i] == -2;
+    }
+    sq.len = (uint8_t)n;
+}
 static void hold3(void) { arp_in_on(60, 100); arp_in_on(64, 100); arp_in_on(67, 100); }
 static uint32_t nth_on_time(int k)
 {
@@ -131,6 +144,30 @@ int main(void)
           bb = arp_tap.beat_blocks;
           check(bb == 96, "external tempo: 24 ticks of 4 blocks = a quarter of 96 blocks (10336 / 96 = 108 BPM)"); }
         run(200); check(arp_tap.ext == 0, "no clock for 0.5 s: back to the internal tempo"); }
+    {   int p[] = {60, 64, 67, -1}, w[] = {60, 64, 67, 60, 64, 67};
+        reset(); set_pat(p, 4); arp_cfg.seq = 1; run(400);
+        check(seq_is(w, 6), "SEQ: C E G rest, then again");
+        { uint32_t a = nth_on_time(3) - nth_on_time(0);
+          check(a >= 21700 && a <= 22400, "the rest takes a step (4 steps of 125 ms = 22050 samples per loop, 3 notes + rest: the 4th note 4 steps after the 1st)" ); } }
+    {   int p[] = {60, 64, 67, 72}, w[] = {67, 71, 74, 79};
+        reset(); set_pat(p, 4); arp_cfg.seq = 1; key_on(67); run(400);
+        check(seq_is(w, 4), "SEQ: a held G (67) transposes by +7");
+        key_off(67); i = nev; run(100); ons(got, 64);
+        check(nev > i && ev[nev - 1].note != 0 && snd[67 + 7] + snd[67] + snd[71] + snd[74] + snd[79] <= 1, "SEQ: key released: back to the pattern as recorded");
+        { int c = 0; for (i = nev - 8; i < nev; i++) c += ev[i].on && ev[i].note < 73 && ev[i].note >= 60; check(c >= 2, "(notes 60..72 are back)"); } }
+    {   int p[] = {60, -2, 64}, k, n60 = 0, off60 = -1, on64 = -1;
+        reset(); set_pat(p, 3); arp_cfg.seq = 1; arp_cfg.gate = 64; run(60);
+        for (k = 0; k < nev; k++) { if (ev[k].on && ev[k].note == 60) n60++; if (!ev[k].on && ev[k].note == 60 && off60 < 0 && ev[k].t > 0) off60 = (int)ev[k].t; if (ev[k].on && ev[k].note == 64 && on64 < 0) on64 = (int)ev[k].t; }
+        check(n60 == 1 && off60 > 7800 && off60 < 8800 && on64 > 0, "SEQ: a tie keeps the note going through two steps (one note-on, off after the second step)"); }
+    {   int p[] = {60, 64}; int before;
+        reset(); set_pat(p, 2); arp_cfg.seq = 1; run(40); sq.rec = 1; run(2); before = nev; run(100);
+        hung = 0; for (i = 0; i < 128; i++) hung += snd[i];
+        check(nev == before && hung == 0, "step input: the sequencer is silent and nothing hangs");
+        sq.rec = 0; run(100); check(nev > before, "step input over: it plays again"); }
+    {   int p[] = {60, 64};
+        reset(); set_pat(p, 2); arp_cfg.seq = 1; key_on(67); run(40); arp_cfg.seq = 0; run(2);
+        check(snd[67], "sequencer off with a key held: the key sounds as a plain note");
+        key_off(67); hung = 0; for (i = 0; i < 128; i++) hung += snd[i]; check(hung == 0, "(and ends with the key)"); }
     {   uint32_t seed = 99u; int step;
         reset(); arp_cfg.mode = ARP_UP;
         for (step = 0; step < 20000; step++) {
@@ -138,7 +175,7 @@ int main(void)
             switch ((seed >> 20) % 10u) {
             case 0: case 1: key_on(48 + (seed >> 8) % 40u); break;
             case 2: case 3: key_off(48 + (seed >> 8) % 40u); break;
-            case 4: arp_cfg.mode = (int32_t)((seed >> 8) % ARP_NMODES); break;
+            case 4: arp_cfg.mode = (int32_t)((seed >> 8) % ARP_NMODES); if (!((seed >> 12) & 3u)) arp_cfg.seq = (int32_t)((seed >> 14) & 1u); if (!((seed >> 16) & 7u)) sq.rec = (uint8_t)((seed >> 19) & 1u); break;
             case 5: arp_cfg.oct = 1 + (int32_t)((seed >> 8) & 3u); break;
             case 6: arp_cfg.rate = (int32_t)((seed >> 8) % ARP_NRATES); arp_cfg.gate = 1 + (int32_t)((seed >> 12) % 127u); break;
             case 7: arp_cfg.swing = (int32_t)((seed >> 8) % 51u); arp_cfg.bpm = 40 + (int32_t)((seed >> 12) % 201u); break;
@@ -148,7 +185,7 @@ int main(void)
             if (nev > MAXEV - 64) nev = 0;
             run(1 + (seed >> 14) % 3u);
         }
-        for (i = 0; i < 128; i++) key_off((uint32_t)i); arp_cfg.mode = ARP_UP; run(1); arp_clear(); run(300);
+        sq.rec = 0; arp_cfg.seq = 0; for (i = 0; i < 128; i++) key_off((uint32_t)i); arp_cfg.mode = ARP_UP; run(1); arp_clear(); run(300);
         hung = 0; for (i = 0; i < 128; i++) hung += snd[i];
         check(hung == 0 && bad == 0, "20000 random operations: no note out of range, none hangs after a clear"); }
     printf("arp_check: %d failures\n", fails + bad);

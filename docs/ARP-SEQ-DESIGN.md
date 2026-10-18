@@ -83,3 +83,10 @@ Gate length is a fraction of the step (10..100 %). Notes are always released by 
 - **L.** Arp parameters live in the patch; widen the patch log to 5 sectors. OK?
 - **M.** One pattern per patch, saved with it. OK, or a separate pattern library?
 - **N.** Build order S0..S4 as in section 10, arp first. OK?
+
+## 12. Built so far (S2: note sequencer), where it differs from the plan
+
+- Pattern is global RAM, 32 steps, one note per step (no per-step velocity input yet: 100), saved with the patch only in S4. Not yet the transposition root C3: held key minus C4 (60), so C4 plays it as recorded; no key held plays it as recorded.
+- Step input: REC short press starts/stops (stop sets the length to the steps entered), PLAY enters a rest, SEQ a tie, hold REC clears. SEQ short press switches the sequencer, hold opens the SEQ page. The sequencer shares RATE / GATE / SWING / TEMPO with the arp and bypasses it while on.
+- The first quick pass had a diagnostic readout on the ARP page; removed after device confirmation.
+

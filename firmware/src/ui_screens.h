@@ -23,7 +23,7 @@
 #define UI_Y_LINEA 182u
 #define UI_Y_PATCH 202u
 
-enum { UI_P_HOME, UI_P_EDIT, UI_P_FX, UI_P_ENV, UI_P_LFO, UI_P_SEL, UI_P_GLO, UI_P_ARP, UI_P_HELP, UI_P_N };
+enum { UI_P_HOME, UI_P_EDIT, UI_P_FX, UI_P_ENV, UI_P_LFO, UI_P_SEL, UI_P_GLO, UI_P_ARP, UI_P_SEQ, UI_P_HELP, UI_P_N };
 enum { UI_H_WATERFALL, UI_H_SPECTRUM, UI_H_MINIMAL, UI_H_N };
 
 typedef struct {
@@ -53,7 +53,9 @@ typedef struct {
     uint8_t flt_cut, flt_res, flt_mode;         /* FX picture: cutoff, resonance 0..127, mode 0 LP 1 BP 2 HP */
     uint8_t lfo_shape, drive;                   /* LFO picture (0 sine 1 tri 2 saw 3 square 4 S&H), GLO picture 0..127 */
     char ptxt[8];                               /* SEL picture: the voice mode, big; ARP picture: the arp mode */
-    char info[40];                              /* ARP picture: tempo and rate */
+    char info[40];                              /* ARP and SEQ pictures: tempo and rate; steps */
+    uint8_t seq_len, seq_pos, seq_rec, seq_on;  /* SEQ picture: steps, the step playing / being recorded, step input on, running */
+    uint32_t seq_mask;                          /* SEQ picture: bit i = step i has a note (else a rest) */
     char list[8][16];                           /* FX / LFO / SEL / GLO: 4 rows x 2 columns of "LABEL VALUE" (14 chars) */
     char boot[2][32];                           /* GLO set 3 (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
 } ui_view_t;
@@ -377,6 +379,7 @@ static void ui_left_text(char *out, const ui_view_t *v)       /* the left part o
     case UI_P_LFO: ui_cat(d, v->sub ? "LFO 2/2" : "LFO 1/2"); break;
     case UI_P_SEL: ui_cat(d, "VOICE"); break;
     case UI_P_ARP: ui_cat(d, v->sub ? "ARP 2/2" : "ARP 1/2"); break;
+    case UI_P_SEQ: ui_cat(d, v->seq_rec ? "SEQ RECORD" : "SEQ"); break;
     case UI_P_GLO: ui_cat(d, v->sub == 2u ? "BOOT KEYS 3/3" : v->sub ? "GLOBAL 2/3" : "GLOBAL 1/3"); break;
     default:
         if (v->variant != UI_H_MINIMAL) { d = ui_cat5(d, v->tname); d = ui_cat(d, " "); }
@@ -473,6 +476,19 @@ static void ui_boot_pic(uint32_t y, const ui_view_t *v)       /* GLO set 3: what
     cv_blit(0, y);
 }
 
+static void ui_seq_grid(uint32_t y, const ui_view_t *v)       /* the pattern: one cell a step, white = playing / being recorded */
+{
+    uint32_t i;
+    cv_begin(240, 14, C_BLACK);
+    for (i = 0; i < 32u; i++) {
+        int32_t x = 8 + (int32_t)i * 7;
+        if (i < v->seq_len) cv_rect(x, 1, 5, 12, i == v->seq_pos && (v->seq_on || v->seq_rec) ? C_WHITE : (v->seq_mask >> i & 1u) ? UI_ACC : UI_DIM);
+        else if (v->seq_rec && i == v->seq_pos) cv_rect(x, 1, 5, 12, C_WHITE);
+        else cv_rect(x, 6, 5, 2, UI_ACC3);
+    }
+    cv_blit(0, y);
+}
+
 static void ui_list(uint32_t y, const ui_view_t *v)
 {
     uint32_t i;
@@ -500,8 +516,8 @@ static const char *const UI_HELP[2][14] = {
      "SAVE  STORE (HOLD: PICK, DEL)",
      "OCT- OCT+  OCTAVE DOWN, UP",
      "PLAY  LATCH: KEYS KEEP SOUND",
-     "ARP   ON/OFF (HOLD: PAGE)",
-     "EDIT+HOME  RESET CPU MAX",
+     "ARP SEQ  ON/OFF, HOLD: PAGE",
+     "REC   STEPS, HOLD: CLEAR",
      "EDIT+F# G# A# C#  PICK OSC",
      "HOME: NEXT PAGE, THEN EXIT"},
     {"HELP 2/2  KNOBS",
@@ -624,11 +640,11 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
                 ui_env(UI_Y_MID + i * 64u, i ? "FILTER ENV" : "AMP ENV", v->env[i], v->sub == i);
     } else if (v->page != UI_P_HOME) {          /* FX, LFO, SEL, GLO */
         uint32_t pk = v->page == UI_P_FX ? (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16
-                    : v->page == UI_P_LFO ? v->lfo_shape : v->page == UI_P_ARP ? 0x20000000u : v->page == UI_P_SEL ? v->voices | (uint32_t)v->voices_max << 8
+                    : v->page == UI_P_LFO ? v->lfo_shape : v->page == UI_P_ARP ? 0x20000000u : v->page == UI_P_SEQ ? (v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ 0x40000000u) : v->page == UI_P_SEL ? v->voices | (uint32_t)v->voices_max << 8
                     : v->sub == 2u ? 0x40000000u : (uint32_t)v->drive | (uint32_t)v->cpu_max << 8;
         uint32_t lch = full || s->set != v->set;
         for (i = 0; i < 8u && !lch; i++) lch = !ui_eq(s->list[i], v->list[i]);
-        if (full || s->pic_key != pk || ((v->page == UI_P_SEL || v->page == UI_P_ARP) && !ui_eq(s->ptxt, v->ptxt)) || (v->page == UI_P_ARP && !ui_eq(s->info, v->info))) {
+        if (full || s->pic_key != pk || ((v->page == UI_P_SEL || v->page == UI_P_ARP || v->page == UI_P_SEQ) && !ui_eq(s->ptxt, v->ptxt)) || ((v->page == UI_P_ARP || v->page == UI_P_SEQ) && !ui_eq(s->info, v->info))) {
             switch (v->page) {
             case UI_P_FX: ui_filter_pic(UI_Y_MID, v); break;
             case UI_P_LFO: ui_lfo_pic(UI_Y_MID, v->lfo_shape); break;
@@ -639,6 +655,11 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             case UI_P_ARP:
                 draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1);
                 ui_text_line(96, v->info, UI_GRAY);
+                break;
+            case UI_P_SEQ:
+                draw_text_box(0, 54, 240, &FONT_L, v->ptxt, UI_ACC, 1);
+                ui_text_line(82, v->info, UI_GRAY);
+                ui_seq_grid(98, v);
                 break;
             default:
                 if (v->sub == 2u) ui_boot_pic(UI_Y_MID, v);

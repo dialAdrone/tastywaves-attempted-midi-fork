@@ -148,7 +148,8 @@ static void app_main(void)
     app_set_t set;
     uint32_t prev = 0, started = 0, k, t_change = 0, dirty = 0, t_cpu = 0, cpu = 0, cpu_mx = 0, gen_seen = 0;
     uint8_t held[27] = {0};                     /* the note each key plays */
-    uint32_t arp_prev = 0, t_rejoin = 0;       /* the arp mode last pass; when latched notes join a newly started arp (0 = not pending) */
+    uint32_t route_prev = 0, t_rejoin = 0, t_rec = 0, rec_arm = 0;   /* where keys go (1 arp, 2 sequencer, 0 plain), last pass; REC pressed and not yet decided */
+      /* the arp mode last pass; when latched notes join a newly started arp (0 = not pending) */
     uint8_t latch = 0, lat[16] = {0};           /* LATCH (the PLAY button): notes kept sounding after the key is up, 1 bit per note */
 
     boot_btn = fm1_in.buttons;                  /* before anything else */
@@ -207,7 +208,28 @@ static void app_main(void)
                 for (k = 0; k < 16u; k++) lat[k] = nl[k];
             }
         }
-        if (b & (1u << BTN_PLAY)) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
+        if (b & (1u << BTN_REC)) { rec_arm = 1; t_rec = fm1_ms; }
+        if (rec_arm) {
+            if (!(hb >> BTN_REC & 1u)) {        /* a short press: step input on / off (off keeps what was entered as the pattern) */
+                rec_arm = 0;
+                if (!sq.rec) { sq.cur = 0; sq.rec = 1; pn.page = UI_P_SEQ; pn.sub = 0; pn.touched = 4; }   /* (and its page shows the steps) */
+                else { if (sq.cur) sq.len = sq.cur; sq.rec = 0; }
+            } else if (fm1_ms - t_rec >= 700u) {    /* held: clear the pattern */
+                rec_arm = 0;
+                sq.len = 0; sq.cur = 0;
+                for (k = 0; k < SEQ_MAXN; k++) { sq.note[k] = 0; sq.vel[k] = 0; sq.tie[k] = 0; }
+            }
+        }
+        if (sq.rec && b & (1u << BTN_PLAY) && sq.cur < SEQ_MAXN) {         /* step input: PLAY is a rest */
+            sq.note[sq.cur] = 0; sq.vel[sq.cur] = 0; sq.tie[sq.cur] = 0;
+            sq.cur++;
+        }
+        if (sq.rec && b & (1u << BTN_SEQ) && sq.cur && sq.cur < SEQ_MAXN) {   /* step input: SEQ ties the step before */
+            sq.note[sq.cur] = sq.note[sq.cur - 1u]; sq.vel[sq.cur] = sq.vel[sq.cur - 1u]; sq.tie[sq.cur] = 1;
+            sq.cur++;
+        }
+        if (sq.rec && sq.cur >= SEQ_MAXN) { sq.len = SEQ_MAXN; sq.rec = 0; }  /* 32 steps: full */
+        if (!sq.rec && (b & (1u << BTN_PLAY))) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
             latch ^= 1u;
             for (k = 0; k < 27u; k++)
                 if (latch && (started >> k & 1u)) { lat[held[k] >> 3] |= (uint8_t)(1u << (held[k] & 7u)); started &= ~(1u << k); }
@@ -219,12 +241,12 @@ static void app_main(void)
         {
             uint8_t look = set.look;
             uint32_t d0 = dirty;
-            pn_buttons(b, hb, &set, &dirty);
+            pn_buttons(sq.rec ? b & ~(1u << BTN_SEQ) : b, hb, &set, &dirty);
             if (look != set.look || dirty != d0) t_change = fm1_ms;
         }
-        {   uint32_t am = (uint32_t)patch_get(P_ARP);
-            if (am && !arp_prev) t_rejoin = fm1_ms + 15u;      /* the arp came on over sounding notes (held keys, latched): after a block or two they become its notes */
-            arp_prev = am;
+        {   uint32_t am = sq.rec ? 0u : patch_get(P_SEQ) ? 2u : patch_get(P_ARP) ? 1u : 0u;
+            if (am && am != route_prev) t_rejoin = fm1_ms + 15u;   /* the arp or the sequencer came on over sounding notes (held keys, latched): after a block or two they become its notes */
+            route_prev = am;
             if (t_rejoin && fm1_ms >= t_rejoin) {
                 t_rejoin = 0;
                 if (am) {
@@ -245,12 +267,15 @@ static void app_main(void)
             if (down >> k & 1u) {
                 int chip = k == 1u ? 0 : k == 3u ? 1 : k == 5u ? 2 : k == 8u ? 3 : -1;   /* the OP1..OP4 black keys */
                 if (edit_held && chip >= 0) { pn.page = UI_P_EDIT; pn.sub = (uint8_t)chip; pn.touched = 4; }
-                else if (latch) {               /* latched: the same note again lets it go; the key's release does nothing */
+                else if (latch && !sq.rec) {    /* latched: the same note again lets it go; the key's release does nothing */
                     uint32_t n = base + k;
                     if (lat[n >> 3] >> (n & 7u) & 1u) { lat[n >> 3] &= (uint8_t)~(1u << (n & 7u)); stop((uint8_t)n); midi_send(0x80, n, 0); }
                     else { lat[n >> 3] |= (uint8_t)(1u << (n & 7u)); play((uint8_t)n, 100); midi_send(0x90, n, 100); }
                 }
-                else { started |= 1u << k; held[k] = (uint8_t)(base + k); play(held[k], 100); midi_send(0x90, held[k], 100); }
+                else {
+                    started |= 1u << k; held[k] = (uint8_t)(base + k); play(held[k], 100); midi_send(0x90, held[k], 100);
+                    if (sq.rec && sq.cur < SEQ_MAXN) { sq.note[sq.cur] = held[k]; sq.vel[sq.cur] = 100; sq.tie[sq.cur] = 0; sq.cur++; }    /* step input */
+                }
             }
             if (up >> k & 1u && started >> k & 1u) { started &= ~(1u << k); stop(held[k]); midi_send(0x80, held[k], 0); }
         }
@@ -285,6 +310,10 @@ static void app_main(void)
         ui_draw(&pn_view, &pn_shadow);          /* redraws only what changed */
 
         lit = eng_lit(base);                    /* LEDs: what sounds, on the keys of this octave */
+        if (sq.rec) {                           /* step input: the steps entered, the next one blinking */
+            lit = sq.cur >= 27u ? 0x7FFFFFFu : (1u << sq.cur) - 1u;
+            if (sq.cur < 27u && fm1_ms >> 8 & 1u) lit |= 1u << sq.cur;
+        } else if (pn.page == UI_P_SEQ && sq_tap.on && sq_tap.step < 27u) lit = 1u << sq_tap.step;      /* the SEQ page: the step playing */
         for (k = 0; k < 27u; k++) {
             uint32_t on = lit >> k & 1u;
             if (edit_held && (k == 1u || k == 3u || k == 5u || k == 8u))     /* the oscillator chips */
@@ -295,6 +324,8 @@ static void app_main(void)
         if (fm1_ms < pn.t_flash) m |= 1u << BTN_SAVE;
         if (latch) m |= 1u << BTN_PLAY;
         if (patch_get(P_ARP)) m |= 1u << BTN_ARP;
+        if (patch_get(P_SEQ)) m |= 1u << BTN_SEQ;
+        if (sq.rec) m |= 1u << BTN_REC;
         if (set.oct < 0) m |= 1u << BTN_OCT_DOWN;
         if (set.oct > 0) m |= 1u << BTN_OCT_UP;
         for (k = 0; k < 14u; k++) fm1_led_key(k, (int)(m >> k & 1u));
