@@ -229,3 +229,18 @@ Flash `build/vavewave.fwsc`. The lane is one value a step (shown 0..127, 64 = ne
 | 14.8 | Hold REC | pattern and lane cleared (all values 64) |
 | 14.9 | CPU | note the percentage |
 | 14.10 | GLIDE ON, different values on neighbouring steps | the target slides from each step's value to the next over the step instead of jumping |
+
+## 15. Effects chain (FX page, sets 3 to 6)
+
+Flash `build/vavewave.fwsc`. Press FX: set 1 and 2 are the filter, sets 3..6 are effect slots 1..4 (TYPE, A, B, MIX). The slots run in order, 1 first. Types so far: CHORUS, FLANGER (delay, reverb and phaser come later).
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 15.1 | Press FX five times | "FX SLOT 3": big text OFF (a slot does nothing while OFF), the chain line "OFF>OFF>OFF>OFF" |
+| 15.2 | TYPE = CHORUS, play a held chord | the sound thickens and moves; MIX 0 = unchanged, MIX up = more; RATE changes the speed, DEPTH the width (stereo: left and right differ) |
+| 15.3 | TYPE = FLANGER, FEEDBK up | a sweeping comb; with FEEDBK at maximum it rings but does not run away |
+| 15.4 | TYPE back to OFF while a note holds | no click, the dry sound goes on |
+| 15.5 | Chorus in slot 1, flanger in slot 2 | both are heard; swap them (the order changes the sound a little) |
+| 15.6 | SAVE a patch with an effect, change patch, come back | the effect settings return with the patch |
+| 15.7 | Effects while the arp / sequencer plays | still in time, no dropouts |
+| 15.8 | CPU with one chorus and one flanger running (HOME / GLO page reading) | note the percentage |

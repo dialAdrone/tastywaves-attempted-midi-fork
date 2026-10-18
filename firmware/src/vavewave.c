@@ -285,6 +285,7 @@ static void app_main(void)
         }
 
         pn_encoders();
+        fx_sync();
         if (pn.browse_pend && fm1_ms - pn.t_browse >= 400u) {   /* the patch name turned, then 400 ms of quiet */
             pn_load(pn.browse, &set);
             if (latch)                          /* a new patch may release the voices (voice mode): the latched notes start again on it */

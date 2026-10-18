@@ -148,3 +148,6 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - 2026-10-18 SEQ page sets 2 and 3 read as such: the big text is the lane target / GLIDE, the info line says what it is, the bars show in set 3.
 - 2026-10-18 SEQ page: the lane's GLIDE moved into set 2 (TARGET / DEPTH / GLIDE / VALUE), the SELECT knob picks the step; the third set is gone.
 - 2026-10-18 pn_load: with the sequencer on, a loaded patch's own arp mode no longer comes on (the arp stays as it was).
+- 2026-10-18 S3 device-passed (user: MOD SEQ working, CPU 5%, preset change keeps SEQ running).
+
+- 2026-10-18 T26 stage E1 (effects chain framework + CHORUS + FLANGER): fx.h, 16 patch parameters (P_COUNT 73), FX page sets 3..6, fx_sync in the main loop, tests/run_fx.sh. Pool 30720 to 47184 B. Device test: section 15. The chain runs before the drive/clip (the existing hook).

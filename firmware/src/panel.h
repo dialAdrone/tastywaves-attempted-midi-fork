@@ -60,13 +60,13 @@ static void preset_apply(uint32_t i)
 
 /* ---- pages: four fixed knobs per page and set. NSUB[page] sets (EDIT: the four oscillators). */
 enum { F_NONE, F_PCT, F_TIME, F_BIP, F_CENTS, F_FRAMES, F_RATE, F_POS, F_TXT, F_INT };
-enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_MOD, TX_ONOFF, TX_N };
+enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_MOD, TX_ONOFF, TX_FXT, TX_N };
 typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 2, 2, 2, 1, 3, 2, 2, 2};   /* ... GLO, ARP, SEQ, HELP */   /* HELP: two text pages (PG[HELP] stays empty) */
-static const kdef_t PG[UI_P_N][4][4] = {
+static const uint8_t NSUB[UI_P_N] = {1, 4, 6, 2, 2, 1, 3, 2, 2, 2};   /* ... GLO, ARP, SEQ, HELP */   /* HELP: two text pages (PG[HELP] stays empty) */
+static const kdef_t PG[UI_P_N][6][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
     [UI_P_EDIT] = {{K("POS", P_POS1, F_POS, 8, 0), K("DETUNE", P_FINE1, F_CENTS, 1, 0), K("LEVEL", P_LEVEL1, F_PCT, 1, 0),
@@ -78,7 +78,11 @@ static const kdef_t PG[UI_P_N][4][4] = {
     [UI_P_FX] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("FENV", P_FENV, F_BIP, 1, 0),
                   K("KEYTRK", P_KEYTRK, F_PCT, 1, 0)},
                  {K("MODE", P_FMODE, F_TXT, 1, TX_FMODE), K("FVEL", P_FVEL, F_PCT, 1, 0), K("E>POS", P_MENV_POS, F_FRAMES, 1, 0),
-                  K("E>BEND", P_MENV_WARP, F_BIP, 1, 0)}},
+                  K("E>BEND", P_MENV_WARP, F_BIP, 1, 0)},
+                 {K("TYPE", P_FX1_TYPE, F_TXT, 1, TX_FXT), K("A", P_FX1_A, F_INT, 1, 0), K("B", P_FX1_B, F_INT, 1, 0), K("MIX", P_FX1_MIX, F_PCT, 1, 0)},
+                 {K("TYPE", P_FX2_TYPE, F_TXT, 1, TX_FXT), K("A", P_FX2_A, F_INT, 1, 0), K("B", P_FX2_B, F_INT, 1, 0), K("MIX", P_FX2_MIX, F_PCT, 1, 0)},
+                 {K("TYPE", P_FX3_TYPE, F_TXT, 1, TX_FXT), K("A", P_FX3_A, F_INT, 1, 0), K("B", P_FX3_B, F_INT, 1, 0), K("MIX", P_FX3_MIX, F_PCT, 1, 0)},
+                 {K("TYPE", P_FX4_TYPE, F_TXT, 1, TX_FXT), K("A", P_FX4_A, F_INT, 1, 0), K("B", P_FX4_B, F_INT, 1, 0), K("MIX", P_FX4_MIX, F_PCT, 1, 0)}},   /* sets 3..6: the effect slots (labels follow the type: pn_view_fill) */
     [UI_P_ENV] = {{K("ATK", P_A1, F_TIME, 1, 0), K("DEC", P_D1, F_TIME, 1, 0), K("SUS", P_S1, F_PCT, 1, 0),
                    K("REL", P_R1, F_TIME, 1, 0)},
                   {K("ATK", P_A2, F_TIME, 1, 0), K("DEC", P_D2, F_TIME, 1, 0), K("SUS", P_S2, F_PCT, 1, 0),
@@ -106,7 +110,7 @@ static const char *const TXT[TX_N][8] = {
     {"LP", "BP", "HP"}, {"POLY", "MONO", "LEGATO"}, {"BOTH", "OSC1", "OSC2"}, {"HI", "ECO"}, {"LIN", "EXP"},
     {"SINE", "TRI", "SAW", "SQUARE", "S&H"},
     {"OFF", "UP", "DOWN", "UP-DN", "UP-DN2", "RANDOM", "PLAYED", "CHORD"}, {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"},
-    {"OFF", "POS", "CUTOFF", "BEND", "DRIVE"}, {"OFF", "ON"}};
+    {"OFF", "POS", "CUTOFF", "BEND", "DRIVE"}, {"OFF", "ON"}, {"OFF", "CHORUS", "FLANGER", "PHASER", "DELAY", "REVERB"}};
 
 /* ---- panel state (main loop only) */
 static struct {
@@ -586,6 +590,15 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             v->seq_tie = tm; v->seq_tr = (uint8_t)(tr != 0 && !sq.rec);
         }
     }
+    if (pn.page == UI_P_FX && pn.sub >= 2u) {           /* an effect slot: the labels follow its type, an empty slot shows nothing */
+        static const char *const CN[3][3] = {{"-", "-", "-"}, {"RATE", "DEPTH", "MIX"}, {"RATE", "FEEDBK", "MIX"}};
+        uint32_t ty = (uint32_t)patch_get(P_FX1_TYPE + 4u * (pn.sub - 2u)), c;
+        if (ty > 2u) ty = 0;
+        for (c = 0; c < 3u; c++) {
+            v->klabel[1u + c] = CN[ty][c];
+            if (!ty) { v->kval[1u + c][0] = 0; v->kfrac[1u + c] = 0; }
+        }
+    }
     if (pn.page == UI_P_SEQ && pn.sub == 1u) {          /* STEP and VALUE of the lane */
         uint32_t m = pn.mstep < 32u ? pn.mstep : 31u;
         v->klabel[3] = "VALUE";
@@ -632,7 +645,19 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         v->flt_mode = (uint8_t)patch_get(P_FMODE);
         v->lfo_shape = (uint8_t)patch_get(P_LFO_SHAPE);
         v->drive = (uint8_t)patch_get(P_DRIVE);
-        ui_copy(v->ptxt, pn.page == UI_P_ARP ? TXT[TX_ARP][patch_get(P_ARP)] : TXT[TX_VMODE][patch_get(P_VMODE)], 8);
+        if (pn.page == UI_P_FX && pn.sub >= 2u) {      /* the slot's effect, big; the chain below */
+            static const char *const NM[6] = {"OFF", "CHO", "FLG", "PHA", "DLY", "REV"};
+            char *d = v->info;
+            uint32_t c;
+            d = ui_cat(d, "SLOT "); d = ui_num(d, (int32_t)pn.sub - 1);
+            d = ui_cat(d, "  ");
+            for (c = 0; c < 4u; c++) {
+                uint32_t ty = (uint32_t)patch_get(P_FX1_TYPE + 4u * c);
+                d = ui_cat(d, NM[ty < 6u ? ty : 0u]);
+                if (c < 3u) d = ui_cat(d, ">");
+            }
+        }
+        ui_copy(v->ptxt, pn.page == UI_P_FX ? TXT[TX_FXT][patch_get(P_FX1_TYPE + 4u * (pn.sub >= 2u ? pn.sub - 2u : 0u))] : pn.page == UI_P_ARP ? TXT[TX_ARP][patch_get(P_ARP)] : TXT[TX_VMODE][patch_get(P_VMODE)], 8);
         if (pn.page == UI_P_SEQ) {
             char *d = v->info;
             ui_copy(v->ptxt, sq.rec ? "RECORD" : patch_get(P_SEQ) ? (sq_run || !sq.len ? "PLAY" : "STOP") : "OFF", 8);

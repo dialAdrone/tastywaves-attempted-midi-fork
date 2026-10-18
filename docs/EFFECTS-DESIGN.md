@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Effects chain (T26): design note
 
-Status: direction accepted by the user (2026-10-18): a user-ordered chain of 4 slots; reverb may be used once. Not built. Stage E0 needs the CPU number from DEVICE-TEST-PLAN 14.9 / 13.15 (the arp measured 9 %).
+Status: direction accepted by the user (2026-10-18): a user-ordered chain of 4 slots; reverb may be used once. E1 built (framework, CHORUS, FLANGER; fx.h). CPU with the sequencer and lane running was 5 % (device).
 
 ## 1. Goal
 
@@ -54,6 +54,14 @@ Once DELAY or REVERB is in a slot, the type list of the other slots shows it gra
 ## 6. Decisions for the user
 
 - **O.** 4 slots (accepted).
-- **P.** Chain after the master drive (effects on a clean-clipped signal) or before it (drive distorts the effects too)? Proposal: after.
+- **P.** Settled by the existing hook (synth.h): the chain runs on the stereo bus before the drive and the soft clip, so the clip is also the last limiter. DRIVE therefore distorts the effects too.
 - **Q.** DELAY once as well as REVERB (proposal: yes, the 96 KB buffer).
 - **R.** The effect list as in section 1, nothing else for v1.
+
+## 7. Built (E1)
+
+- fx.h: slot framework on the existing `fx_chain` hooks; types 1 CHORUS, 2 FLANGER (one 2048-sample delay line a slot, 4 KB, in `.pool`; two taps, quarter-cycle LFO apart). Types 3..5 are in the type list (TXT) but PDESC allows 0..2 until they exist.
+- Patch: 16 parameters P_FX1_TYPE.. (P_COUNT 73), defaults OFF, A 64, B 64, MIX 64. The panel: FX page sets 3..6 (press FX again): TYPE / A / B / MIX; the labels follow the type.
+- Slot type changes run in the main loop (`fx_sync`): `on` = 0, clear the line, new type, `on` = 1; the mix ramps in from 0.
+- Grayed delay / reverb: with the types.
+- Test: tests/run_fx.sh.

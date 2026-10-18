@@ -558,6 +558,8 @@ static void block_control(void)
     }
 }
 
+#include "fx.h"
+
 /* ---------------------------------------------------------------- one voice, one block */
 static void voice_render(uint32_t v, uint32_t nsteps)
 {

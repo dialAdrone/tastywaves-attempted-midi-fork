@@ -380,7 +380,7 @@ static void ui_left_text(char *out, const ui_view_t *v)       /* the left part o
     switch (v->page) {
     case UI_P_EDIT: d = ui_cat(d, OSC[v->sub & 3u]); d = ui_cat(d, " "); ui_cat5(d, v->tname); break;
     case UI_P_ENV: d = ui_cat(d, "ENV "); ui_cat(d, v->sub ? "FILTER" : "AMP"); break;
-    case UI_P_FX: ui_cat(d, v->sub ? "FILTER 2/2" : "FILTER 1/2"); break;
+    case UI_P_FX: if (v->sub >= 2u) { d = ui_cat(d, "FX SLOT "); *d++ = (char)('0' + v->sub - 1u); *d = 0; } else ui_cat(d, v->sub ? "FILTER 2/2" : "FILTER 1/2"); break;
     case UI_P_LFO: ui_cat(d, v->sub ? "LFO 2/2" : "LFO 1/2"); break;
     case UI_P_SEL: ui_cat(d, "VOICE"); break;
     case UI_P_ARP: ui_cat(d, v->sub ? "ARP 2/2" : "ARP 1/2"); break;
@@ -677,14 +677,17 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
                 s->env[i][2] != v->env[i][2] || s->env[i][3] != v->env[i][3])
                 ui_env(UI_Y_MID + i * 64u, i ? "FILTER ENV" : "AMP ENV", v->env[i], v->sub == i);
     } else if (v->page != UI_P_HOME) {          /* FX, LFO, SEL, GLO */
-        uint32_t pk = v->page == UI_P_FX ? (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16
+        uint32_t pk = v->page == UI_P_FX ? (v->set >= 2u ? 0x50000000u | v->set : (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16)
                     : v->page == UI_P_LFO ? v->lfo_shape : v->page == UI_P_ARP ? 0x20000000u : v->page == UI_P_SEQ ? (v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ v->seq_tie * 2654435761u ^ (uint32_t)v->seq_tr << 8 ^ ui_seq_h(v) ^ 0x40000000u) : v->page == UI_P_SEL ? v->voices | (uint32_t)v->voices_max << 8
                     : v->sub == 2u ? 0x40000000u : (uint32_t)v->drive | (uint32_t)v->cpu_max << 8;
         uint32_t lch = full || s->set != v->set;
         for (i = 0; i < 8u && !lch; i++) lch = !ui_eq(s->list[i], v->list[i]);
-        if (full || s->pic_key != pk || ((v->page == UI_P_SEL || v->page == UI_P_ARP || v->page == UI_P_SEQ) && !ui_eq(s->ptxt, v->ptxt)) || ((v->page == UI_P_ARP || v->page == UI_P_SEQ) && !ui_eq(s->info, v->info))) {
+        if (full || s->pic_key != pk || ((v->page == UI_P_SEL || v->page == UI_P_ARP || v->page == UI_P_SEQ || v->page == UI_P_FX) && !ui_eq(s->ptxt, v->ptxt)) || ((v->page == UI_P_ARP || v->page == UI_P_SEQ || (v->page == UI_P_FX && v->set >= 2u)) && !ui_eq(s->info, v->info))) {
             switch (v->page) {
-            case UI_P_FX: ui_filter_pic(UI_Y_MID, v); break;
+            case UI_P_FX:
+                if (v->set >= 2u) { cv_begin(240, 62, C_BLACK); cv_blit(0, 54); draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1); ui_text_line(96, v->info, UI_GRAY); }
+                else ui_filter_pic(UI_Y_MID, v);
+                break;
             case UI_P_LFO: ui_lfo_pic(UI_Y_MID, v->lfo_shape); break;
             case UI_P_SEL:
                 draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1);
@@ -709,7 +712,9 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             ui_copy(s->info, v->info, 40);
         }
         if (lch) {
-            if (v->page != UI_P_SEQ) ui_list(116, v);
+            if (v->page == UI_P_SEQ) {}
+            else if (v->page == UI_P_FX && v->set >= 2u) { cv_begin(240, 64, C_BLACK); cv_blit(0, 116); }
+            else ui_list(116, v);
             for (i = 0; i < 8u; i++) ui_copy(s->list[i], v->list[i], 16);
             s->set = v->set;
         }
