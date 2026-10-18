@@ -53,7 +53,7 @@ typedef struct {
     uint8_t flt_cut, flt_res, flt_mode;         /* FX picture: cutoff, resonance 0..127, mode 0 LP 1 BP 2 HP */
     uint8_t lfo_shape, drive;                   /* LFO picture (0 sine 1 tri 2 saw 3 square 4 S&H), GLO picture 0..127 */
     char ptxt[8];                               /* SEL picture: the voice mode, big; ARP picture: the arp mode */
-    char info[28];                              /* ARP picture: tempo and rate */
+    char info[40];                              /* ARP picture: tempo and rate */
     char list[8][16];                           /* FX / LFO / SEL / GLO: 4 rows x 2 columns of "LABEL VALUE" (14 chars) */
     char boot[2][32];                           /* GLO set 3 (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
 } ui_view_t;
@@ -68,7 +68,7 @@ typedef struct {
     uint32_t wave_key, pic_key;
     uint32_t t_chg;                             /* waterfall: ms of the last frame change */
     uint8_t wf_arrow, wf_frame;                 /* waterfall: frame of the arrow on screen, of the white trace */
-    char list[8][16], ptxt[8], info[28];
+    char list[8][16], ptxt[8], info[40];
 } ui_shadow_t;
 
 /* ---- small helpers (own copies: ui.h's s_cat / s_num belong to the sine build) */
@@ -647,7 +647,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             }
             s->pic_key = pk;
             ui_copy(s->ptxt, v->ptxt, 8);
-            ui_copy(s->info, v->info, 28);
+            ui_copy(s->info, v->info, 40);
         }
         if (lch) {
             ui_list(116, v);
@@ -687,7 +687,6 @@ static uint32_t ui_button_leds(const ui_view_t *v, uint32_t blink)
     case UI_P_LFO: m |= 1u << BTN_LFO; break;
     case UI_P_SEL: m |= 1u << BTN_SEL; break;
     case UI_P_GLO: m |= 1u << BTN_GLO; break;
-    case UI_P_ARP: m |= 1u << BTN_ARP; break;
     default: break;
     }
     if (v->modified && blink) m |= 1u << BTN_SAVE;

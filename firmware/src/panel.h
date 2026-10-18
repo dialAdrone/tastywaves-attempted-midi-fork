@@ -110,7 +110,7 @@ static struct {
     uint8_t slot, browse, browse_pend;          /* entry loaded (0..7 factory, 8.. user); entry shown in the name line; load pending */
     uint8_t save_req, home_arm;                 /* HOME pressed and not yet decided: short press or hold */
     uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: on / off, hold: the page); the mode it switches back to */
-    uint32_t t_arp;
+    uint32_t t_arp, t_arp_tog, n_arp_edge, n_arp_tog;   /* press time; time of the last switch; counts of press edges and switches (shown on the ARP page while testing) */
     uint8_t sv, act, act_id, tgt;               /* SAVE gesture (SV_*), the request for pn_save_poll (ACT_*, user id), the chosen target id */
     uint32_t t_browse, t_flash, t_save, t_home, t_sv;
     char fmsg[12];                              /* the confirmation shown while t_flash runs */
@@ -378,12 +378,16 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
     if (b & 1u << BTN_LFO) pn_page(UI_P_LFO);
     if (b & 1u << BTN_SEL) pn_page(UI_P_SEL);
     if (b & 1u << BTN_GLO) pn_page(UI_P_GLO);
-    if (b & 1u << BTN_ARP) { pn.arp_arm = 1; pn.t_arp = fm1_ms; }
+    if (b & 1u << BTN_ARP) {
+        pn.n_arp_edge++;
+        if (!pn.arp_arm && (!pn.t_arp_tog || fm1_ms - pn.t_arp_tog >= 200u)) { pn.arp_arm = 1; pn.t_arp = fm1_ms; }     /* (a bounce right after a switch is not a new press) */
+    }
     if (pn.arp_arm) {
         if (!(held >> BTN_ARP & 1u)) {                              /* released: a short press switches the arp */
             pn.arp_arm = 0;
             if (patch_get(P_ARP)) { pn.arp_last = (uint8_t)patch_get(P_ARP); patch_set(P_ARP, 0); }
             else patch_set(P_ARP, pn.arp_last ? pn.arp_last : 1);
+            pn.t_arp_tog = fm1_ms ? fm1_ms : 1u; pn.n_arp_tog++;
             pn.base[P_ARP] = (int16_t)patch.p[P_ARP];               /* the button is a performance switch, not a patch edit: SAVE does not blink for it */
         } else if (fm1_ms - pn.t_arp >= 500u) { pn.arp_arm = 0; pn_page(UI_P_ARP); }   /* held: its page (again: the next set) */
     }
@@ -589,7 +593,9 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }
             d = ui_cat(d, "  ");
             d = ui_cat(d, TXT[TX_ARATE][patch_get(P_ARP_RATE)]);
-            if (arp_ext.ticks) { d = ui_cat(d, "  C"); ui_num(d, (int32_t)(arp_ext.ticks % 10000u)); }   /* clock pulses received (a check that the clock arrives) */
+            d = ui_cat(d, " P"); d = ui_num(d, (int32_t)(pn.n_arp_edge % 1000u));        /* test readout: ARP press edges, switches, clock pulses */
+            d = ui_cat(d, " T"); d = ui_num(d, (int32_t)(pn.n_arp_tog % 1000u));
+            if (arp_ext.ticks) { d = ui_cat(d, " C"); ui_num(d, (int32_t)(arp_ext.ticks % 1000u)); }
         }
         for (s = 0; s < 2u; s++)
             for (i = 0; i < 4u; i++) {
