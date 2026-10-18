@@ -504,7 +504,7 @@ static void ui_seq_grid(uint32_t y, const ui_view_t *v)       /* the pattern: 4 
             cv_rect(x, ty, 29, 20, on ? UI_ACC3 : C_BLACK);
             cv_rect(x + 3, ty + 10, 23, 1, UI_DIM);
             if (bh) cv_rect(x + 3, mv > 0 ? ty + 10 - bh : ty + 11, 23, bh, c);
-            if (i == v->seq_cur) { cv_rect(x, ty, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty + 19, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty, 1, 20, RGB(255, 200, 90)); cv_rect(x + 28, ty, 1, 20, RGB(255, 200, 90)); }
+            if (v->seq_set == 1u && i == v->seq_cur) { cv_rect(x, ty, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty + 19, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty, 1, 20, RGB(255, 200, 90)); cv_rect(x + 28, ty, 1, 20, RGB(255, 200, 90)); }
         } else if (i < v->seq_len) {
             uint32_t nt = v->seq_note[i];
             uint16_t bg = cur ? C_WHITE : (v->seq_mask >> i & 1u) ? UI_ACC3 : C_BLACK;

@@ -592,7 +592,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         ui_num(v->kval[2], (int32_t)m + 1); ui_num(v->kval[3], (int32_t)ml[m] + 64);
         v->kfrac[2] = (uint8_t)(m * 255u / 31u); v->kfrac[3] = (uint8_t)(((int32_t)ml[m] + 64) * 2);
     }
-    v->seq_set = (uint8_t)(pn.page == UI_P_SEQ && pn.sub == 1u);
+    v->seq_set = (uint8_t)(pn.page == UI_P_SEQ ? pn.sub : 0u);       /* 1: lane being edited, 2: lane glide (bars, no edit frame) */
     v->seq_cur = pn.mstep;
     for (i = 0; i < 32u; i++) v->seq_mod[i] = (uint8_t)((int32_t)ml[i] + 64);
     v->kbip = (uint8_t)kbip;
@@ -636,7 +636,11 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         if (pn.page == UI_P_SEQ) {
             char *d = v->info;
             ui_copy(v->ptxt, sq.rec ? "RECORD" : patch_get(P_SEQ) ? (sq_run || !sq.len ? "PLAY" : "STOP") : "OFF", 8);
-            if (sq.rec) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, " OF 32  PLAY=REST SEQ=TIE"); }
+            if (pn.sub == 1u) ui_copy(v->ptxt, TXT[TX_MOD][patch_get(P_MOD)], 8);           /* the lane: its target, big */
+            else if (pn.sub == 2u) ui_copy(v->ptxt, "GLIDE", 8);
+            if (pn.sub == 1u) { d = ui_cat(d, "MOD LANE  TARGET "); d = ui_cat(d, TXT[TX_MOD][patch_get(P_MOD)]); }
+            else if (pn.sub == 2u) d = ui_cat(d, patch_get(P_MOD_GLIDE) ? "LANE GLIDE ON: STEPS SLIDE" : "LANE GLIDE OFF: STEPS JUMP");
+            else if (sq.rec) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, " OF 32  PLAY=REST SEQ=TIE"); }
             else if (!sq.len) ui_cat(d, "NO PATTERN  REC TO ENTER STEPS");
             else { d = ui_cat(d, "LEN "); d = ui_num(d, sq.len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); } }
         }
