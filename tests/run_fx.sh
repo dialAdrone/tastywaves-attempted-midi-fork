@@ -25,15 +25,15 @@ run pha "1 patch 57 3
 3 patch 59 100
 4 patch 60 127"
 runk dly "1 patch 57 4
-2 patch 58 20
+2 patch 58 100
 3 patch 59 60
 4 patch 60 127"
 runk dly2 "1 patch 57 4
-2 patch 58 20
+2 patch 58 100
 3 patch 59 60
 4 patch 60 127
 5 patch 61 4
-6 patch 62 100
+6 patch 62 20
 7 patch 63 100
 8 patch 64 127"
 runk rev "1 patch 57 5
@@ -65,8 +65,8 @@ check(pk(pha) < 2 * pk(dry) and sum(abs(x - y) for x, y in zip(dry, pha)) / len(
 check(any(abs(a - b) > 100 for a, b in zip(pha, phar)), 'phaser: left and right differ')
 rms = lambda x: (sum(v * v for v in x) / max(len(x), 1)) ** .5
 sr = 44100
-check(rms(dly[int(.7 * sr):int(1.1 * sr)]) > 5 * rms(rd[int(.7 * sr):int(1.1 * sr)]) + 50, 'delay: echoes after the note has ended')
-check(rms(dly[-4410:]) < 0.3 * rms(dly[int(.7 * sr):int(1.1 * sr)]) and pk(dly) < 3 * pk(dry), 'delay: the echoes die away (feedback 0.4), level bounded')
+check(rms(dly[int(.6 * sr):int(1.0 * sr)]) > 5 * rms(rd[int(.6 * sr):int(1.0 * sr)]) + 50, 'delay: echoes after the note has ended')
+check(rms(dly[-4410:]) < 0.3 * rms(dly[int(.6 * sr):int(1.0 * sr)]) and pk(dly) < 3 * pk(dry), 'delay: the echoes die away (feedback 0.4), level bounded')
 check(dly2 == dly, 'delay: a second delay in the chain does nothing (once only)')
 check(rms(rev[int(.5 * sr):int(.9 * sr)]) > 5 * rms(rd[int(.5 * sr):int(.9 * sr)]) + 50, 'reverb: a tail after the note has ended')
 check(rms(rev[-4410:]) < 0.3 * rms(rev[int(.5 * sr):int(.9 * sr)]) and pk(rev) < 3 * pk(dry), 'reverb: the tail decays, level bounded')

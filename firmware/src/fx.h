@@ -129,8 +129,7 @@ static void fx_delay(int32_t *lr, uint32_t n, fx_slot_t *s)
         ms += (mt * 256 - ms + 512) >> 10;
         ts += (tt - ts + 1024) >> 11;                   /* the time glides (no click, a short pitch bend while it moves) */
         pos = ((int32_t)w << 8) - ts;
-        pos &= (int32_t)(FX_DELEN << 8) - 1;
-        pos = pos < 0 ? 0 : pos;
+        if (pos < 0) pos += (int32_t)(FX_DELEN << 8);        /* (the line is not a power of two long: no mask) */
         i0 = pos >> 8; fr = pos & 255;
         i1 = i0 + 1; if (i1 >= (int32_t)FX_DELEN) i1 = 0;
         wl = ((int32_t)fx_dl[0][i0] * (256 - fr) + (int32_t)fx_dl[0][i1] * fr) >> 8;
