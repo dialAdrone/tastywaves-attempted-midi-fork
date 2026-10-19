@@ -680,7 +680,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
                 uint32_t t, own;
                 for (t = 4; t < 6u; t++) {
                     own = 0;
-                    for (c = 0; c < 4u; c++) if ((uint32_t)patch_get(P_FX1_TYPE + 4u * c) == t) own = c + 1u;
+                    for (c = 4; c-- > 0u; ) if ((uint32_t)patch_get(P_FX1_TYPE + 4u * c) == t) own = c + 1u;      /* (the first slot owns it) */
                     e = ui_cat(e, t == 4u ? "DELAY " : "  REVERB ");
                     if (own) { e = ui_cat(e, "SLOT "); e = ui_num(e, (int32_t)own); } else e = ui_cat(e, "FREE");
                 }

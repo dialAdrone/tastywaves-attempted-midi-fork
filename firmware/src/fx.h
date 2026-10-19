@@ -165,7 +165,7 @@ static void fx_reverb(int32_t *lr, uint32_t n, fx_slot_t *s)
     off[0] = 0;
     for (j = 1; j < 12u; j++) off[j] = off[j - 1u] + FX_RVL[j - 1u];
     for (i = 0; i < n; i++) {
-        int32_t inl = lr[2u * i], inr = lr[2u * i + 1u], x = ((inl + inr) >> 1) >> 7, m, o[2];
+        int32_t inl = lr[2u * i], inr = lr[2u * i + 1u], x = ((inl + inr) >> 1) >> 8, m, o[2];       /* (headroom: the comb loops gain up to 47 at DC) */
         ms += (mt * 256 - ms + 512) >> 10;
         m = ms >> 8;
         for (ch = 0; ch < 2u; ch++) {
@@ -188,11 +188,11 @@ static void fx_reverb(int32_t *lr, uint32_t n, fx_slot_t *s)
                 if (++fx_rvs.pos[q] >= FX_RVL[q]) fx_rvs.pos[q] = 0;
                 acc = bo - acc;
             }
-            fx_rvs.dc[ch] += (acc * 256 - fx_rvs.dc[ch]) >> 11;     /* a DC trap: the integer rounding in the loops leaves a small offset */
-            o[ch] = acc - (fx_rvs.dc[ch] >> 8);
+            fx_rvs.dc[ch] += (acc * 65536 - fx_rvs.dc[ch]) >> 11;   /* a DC trap (Q16): the integer rounding in the loops leaves a small offset */
+            o[ch] = acc - (fx_rvs.dc[ch] >> 16);
         }
-        lr[2u * i] = inl + (((o[0] * 32) * m) >> 7);
-        lr[2u * i + 1u] = inr + (((o[1] * 32) * m) >> 7);
+        lr[2u * i] = inl + (((o[0] * 64) * m) >> 7);
+        lr[2u * i + 1u] = inr + (((o[1] * 64) * m) >> 7);
     }
     s->mix_s = ms;
 }
@@ -212,12 +212,17 @@ static void fx_slot_run(int32_t *lr, uint32_t n, void *state)
 /* main loop: bring each slot to the patch's type (clear the delay line, the mix starts from 0 and ramps in) */
 static void fx_sync(void)
 {
-    uint32_t i, j;
+    uint32_t i, j, tw[FX_SLOTS];
     for (i = 0; i < FX_SLOTS; i++) {
-        uint32_t want = (uint32_t)patch_get(P_FX1_TYPE + 4u * i);
+        tw[i] = (uint32_t)patch_get(P_FX1_TYPE + 4u * i);
+        if (tw[i] == FXT_DELAY || tw[i] == FXT_REVERB)     /* one of each in the chain: a later slot with the same type does nothing */
+            for (j = 0; j < i; j++) if ((uint32_t)patch_get(P_FX1_TYPE + 4u * j) == tw[i]) tw[i] = FXT_NONE;
+    }
+    for (i = 0; i < FX_SLOTS; i++)                         /* first every slot that changes goes off (a buffer changes owner only when nobody runs on it) */
+        if (tw[i] != fxs[i].type || !fx_chain[i].fn) { fx_chain[i].on = 0; __asm__ volatile("" ::: "memory"); fxs[i].type = FXT_NONE; }
+    for (i = 0; i < FX_SLOTS; i++) {
+        uint32_t want = tw[i];
         fx_slot_t *s = &fxs[i];
-        if (want == FXT_DELAY || want == FXT_REVERB)       /* one of each in the chain: a later slot with the same type does nothing */
-            for (j = 0; j < i; j++) if ((uint32_t)patch_get(P_FX1_TYPE + 4u * j) == want) want = FXT_NONE;
         if (want == s->type && fx_chain[i].fn) continue;
         fx_chain[i].on = 0;
         __asm__ volatile("" ::: "memory");        /* the plain stores below stay between the volatile ones */

@@ -157,3 +157,4 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - 2026-10-18 The band-pass change was reverted: the filter was fine (the user had missed that FX set 1 is cutoff and set 2 the mode).
 
 - 2026-10-18 T26 stages E2-E4: PHASER, DELAY (ping-pong 96 KB, once), REVERB (Freeverb-style 24 KB, once; DC trap), the TYPE knob skips a taken delay/reverb, tests in tests/run_fx.sh. Pool 169756 B. Device test: section 16.
+- 2026-10-18 E2-E4 review fixes: duplicate delay/reverb switch-off pass before any slot is set up, info line names the first owner, reverb input headroom (>>8, output x64), reverb DC trap in Q16 (residual about -84 dB). Known: changing a slot's TYPE cuts the old effect's tail at once (reverb/delay tails click); delay/reverb loops clamp on loud repeats; effects are outside the voice-shedding budget.
