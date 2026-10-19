@@ -155,3 +155,5 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - 2026-10-18 E1 device-passed (user: effects sound great, chain works, no clicks). CPU: 1 note + chorus + flanger 21 %; 12 notes + 2 slots 71 %; 12 notes + 4 slots 67 %. The slot cost looked high (about 8 % a slot): the LFO now runs once per 16 samples instead of per sample (fx.h); to be re-measured on the device.
 - 2026-10-18 Mod lane 'little audible effect' investigated: the engine path is correct (host trace: cutoff +-127 at depth 100 and values +-64; per-step level changes 2x). Causes of the weak result: DEPTH default 50 and VALUE moving 1 of 128 per detent (typical edits were a few percent of the range). DEPTH default now 100, VALUE moves 4 a detent.
 - 2026-10-18 The band-pass change was reverted: the filter was fine (the user had missed that FX set 1 is cutoff and set 2 the mode).
+
+- 2026-10-18 T26 stages E2-E4: PHASER, DELAY (ping-pong 96 KB, once), REVERB (Freeverb-style 24 KB, once; DC trap), the TYPE knob skips a taken delay/reverb, tests in tests/run_fx.sh. Pool 169756 B. Device test: section 16.

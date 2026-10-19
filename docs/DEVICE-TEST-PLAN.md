@@ -245,3 +245,20 @@ Flash `build/vavewave.fwsc`. Press FX: set 1 and 2 are the filter, sets 3..6 are
 | 15.7 | Effects while the arp / sequencer plays | still in time, no dropouts |
 | 15.9 | Worst case: hold a 12-note chord (or latch it) with all 4 slots on (two chorus, two flanger) | no dropouts or crackle; note the CPU (the effects are not part of the voice-shedding budget) |
 | 15.8 | CPU with one chorus and one flanger running (HOME / GLO page reading) | note the percentage |
+
+## 16. Phaser, delay, reverb (FX slots)
+
+Flash `build/vavewave.fwsc`. TYPE now also has PHASER, DELAY, REVERB. DELAY and REVERB can be in only one slot each.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 16.1 | PHASER, held chord, RATE and FEEDBK | a slow sweeping swirl, stereo; FEEDBK makes it sharper; MIX at maximum is half wet on purpose |
+| 16.2 | DELAY, play a short note, TIME 40 | ping-pong echoes left and right; FEEDBK sets how many; MIX the level |
+| 16.3 | Turn TIME while echoes ring | the pitch glides, no click |
+| 16.4 | REVERB, play a short note | a smooth tail; SIZE longer, DAMP darker |
+| 16.5 | Reverb with a held pad, then release | the tail decays to silence (no hum, no hiss that stays) |
+| 16.6 | Put DELAY in slot 1, then in slot 2 try TYPE | the TYPE knob skips DELAY (and the bottom line says DELAY SLOT 1) |
+| 16.7 | Delay in slot 1 and reverb in slot 2, then swap the order | both work; reverb before delay and delay before reverb sound different |
+| 16.8 | SAVE with a delay and a reverb, load another patch, come back | both return with their settings |
+| 16.9 | CPU with a reverb running, one note and 12 notes | note both numbers |
+| 16.10 | CPU with chorus + flanger + delay + reverb, 12 notes | note it; any crackle? |

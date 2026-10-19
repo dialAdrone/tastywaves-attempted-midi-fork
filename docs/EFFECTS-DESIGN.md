@@ -1,7 +1,7 @@
 <!-- SPDX-License-Identifier: GPL-3.0-only -->
 # Effects chain (T26): design note
 
-Status: direction accepted by the user (2026-10-18): a user-ordered chain of 4 slots; reverb may be used once. E1 built (framework, CHORUS, FLANGER; fx.h). CPU with the sequencer and lane running was 5 % (device).
+Status: direction accepted by the user (2026-10-18): a user-ordered chain of 4 slots; reverb may be used once. E1-E4 built (framework, CHORUS, FLANGER, PHASER, DELAY, REVERB; fx.h). CPU with the sequencer and lane running was 5 % (device).
 
 ## 1. Goal
 
@@ -65,3 +65,11 @@ Once DELAY or REVERB is in a slot, the type list of the other slots shows it gra
 - Slot type changes run in the main loop (`fx_sync`): `on` = 0, clear the line, new type, `on` = 1; the mix ramps in from 0.
 - Grayed delay / reverb: with the types.
 - Test: tests/run_fx.sh.
+
+## 8. Built (E2 to E4)
+
+- PHASER: 4 first-order all-pass stages a side, coefficient 0.13..0.87 swept by the LFO (the sides a quarter cycle apart), feedback, at most half wet (the notches need the dry signal). A RATE, B FEEDBK.
+- DELAY: ping-pong, 2 x 24576 int16 (96 KB) in `.pool`, time 10..530 ms (A TIME, glides: no click), B FEEDBK up to 0.86, MIX adds the echo to the dry sound.
+- REVERB: Freeverb-style, 4 low-passed combs and 2 all-pass a side, right side a few samples longer (24 KB). A SIZE (comb feedback 0.70..0.98), B DAMP. A DC trap removes the offset the integer rounding leaves in the loops.
+- Once only: a slot's TYPE knob skips DELAY / REVERB while another slot has it (the slot pages show "DELAY SLOT 1  REVERB FREE"); fx_sync also ignores a second one that arrives in a patch.
+- Pool now 169756 B of 344064 (the effects 123 KB).

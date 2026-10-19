@@ -53,6 +53,7 @@ typedef struct {
     uint8_t flt_cut, flt_res, flt_mode;         /* FX picture: cutoff, resonance 0..127, mode 0 LP 1 BP 2 HP */
     uint8_t lfo_shape, drive;                   /* LFO picture (0 sine 1 tri 2 saw 3 square 4 S&H), GLO picture 0..127 */
     char ptxt[8];                               /* SEL picture: the voice mode, big; ARP picture: the arp mode */
+    char info2[40];                             /* FX slot pictures: the once-only effects */
     char info[40];                              /* ARP and SEQ pictures: tempo and rate; steps */
     uint8_t seq_len, seq_pos, seq_rec, seq_on;  /* SEQ picture: steps, the step playing / being recorded, step input on, running */
     uint32_t seq_mask;                          /* SEQ picture: bit i = step i has a note (else a rest) */
@@ -75,7 +76,7 @@ typedef struct {
     uint32_t wave_key, pic_key;
     uint32_t t_chg;                             /* waterfall: ms of the last frame change */
     uint8_t wf_arrow, wf_frame;                 /* waterfall: frame of the arrow on screen, of the white trace */
-    char list[8][16], ptxt[8], info[40];
+    char list[8][16], ptxt[8], info[40], info2[40];
 } ui_shadow_t;
 
 /* ---- small helpers (own copies: ui.h's s_cat / s_num belong to the sine build) */
@@ -682,10 +683,10 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
                     : v->sub == 2u ? 0x40000000u : (uint32_t)v->drive | (uint32_t)v->cpu_max << 8;
         uint32_t lch = full || s->set != v->set;
         for (i = 0; i < 8u && !lch; i++) lch = !ui_eq(s->list[i], v->list[i]);
-        if (full || s->pic_key != pk || ((v->page == UI_P_SEL || v->page == UI_P_ARP || v->page == UI_P_SEQ || v->page == UI_P_FX) && !ui_eq(s->ptxt, v->ptxt)) || ((v->page == UI_P_ARP || v->page == UI_P_SEQ || (v->page == UI_P_FX && v->set >= 2u)) && !ui_eq(s->info, v->info))) {
+        if (full || s->pic_key != pk || ((v->page == UI_P_SEL || v->page == UI_P_ARP || v->page == UI_P_SEQ || v->page == UI_P_FX) && !ui_eq(s->ptxt, v->ptxt)) || ((v->page == UI_P_ARP || v->page == UI_P_SEQ || (v->page == UI_P_FX && v->set >= 2u)) && !(ui_eq(s->info, v->info) && ui_eq(s->info2, v->info2)))) {
             switch (v->page) {
             case UI_P_FX:
-                if (v->set >= 2u) { cv_begin(240, 62, C_BLACK); cv_blit(0, 54); draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1); ui_text_line(96, v->info, UI_GRAY); }
+                if (v->set >= 2u) { cv_begin(240, 62, C_BLACK); cv_blit(0, 54); draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1); ui_text_line(96, v->info, UI_GRAY); ui_text_line(112, v->info2, UI_DIM); }
                 else ui_filter_pic(UI_Y_MID, v);
                 break;
             case UI_P_LFO: ui_lfo_pic(UI_Y_MID, v->lfo_shape); break;
@@ -710,6 +711,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             s->pic_key = pk;
             ui_copy(s->ptxt, v->ptxt, 8);
             ui_copy(s->info, v->info, 40);
+            ui_copy(s->info2, v->info2, 40);
         }
         if (lch) {
             if (v->page == UI_P_SEQ) {}

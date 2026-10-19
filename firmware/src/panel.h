@@ -467,6 +467,25 @@ static const char *pn_tname(uint32_t t)
 /* the oscillator the table / position encoders act on: OSC2 only while its EDIT chip is shown */
 static uint32_t pn_osc(void) { return pn.page == UI_P_EDIT && pn.sub == 1u; }
 
+static uint32_t pn_fx_taken(uint32_t id, int32_t ty)       /* another slot already has this type */
+{
+    uint32_t j;
+    for (j = 0; j < 4u; j++)
+        if (P_FX1_TYPE + 4u * j != id && patch_get(P_FX1_TYPE + 4u * j) == ty) return 1;
+    return 0;
+}
+static void pn_fx_type(uint32_t id, int32_t d)
+{
+    int32_t cur = patch_get(id), dir = d > 0 ? 1 : -1, n = d < 0 ? -d : d, v;
+    while (n-- > 0) {
+        v = cur + dir;
+        while ((v == 4 || v == 5) && pn_fx_taken(id, v)) v += dir;
+        if (v < 0 || v > 5) break;
+        cur = v;
+    }
+    patch_set(id, cur);
+}
+
 static void pn_encoders(void)
 {
     uint32_t i, o = pn_osc();
@@ -488,7 +507,8 @@ static void pn_encoders(void)
         const kdef_t *k = &PG[pn.page][pn.sub][i];
         d = fm1_enc_take(ENC_KNOB1 + i);
         if (!d || k->fmt == F_NONE) continue;
-        patch_add(k->id, (k->fmt == F_TXT ? d : pn_accel(d)) * k->step);
+        if (pn.page == UI_P_FX && pn.sub >= 2u && i == 0u) pn_fx_type(k->id, d);    /* an effect slot's TYPE: delay and reverb are used once, the taken one is skipped */
+        else patch_add(k->id, (k->fmt == F_TXT ? d : pn_accel(d)) * k->step);
         pn.touched = (uint8_t)i;
     }
     if ((d = fm1_enc_take(ENC_PRESETS)) != 0) {
@@ -591,9 +611,9 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         }
     }
     if (pn.page == UI_P_FX && pn.sub >= 2u) {           /* an effect slot: the labels follow its type, an empty slot shows nothing */
-        static const char *const CN[3][3] = {{"-", "-", "-"}, {"RATE", "DEPTH", "MIX"}, {"RATE", "FEEDBK", "MIX"}};
+        static const char *const CN[6][3] = {{"-", "-", "-"}, {"RATE", "DEPTH", "MIX"}, {"RATE", "FEEDBK", "MIX"}, {"RATE", "FEEDBK", "MIX"}, {"TIME", "FEEDBK", "MIX"}, {"SIZE", "DAMP", "MIX"}};
         uint32_t ty = (uint32_t)patch_get(P_FX1_TYPE + 4u * (pn.sub - 2u)), c;
-        if (ty > 2u) ty = 0;
+        if (ty > 5u) ty = 0;
         for (c = 0; c < 3u; c++) {
             v->klabel[1u + c] = CN[ty][c];
             if (!ty) { v->kval[1u + c][0] = 0; v->kfrac[1u + c] = 0; }
@@ -655,6 +675,15 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
                 uint32_t ty = (uint32_t)patch_get(P_FX1_TYPE + 4u * c);
                 d = ui_cat(d, NM[ty < 6u ? ty : 0u]);
                 if (c < 3u) d = ui_cat(d, ">");
+            }
+            {   char *e = v->info2;                 /* the once-only effects: where they are, or free */
+                uint32_t t, own;
+                for (t = 4; t < 6u; t++) {
+                    own = 0;
+                    for (c = 0; c < 4u; c++) if ((uint32_t)patch_get(P_FX1_TYPE + 4u * c) == t) own = c + 1u;
+                    e = ui_cat(e, t == 4u ? "DELAY " : "  REVERB ");
+                    if (own) { e = ui_cat(e, "SLOT "); e = ui_num(e, (int32_t)own); } else e = ui_cat(e, "FREE");
+                }
             }
         }
         ui_copy(v->ptxt, pn.page == UI_P_FX ? TXT[TX_FXT][patch_get(P_FX1_TYPE + 4u * (pn.sub >= 2u ? pn.sub - 2u : 0u))] : pn.page == UI_P_ARP ? TXT[TX_ARP][patch_get(P_ARP)] : TXT[TX_VMODE][patch_get(P_VMODE)], 8);
