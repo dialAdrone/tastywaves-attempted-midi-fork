@@ -411,8 +411,8 @@ static void ui_filter_pic(uint32_t y, const ui_view_t *v)
         int32_t dd = x - xc, ad = dd < 0 ? -dd : dd, yy;
         if (v->flt_mode == 0) yy = top + (dd > 0 ? dd * 5 / 9 : 0);               /* 12 dB / octave ~ 0.55 px / px */
         else if (v->flt_mode == 2) yy = top + (dd < 0 ? -dd * 5 / 9 : 0);
-        else yy = top + 8 + ad * 5 / 18;                                          /* band pass: 6 dB / octave */
-        if (ad < 16) yy -= bump * (16 - ad) / 16;                                 /* the resonance peak */
+        else yy = top + 8 + ad * (5 + (int32_t)v->flt_res / 6) / 18;               /* band pass: 6 dB / octave, steeper (narrower) with the resonance */
+        if (ad < 16) yy -= (v->flt_mode == 1 ? bump / 2 : bump) * (16 - ad) / 16;   /* the resonance peak */
         if (yy < 0) yy = 0;
         if (yy > base) yy = base;
         cv_rect(x, yy, 1, base - yy + 1, UI_ACC3);
