@@ -126,7 +126,7 @@ check(crc32(new TextEncoder().encode('123456789')) === 0xCBF43926, 'crc32 check 
   await vw.renamePatch(1, 'bass 2 \u00e9');
   check(decodeBody(await vw.getPatchBody(1)).name === 'bass 2', 'rename keeps printable ASCII only and the patch contents');
   check(decodeBody(await vw.getPatchBody(1)).params.every((v, i) => v === decodeBody(b).params[i]), 'rename leaves every parameter alone');
-  check(await vw.swapPatches(0, 5) === 'swapped', 'swap through a free id');
+  check(await vw.swapPatches(0, 5, 'stale') === 'swapped', 'swap through a free id');
   check(decodeBody(await vw.getPatchBody(0)).name === 'ARP LEAD' && decodeBody(await vw.getPatchBody(5)).name === 'BRIGHT PAD' && !(await vw.patchDirectory())[2].present, 'after the swap the patches changed places and no copy is left');
   check(await vw.swapPatches(5, 9) === 'moved' && !(await vw.patchDirectory())[5].present && decodeBody(await vw.getPatchBody(9)).name === 'BRIGHT PAD', 'a move to an empty id');
   const bk = await vw.backup();

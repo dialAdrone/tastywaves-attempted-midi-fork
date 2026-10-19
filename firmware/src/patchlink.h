@@ -10,16 +10,17 @@
  *   PGET  id                          -> the body (rc 10: no patch with that id)
  *   PPUT  id, body                    -> writes the patch (a new record; the old one of the id is replaced); rc 11 store full
  *   PDEL  id                          -> deletes it (rc 0 also when there was none)
- * Return codes: 1 bad arguments, 4 the write failed (flash), 7 busy (a table upload runs), 9 no flash, 10 no such patch, 11 store full.
+ * Return codes: 1 bad arguments, 4 the write failed (flash), 7 busy (a table upload runs), 9 no flash, 10 no such patch, 11 store full, 12 the stored record is damaged.
+ * PPUT and PDEL wait for quiet like the table link (7 while keys are down or sound plays); a PPUT of a body the id already holds writes nothing.
  * The app learns which ids changed from pl_link_dirty (bit per id), to refresh the names it shows. */
 #pragma once
 enum { PLK_CMD_PDIR = 12, PLK_CMD_PGET = 13, PLK_CMD_PPUT = 14, PLK_CMD_PDEL = 15 };
-enum { PLK_E_ARGS = 1, PLK_E_FLASH = 4, PLK_E_BUSY = 7, PLK_E_NOFLASH = 9, PLK_E_NONE = 10, PLK_E_FULL = 11 };
+enum { PLK_E_ARGS = 1, PLK_E_FLASH = 4, PLK_E_BUSY = 7, PLK_E_NOFLASH = 9, PLK_E_NONE = 10, PLK_E_FULL = 11, PLK_E_BAD = 12 };
 static volatile uint32_t pl_link_dirty;
 
 static uint32_t plk_rc(int rc)
 {
-    return rc == PL_OK ? 0u : rc == PL_E_FULL ? PLK_E_FULL : rc == PL_E_NONE ? PLK_E_NONE : rc == PL_E_NOFLASH ? PLK_E_NOFLASH :
+    return rc == PL_OK ? 0u : rc == PL_E_FULL ? PLK_E_FULL : rc == PL_E_NONE ? PLK_E_NONE : rc == PL_E_BAD ? PLK_E_BAD : rc == PL_E_NOFLASH ? PLK_E_NOFLASH :
            rc == PL_E_ARGS ? PLK_E_ARGS : PLK_E_FLASH;
 }
 
@@ -33,9 +34,9 @@ static uint32_t pl_link(uint32_t cmd, const uint8_t *a, uint32_t len, uint8_t *o
     if (cmd == PLK_CMD_PDIR) {
         if (len != 2u || a[0] >= PL_IDS || a[1] == 0u || a[1] > 16u || a[0] + a[1] > PL_IDS) return PLK_E_ARGS;
         for (id = a[0]; id < (uint32_t)a[0] + a[1]; id++) {
-            int rc = pl_present() >> id & 1u ? pl_get(id, &p) : PL_E_NONE;
+            int here = (int)(pl_present() >> id & 1u), rc = here ? pl_get(id, &p) : PL_E_NONE;
             out[(*n)++] = (uint8_t)id;
-            out[(*n)++] = rc == PL_OK;
+            out[(*n)++] = (uint8_t)here;                             /* a listed id whose record is damaged still counts as taken (n 0) */
             out[(*n)++] = rc == PL_OK ? p.n : 0u;
             out[(*n)++] = rc == PL_OK ? p.pw : 0u;
             for (i = 0; i < PL_NAME; i++) out[(*n)++] = rc == PL_OK ? (uint8_t)p.name[i] : 0u;
@@ -54,8 +55,10 @@ static uint32_t pl_link(uint32_t cmd, const uint8_t *a, uint32_t len, uint8_t *o
         for (i = 0; i < p.pw; i++) { out[(*n)++] = (uint8_t)p.pv[i]; out[(*n)++] = (uint8_t)((uint16_t)p.pv[i] >> 8); }
         return 0;
     }
+    if ((cmd == PLK_CMD_PPUT || cmd == PLK_CMD_PDEL) && (!quiet() || fm1_in.notes)) return PLK_E_BUSY;
     if (cmd == PLK_CMD_PPUT) {
         uint32_t pn, pw, o;
+        static pl_patch_t old;
         int rc;
         if (len < 1u + PL_NAME + 2u || a[0] >= PL_IDS) return PLK_E_ARGS;
         pn = a[1u + PL_NAME];
@@ -72,6 +75,8 @@ static uint32_t pl_link(uint32_t cmd, const uint8_t *a, uint32_t len, uint8_t *o
         o = 3u + PL_NAME;
         for (k = 0; k < pn; k++, o += 2u) p.v[k] = (int16_t)(a[o] | a[o + 1u] << 8);
         for (k = 0; k < pw; k++, o += 2u) p.pv[k] = (int16_t)(a[o] | a[o + 1u] << 8);
+        if (pl_get(a[0], &old) == PL_OK && old.n == p.n && old.pw == p.pw && !memcmp(old.name, p.name, sizeof p.name) &&
+            !memcmp(old.v, p.v, 2u * p.n) && !memcmp(old.pv, p.pv, 2u * p.pw)) return 0;       /* already there: no record (a retry costs nothing) */
         rc = pl_put(a[0], &p);
         if (rc == PL_OK) pl_link_dirty |= 1u << a[0];
         return plk_rc(rc);

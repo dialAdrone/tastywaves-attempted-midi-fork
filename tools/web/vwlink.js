@@ -9,7 +9,7 @@ export const SLOTS = 8, HEADER_AT = 0x8F00, HEADER_LEN = 64, DATA_BYTES = 35648,
 export const CMD = { HELLO: 1, DIR: 2, BEGIN: 3, DATA: 4, COMMIT: 5, ABORT: 6, ERASE: 7, READ: 8, SELFTEST: 10, XIPCHECK: 11, PDIR: 12, PGET: 13, PPUT: 14, PDEL: 15 };
 export const RC_TEXT = {
   1: 'bad arguments', 2: 'range or alignment', 3: 'erase failed', 4: 'program failed', 5: 'verify failed',
-  6: 'no BEGIN or timeout', 7: 'refused (keys down, sound playing, or this firmware cannot do that)', 8: 'CRC mismatch', 9: 'no flash', 10: 'no such patch', 11: 'the patch store is full (delete a patch first)' };
+  6: 'no BEGIN or timeout', 7: 'refused (keys down, sound playing, or this firmware cannot do that)', 8: 'CRC mismatch', 9: 'no flash', 10: 'no such patch', 11: 'the patch store is full (delete a patch first)', 12: 'that stored patch is damaged' };
 
 export class LinkError extends Error {}
 
@@ -244,24 +244,22 @@ export class VwLink {
     const p = decodeBody(await this.getPatchBody(id));
     await this.putPatchBody(id, encodeBody({ ...p, name }));
   }
-  // exchange two ids (the order of the list on the panel). With a free id as a parking place no patch is ever only in the
-  // computer's memory; without one the direct exchange has a moment where a power cut would lose one of them (caller warns).
-  async swapPatches(a, b, dir) {
-    const d = dir || await this.patchDirectory();
+  // exchange two ids (the order of the list on the panel) through a free id as a parking place, so no patch is ever only in the
+  // computer's memory. The parked copy is deleted only after both writes were read back.
+  async swapPatches(a, b) {
+    const d = await this.patchDirectory();                     // always fresh: the panel may have saved a patch since the page looked
+    if (!d[a].present) throw new LinkError('patch ' + (a + 1) + ' is gone (Refresh)');
     const ba = await this.getPatchBody(a), bb = d[b].present ? await this.getPatchBody(b) : null;
-    const free = d.findIndex((e, i) => !e.present && i !== a && i !== b);
     if (!bb) { await this.putPatchBody(b, ba); await this.deletePatch(a); return 'moved'; }
-    if (free >= 0) {
-      try {
-        await this.putPatchBody(free, ba);
-        await this.putPatchBody(a, bb);
-        await this.putPatchBody(b, ba);
-      } finally { try { await this.deletePatch(free); } catch (e) { /* the copy stays: harmless, delete it by hand */ } }
-      return 'swapped';
-    }
-    await this.putPatchBody(a, bb);
-    await this.putPatchBody(b, ba);
-    return 'swapped-direct';
+    const free = d.findIndex((e, i) => !e.present && i !== a && i !== b);
+    if (free < 0) throw new LinkError('all 32 patch numbers are in use: delete one first (a swap needs one free number as a parking place so that no patch can be lost)');
+    await this.putPatchBody(free, ba);                          // on any failure from here the parked copy stays: nothing is lost
+    try {
+      await this.putPatchBody(a, bb);
+      await this.putPatchBody(b, ba);
+    } catch (e) { throw new LinkError(e.message + ` (a copy of patch ${a + 1} is kept as patch ${free + 1}; nothing was lost)`); }
+    await this.deletePatch(free);
+    return 'swapped';
   }
   // backup of every patch as a JSON-able object; restore of one
   async backup() {
@@ -278,6 +276,7 @@ export function parseBackup(obj) {
     seen.add(p.id);
     const body = Uint8Array.from(p.body.match(/../g).map((h) => parseInt(h, 16)));
     const d = decodeBody(body);
+    for (let i = 0; i < PATCH_NAME; i++) if (body[i] && (body[i] < 32 || body[i] > 126)) throw new LinkError('damaged name in the backup');
     return { id: p.id, name: d.name, body };
   });
 }

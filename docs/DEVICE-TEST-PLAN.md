@@ -288,5 +288,6 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 18.5 | Delete one patch in the page, then on the FM-1 browse PRESETS | it is gone from the list |
 | 18.6 | Restore the backup file | the deleted patch is back under its number, the others unchanged (names, sounds, patterns) |
 | 18.7 | On the FM-1 save a new patch while the page is open, press Refresh | it appears |
-| 18.8 | Fill the store (about 20 pattern patches), Restore a backup that does not fit | the page reports the store is full; patches already there still load |
+| 18.8 | Press a key (hold it) and try Rename in the page | refused: keys down or sound playing; release and it works |
+| 18.8b | Fill the store (about 20 pattern patches), Restore a backup that does not fit | the page reports the store is full; patches already there still load |
 | 18.9 | Pull the cable during a restore, reconnect | every patch is either the old or the new version, nothing half written; the FM-1 works |

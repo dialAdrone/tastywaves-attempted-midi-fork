@@ -550,6 +550,7 @@ static int check_main(void)
     CHECK(reply(&rc, &seq) && rc == WT_E_NOFLASH);
     flash_ok = 1;
 
+    memset(flash + 0xE5000u, 0xFF, 0x4000u); pl_init();                  /* the fuzz reaches the patch commands too */
     /* fuzz: random frames and random header sectors never crash, never write, and every reply is well formed */
     srand(12345);
     for (i = 0; i < 20000; i++) {
@@ -620,6 +621,23 @@ static int check_main(void)
         out_n = 0; request(WT_CMD_PPUT, 32, pl_a, 1 + bl); wt_service();
         CHECK(reply(&rc, &seq) && rc == 0);
         { pl_patch_t q; CHECK(pl_get(3, &q) == PL_OK && !strcmp(q.name, "RENAMED") && q.n == 73); }
+        /* the largest body (80 parameters, 33 pattern words) and an identical put writes nothing */
+        { uint32_t big = 14 + 160 + 66, pr;
+          memset(pl_a, 0, sizeof pl_a); memcpy(pl_a + 1, "BIGGEST", 7); pl_a[13] = 80; pl_a[14] = 33; for (j = 0; j < 226u; j++) pl_a[15 + j] = (uint8_t)(j * 7u + 3u);
+          pl_a[0] = 20; out_n = 0; request(WT_CMD_PPUT, 50, pl_a, 1 + big); wt_service();
+          CHECK(reply(&rc, &seq) && rc == 0);
+          out_n = 0; a[0] = 20; request(WT_CMD_PGET, 51, a, 1); wt_service();
+          CHECK(reply(&rc, &seq) && rc == 0 && rep_n == big && !memcmp(rep + 8, pl_a + 1, big));
+          pr = pl.progs; pl_link_dirty = 0;
+          out_n = 0; request(WT_CMD_PPUT, 52, pl_a, 1 + big); wt_service();
+          CHECK(reply(&rc, &seq) && rc == 0 && pl.progs == pr && pl_link_dirty == 0);
+          quiet_now = 0; out_n = 0; request(WT_CMD_PPUT, 53, pl_a, 1 + big); wt_service();
+          CHECK(reply(&rc, &seq) && rc == WT_E_BUSY);
+          out_n = 0; a[0] = 20; request(WT_CMD_PDEL, 54, a, 1); wt_service();
+          CHECK(reply(&rc, &seq) && rc == WT_E_BUSY && (pl_present() >> 20 & 1u));
+          quiet_now = 1;
+          out_n = 0; a[0] = 20; request(WT_CMD_PDEL, 55, a, 1); wt_service();
+          CHECK(reply(&rc, &seq) && rc == 0 && !(pl_present() >> 20 & 1u)); }
         /* an upload in progress blocks the patch commands */
         wt.busy = 1; wt.t_last = fm1_ms;
         out_n = 0; a[0] = 3; request(WT_CMD_PGET, 33, a, 1); wt_service();

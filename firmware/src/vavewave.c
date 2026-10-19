@@ -171,6 +171,7 @@ static void app_main(void)
             uint32_t pm = pl_link_dirty, pi;
             pl_link_dirty = 0;
             for (pi = 0; pi < PL_IDS; pi++) if (pm >> pi & 1u) pn_ucache(pi);
+            if (pn.slot >= PN_PRESETS && (pm >> (pn.slot - PN_PRESETS) & 1u)) pn_load(pn.slot, &set);     /* the loaded patch was replaced or deleted from the computer: show and play what the log holds (else SAVE would name and replace the wrong one) */
         }
 
         {

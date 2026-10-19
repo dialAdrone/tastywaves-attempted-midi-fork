@@ -86,11 +86,14 @@ async function refreshPatches() {
   if (fw.stage < 5) return;
   pdir = await vw.patchDirectory();
   patches = [];
-  for (const e of pdir) if (e.present) patches.push({ id: e.id, name: e.name, ...decodeBody(await vw.getPatchBody(e.id)) });
+  for (const e of pdir) if (e.present) {
+    try { patches.push({ id: e.id, name: e.name, ...decodeBody(await vw.getPatchBody(e.id)) }); }
+    catch (x) { patches.push({ id: e.id, name: e.name || '(damaged)', params: [], pattern: [], damaged: true }); }
+  }
   const rows = patches.map((p, k) => {
     const d = document.createElement('div'); d.className = 'card prow';
     const tr = tableRefs(p.params), steps = p.pattern.length ? p.pattern[0] : 0;
-    const info = [tr.length ? 'user table slot ' + tr.join(', ') : 'factory tables', steps ? `${steps} step pattern` : ''].filter(Boolean).join(' · ');
+    const info = p.damaged ? 'damaged: delete it' : [tr.length ? 'user table slot ' + tr.join(', ') : 'factory tables', steps ? `${steps} step pattern` : ''].filter(Boolean).join(' · ');
     d.innerHTML = '<span class="pid"></span><span class="pname"></span><span class="pinfo mute"></span><span class="row"></span>';
     d.querySelector('.pid').textContent = 'U' + String(p.id + 1).padStart(2, '0');
     d.querySelector('.pname').textContent = p.name;
@@ -111,9 +114,9 @@ async function movePatch(k, dir) {
   const a = patches[k], b = patches[k + dir];
   if (!b) return;
   await guarded('Move', async () => {
-    const how = await vw.swapPatches(a.id, b.id, pdir);
+    const how = await vw.swapPatches(a.id, b.id);
     await refreshPatches();
-    status(how === 'swapped-direct' ? 'Swapped (no free patch id: a power cut right now could have lost one; make a backup first next time).' : `"${a.name}" and "${b.name}" changed places.`);
+    status(`"${a.name}" and "${b.name}" changed places.`);
   });
 }
 async function deletePatch(p) {
@@ -132,9 +135,10 @@ async function restorePatches(file) {
   if (!file) return;
   let list;
   try { list = parseBackup(JSON.parse(await file.text())); } catch (e) { status('Restore: ' + (e instanceof LinkError ? e.message : 'the file is not a patch backup'), 'bad'); return; }
+  pdir = await vw.patchDirectory();                       // fresh, for the replace warning
   const clash = list.filter((p) => pdir[p.id] && pdir[p.id].present);
   if (!confirm(`Restore ${list.length} patches from "${file.name}"?` + (clash.length ? `\n${clash.length} of them REPLACE patches now on the FM-1 (same number): ${clash.map((p) => 'U' + String(p.id + 1).padStart(2, '0')).join(' ')}. Patches not in the file are kept.` : '') +
-    '\nKeep the FM-1 quiet and plugged in while it runs; a sound may glitch.')) return;
+    '\nKeep the FM-1 quiet (no keys, no arp or latch) and plugged in while it runs.')) return;
   await guarded('Restore', async () => {
     let k = 0;
     for (const p of list) { status(`Writing ${p.name}…`); await vw.putPatchBody(p.id, p.body); progress(++k / list.length); }

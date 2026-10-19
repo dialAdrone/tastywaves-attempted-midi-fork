@@ -181,11 +181,10 @@ whole or not at all, old version kept on a cut). A patch body (what PGET returns
 | 15 | PDEL | id | rc 0 (also when there was none) |
 
 The panel learns of a change through `pl_link_dirty` and refreshes the names it shows; a patch already loaded stays as it is in RAM.
-Writes may glitch the sound (a compaction erase is a 17 ms gap, as with SAVE), so restore with the FM-1 quiet.
+PPUT and PDEL are refused with rc 7 while keys are down or sound plays (like the table link), a PPUT of a body the id already holds writes nothing (a retry after a lost reply is free), rc 12 means the stored record is damaged. If the loaded patch is replaced or deleted from the computer the panel reloads it from the log, so SAVE cannot name or replace the wrong patch.
 
 The web tool (`tools/web`, section "Patches on the FM-1"): list with the user tables and pattern each patch uses; **rename** (get, new
-name, put); **reorder** (the list order is the id order: swap two ids; with a free id as a parking place no patch exists only in
-the browser's memory, without one the page says that a power cut in that moment could have lost one); **delete**; **backup** (JSON:
+name, put); **reorder** (the list order is the id order: swap two ids; through a free id as a parking place, read fresh from the FM-1, so no patch exists only in the browser's memory; with all 32 ids in use the move is refused; if a write fails the parked copy is kept and named); **delete**; **backup** (JSON:
 format, version, per patch id, name and body in hex); **restore** (each patch back under its own id, confirm first, patches not in
 the file stay, every write read back). Tests: `tests/wtlink_check.c` (the commands on the real log), `tests/webtool_check.mjs`
 (the library against the firmware logic), `tests/web_smoke.sh` (the page).
