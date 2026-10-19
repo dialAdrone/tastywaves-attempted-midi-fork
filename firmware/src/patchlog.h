@@ -10,7 +10,7 @@
  *   pl_del(id)             append a tombstone
  *
  * Record (little endian, 4-byte aligned): u16 length | u8 type (1 patch, 2 tombstone) | u8 id | u32 sequence |
- * u8 version | u8 n | char name[12] | u16 0 | int16 v[n] | pad | u32 crc32 of everything before it.
+ * u8 version | u8 n | char name[12] | u8 pattern words, u8 0 | int16 v[n] | int16 pattern[pw] | pad | u32 crc32 of everything before it.
  * A record is programmed from byte 2 on first and its 2 length bytes last: until then the position still reads as
  * erased, so a power cut leaves either nothing or a whole record. A record is valid only with sane length and CRC.
  * The newest (highest sequence) valid record of an id wins; a tombstone newer than every patch record deletes it.
@@ -37,7 +37,8 @@
 #define PL_HI (PL_AT + PL_SECT * PL_SSZ)
 #define PL_IDS 32u
 #define PL_NAME 12u
-#define PL_MAXP 100u                             /* parameters per patch (record <= 256 B) */
+#define PL_MAXP 80u                              /* parameters per patch: with a full pattern (PL_MAXPW words) the record is 254 B, the limit is 256 */
+#define PL_MAXPW 33u                             /* pattern words: the length, then one word a step (arp.h, 32 steps) */
 #define PL_HDR 24u
 #define PL_MAXREC 256u
 #define PL_T_PATCH 1u
@@ -54,6 +55,8 @@ typedef struct {
     char name[PL_NAME + 1];                      /* printable ASCII, zero terminated */
     uint8_t n;                                   /* parameters in v */
     int16_t v[PL_MAXP];
+    uint8_t pw;                                  /* pattern words in pv (0: the patch has no pattern) */
+    int16_t pv[PL_MAXPW];
 } pl_patch_t;
 
 typedef struct { uint32_t off, seq; uint16_t len; uint8_t type; } pl_ent_t;   /* type 0: none */
@@ -70,7 +73,7 @@ static uint8_t pl_ram[PL_SSZ];                    /* the live records of one sec
 
 static uint32_t pl_u32(const uint8_t *p) { return p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24; }
 static void pl_p32(uint8_t *p, uint32_t v) { p[0] = (uint8_t)v; p[1] = (uint8_t)(v >> 8); p[2] = (uint8_t)(v >> 16); p[3] = (uint8_t)(v >> 24); }
-static uint32_t pl_reclen(uint32_t n) { return (PL_HDR + 2u * n + 4u + 3u) & ~3u; }
+static uint32_t pl_reclen(uint32_t n, uint32_t pw) { return (PL_HDR + 2u * n + 2u * pw + 4u + 3u) & ~3u; }
 
 /* ---- the one flash writer ---- */
 static int pl_flash_ok(uint32_t off, uint32_t n) { return off >= PL_AT && off <= PL_HI && n <= PL_HI - off; }
@@ -101,7 +104,7 @@ static int pl_valid(const uint8_t *r, uint32_t avail, uint32_t *len)
     if (l < PL_HDR + 4u || l > PL_MAXREC || (l & 3u) || l > avail) return 0;
     n = r[9];
     if (r[3] >= PL_IDS || r[8] != PL_VER) return 0;
-    if (r[2] == PL_T_PATCH) { if (n > PL_MAXP || l != pl_reclen(n)) return 0; }
+    if (r[2] == PL_T_PATCH) { if (n > PL_MAXP || r[22] > PL_MAXPW || r[23] || l != pl_reclen(n, r[22])) return 0; }   /* byte 22: pattern words (0 in the first records) */
     else if (r[2] == PL_T_DEL) { if (n != 0u || l != PL_HDR + 4u) return 0; }
     else return 0;
     if (crc32(r, l - 4u) != pl_u32(r + l - 4u)) return 0;
@@ -191,6 +194,8 @@ static int pl_get(uint32_t id, pl_patch_t *out)
     }
     out->name[PL_NAME] = 0;
     for (i = 0; i < n; i++) out->v[i] = (int16_t)(pl_rec[PL_HDR + 2u * i] | pl_rec[PL_HDR + 2u * i + 1u] << 8);
+    out->pw = pl_rec[22];
+    for (i = 0; i < out->pw; i++) out->pv[i] = (int16_t)(pl_rec[PL_HDR + 2u * n + 2u * i] | pl_rec[PL_HDR + 2u * n + 2u * i + 1u] << 8);
     return PL_OK;
 }
 
@@ -377,20 +382,21 @@ static int pl_put(uint32_t id, const pl_patch_t *in)
     uint32_t i, n, len, live;
     int rc;
     if (!pl.ready) return PL_E_NOFLASH;
-    if (id >= PL_IDS || !in || in->n > PL_MAXP) return PL_E_ARGS;
+    if (id >= PL_IDS || !in || in->n > PL_MAXP || in->pw > PL_MAXPW) return PL_E_ARGS;
     n = in->n;
-    len = pl_reclen(n);
+    len = pl_reclen(n, in->pw);
     live = pl.live_bytes - (pl.ent[id].type == PL_T_PATCH ? pl.ent[id].len : 0u) + len;
     if (live > PL_SSZ) return PL_E_FULL;
     if ((rc = pl_reserve(len)) != 0) return rc;       /* may compact: that uses pl_rec and changes pl.seq, so build the record after it */
     for (i = 0; i < len; i++) pl_rec[i] = 0;
     pl_rec[0] = (uint8_t)len; pl_rec[1] = (uint8_t)(len >> 8);
-    pl_rec[2] = PL_T_PATCH; pl_rec[3] = (uint8_t)id; pl_rec[8] = PL_VER; pl_rec[9] = (uint8_t)n;
+    pl_rec[2] = PL_T_PATCH; pl_rec[3] = (uint8_t)id; pl_rec[8] = PL_VER; pl_rec[9] = (uint8_t)n; pl_rec[22] = in->pw;
     for (i = 0; i < PL_NAME && in->name[i]; i++) {
         uint8_t c = (uint8_t)in->name[i];
         pl_rec[10 + i] = c >= 32u && c < 127u ? c : '?';
     }
     for (i = 0; i < n; i++) { pl_rec[PL_HDR + 2u * i] = (uint8_t)in->v[i]; pl_rec[PL_HDR + 2u * i + 1u] = (uint8_t)((uint16_t)in->v[i] >> 8); }
+    for (i = 0; i < in->pw; i++) { pl_rec[PL_HDR + 2u * n + 2u * i] = (uint8_t)in->pv[i]; pl_rec[PL_HDR + 2u * n + 2u * i + 1u] = (uint8_t)((uint16_t)in->pv[i] >> 8); }
     if (pl.ent[id].type == PL_T_PATCH) pl.live_bytes -= pl.ent[id].len;
     {
         pl_ent_t old = pl.ent[id];

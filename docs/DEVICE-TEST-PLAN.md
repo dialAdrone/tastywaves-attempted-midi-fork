@@ -262,3 +262,15 @@ Flash `build/vavewave.fwsc`. TYPE now also has PHASER, DELAY, REVERB. DELAY and 
 | 16.8 | SAVE with a delay and a reverb, load another patch, come back | both return with their settings |
 | 16.9 | CPU with a reverb running, one note and 12 notes | note both numbers |
 | 16.10 | CPU with chorus + flanger + delay + reverb, 12 notes | note it; any crackle? |
+
+## 17. Sequencer pattern saved with the patch (S4)
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 17.1 | SEQ on, REC a 6 step pattern, set a few mod lane values (SEQ page, set 2, MOD target on), SAVE | SAVED Unn |
+| 17.2 | Power off and on, PRESETS to that patch | SEQ comes on and plays the same notes, ties and rests, with the lane's movement |
+| 17.3 | Load a factory patch while the pattern plays | the sound changes, the pattern keeps playing |
+| 17.4 | Record a different pattern, then PRESETS to the saved one | the saved pattern replaces it |
+| 17.5 | Load the saved patch, change one lane value, look at SAVE | SAVE blinks (a lane edit counts); SAVE again replaces it, reload shows the new value |
+| 17.6 | Save several patches with 16 step patterns (about 20) | each is saved; when the store is full the message says STORE FULL (delete one to go on) |
+| 17.7 | A patch saved with SEQ off after recording a pattern | no pattern comes back with it (patterns are saved only with SEQ on) |

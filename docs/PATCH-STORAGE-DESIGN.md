@@ -45,9 +45,11 @@ same id replaces it. All integers little endian, records start on a 4-byte bound
 | 8 | 1 | format version (1) |
 | 9 | 1 | parameter count N (P_COUNT when written) |
 | 10 | 12 | name, ASCII, zero padded (default `U01`..`U32` plus the base name) |
-| 22 | 2 | reserved, 0 |
+| 22 | 1 | pattern words PW (0..33; 0 in the first records), the note pattern and mod lane of the sequencer (section 11) |
+| 23 | 1 | reserved, 0 |
 | 24 | 2N | parameters, int16, in `P_*` order |
-| 24+2N | pad | zeros up to a multiple of 4 |
+| 24+2N | 2PW | pattern words, int16 |
+| 24+2N+2PW | pad | zeros up to a multiple of 4 |
 | end-4 | 4 | CRC32 over every byte before it |
 
 48 parameters give a 124 B record, 32 per sector; 32 live patches fill one sector. A record is written in two steps:
@@ -146,3 +148,18 @@ patch refers to. This needs its own staged rollout and reviewer pass; it is not 
 
 Tests as for the table link: `tests/run_patchlog.sh` with the NOR mock and fault injection, panel script tests
 (`tests/scripts/panel_ui.txt`) for the list / SAVE / delete screens, and a section 10 in `docs/DEVICE-TEST-PLAN.md`.
+
+## 11. Sequencer pattern in the patch (T28 stage S4)
+
+A record may carry the note pattern and the mod lane: PW words after the parameters. Word 0 is the length (1..32), then one
+word per step: note (bits 0-6), sounds (bit 7; clear = rest), tied (bit 8), lane value + 64 (bits 9-15). A 16 step pattern is
+17 words (34 B), the most is 33 words (66 B). The record limit stays 256 B, so PL_MAXP dropped from 100 to 80 (P_COUNT is 73): the
+largest record is 80 parameters + 33 words = 254 B. A firmware that does not know PW (older than S4) finds a length that does not
+match its parameter count and skips the record, so a downgrade hides patches that have a pattern.
+
+- **Save**: the pattern goes in only when the sequencer is on (SEQ) and a pattern exists. A patch without it is as small as before.
+- **Load**: a patch with a pattern replaces the pattern in RAM (the ISR plays nothing while the arrays change). A patch without
+  one leaves the pattern as it is: the sequencer is a performance switch, like the arp, so changing the sound does not stop the tune.
+- **Modified**: a changed pattern or lane makes SAVE blink, like a parameter edit.
+- **Capacity**: live data is capped at one sector (4,096 B). A record with a 16 step pattern is about 200 B, so about 20 such patches fit
+  (STORE FULL after that); plain patches are not affected.

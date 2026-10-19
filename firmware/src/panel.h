@@ -127,6 +127,7 @@ static struct {
     char fmsg[12];                              /* the confirmation shown while t_flash runs */
     char uname[PL_IDS][PL_NAME + 1];            /* names of the user patches in the log */
     int16_t base[P_COUNT];                      /* the patch as loaded / saved: "modified" = differs */
+    uint32_t base_pat;                          /* the same for the note pattern and the mod lane (pn_pat_sum) */
     int16_t wave[256];                          /* EDIT: the frame as the engine reads it */
     uint32_t wave_key;
 } pn;
@@ -136,17 +137,64 @@ static ui_shadow_t pn_shadow;
 /* the look order HOME cycles: spectrum (2) -> waterfall (1) -> minimal (3) -> spectrum */
 static const uint8_t LOOK_NEXT[UI_H_N] = {UI_H_MINIMAL, UI_H_WATERFALL, UI_H_SPECTRUM};
 
+/* The note pattern and the mod lane go into a patch record as pattern words (patchlog.h): word 0 the length (1..32), then a word per
+ * step: note (bits 0-6), sounds (7; clear = rest), tied (8), lane value + 64 (9-15). Only a patch saved with the sequencer on and a
+ * pattern recorded has them. Loading a patch with a pattern replaces the pattern in RAM; a patch without one leaves it as it is
+ * (the sequencer is a performance switch, like the arp: changing the patch does not stop the tune). */
+static uint32_t pn_pat_words(int16_t *w, uint32_t any)    /* the words for the pattern now (0: none: a save keeps one only with the sequencer on, `any` ignores that) */
+{
+    uint32_t n = sq.len > SEQ_MAXN ? SEQ_MAXN : sq.len, i;
+    if ((!any && !patch_get(P_SEQ)) || !n) return 0;
+    if (w) {
+        w[0] = (int16_t)n;
+        for (i = 0; i < n; i++) {
+            uint32_t v = (sq.note[i] & 127u) | (sq.vel[i] ? 128u : 0u) | (sq.tie[i] ? 256u : 0u) | (uint32_t)((int32_t)ml[i] + 64) << 9;
+            w[1u + i] = (int16_t)(uint16_t)v;
+        }
+    }
+    return 1u + n;
+}
+static uint32_t pn_pat_sum(void)                 /* a cheap fingerprint of the pattern (0: none): a changed pattern is an edit, SEQ on or off */
+{
+    int16_t w[PL_MAXPW];
+    uint32_t n = pn_pat_words(w, 1u), i, h = 0;
+    for (i = 0; i < n; i++) h = (h * 31u + (uint16_t)w[i]) ^ (h >> 27);
+    return h;
+}
+static void pn_pat_apply(const pl_patch_t *t)    /* a loaded record's pattern (if it has a good one) becomes the pattern */
+{
+    uint32_t n, i;
+    if (!t->pw) return;
+    n = (uint16_t)t->pv[0];
+    if (n < 1u || n > SEQ_MAXN || t->pw < 1u + n) return;
+    sq.rec = 0;
+    sq.len = 0;                                  /* the ISR plays nothing while the arrays change */
+    __asm__ volatile("" ::: "memory");
+    for (i = 0; i < n; i++) {
+        uint32_t v = (uint16_t)t->pv[1u + i];
+        sq.note[i] = (uint8_t)(v & 127u);
+        sq.vel[i] = v & 128u ? 100u : 0u;
+        sq.tie[i] = (v & 256u) != 0u;
+        ml[i] = (int8_t)((int32_t)(v >> 9) - 64);
+    }
+    for (; i < SEQ_MAXN; i++) { sq.note[i] = 0; sq.vel[i] = 0; sq.tie[i] = 0; ml[i] = 0; }
+    sq.cur = (uint8_t)n;
+    __asm__ volatile("" ::: "memory");
+    sq.len = (uint8_t)n;
+}
+
 static void pn_snapshot(void)
 {
     uint32_t i;
     for (i = 0; i < P_COUNT; i++) pn.base[i] = (int16_t)patch.p[i];
+    pn.base_pat = pn_pat_sum();
 }
 static int pn_modified(void)
 {
     uint32_t i;
     for (i = 0; i < P_COUNT; i++)
         if (patch.p[i] != pn.base[i]) return 1;
-    return 0;
+    return pn_pat_sum() != pn.base_pat;
 }
 
 enum { SV_IDLE, SV_ARMED, SV_PICK, SV_CONFIRM, SV_DEL };       /* the SAVE gesture */
@@ -170,6 +218,7 @@ static void pn_load_raw(uint32_t i, const app_set_t *st)
         if (i < PN_ENTRIES && pl_get(i - PN_PRESETS, &pn_tmp) == PL_OK) {
             patch_reset();                      /* parameters a record does not have (older firmware) keep their defaults */
             for (p = 0; p < pn_tmp.n && p < P_COUNT; p++) patch_set(p, pn_tmp.v[p]);
+            pn_pat_apply(&pn_tmp);
             pn_snapshot();
             pn.slot = pn.browse = (uint8_t)i;
             pn.browse_pend = 0;
@@ -228,6 +277,7 @@ static void pn_migrate(app_set_t *st, uint32_t *dirty)
     for (i = 0; i < PL_NAME && PRESET[st->uslot].name[i]; i++) pn_tmp.name[i] = PRESET[st->uslot].name[i];
     pn_tmp.name[i] = 0;
     pn_tmp.n = P_COUNT_V1;
+    pn_tmp.pw = 0;
     for (i = 0; i < P_COUNT_V1; i++) pn_tmp.v[i] = st->uval[i];
     if (pl_put(0, &pn_tmp) != PL_OK) return;     /* the overlay stays and keeps working */
     if (st->slot == st->uslot) st->slot = (uint8_t)PN_PRESETS;    /* the patch in use was that one: it is U01 now */
@@ -744,6 +794,7 @@ static int pn_save_poll(app_set_t *st, uint32_t *dirty)
             pn_tmp.name[i] = 0;
             for (i = 0; i < P_COUNT; i++) pn_tmp.v[i] = (int16_t)patch.p[i];
             pn_tmp.n = P_COUNT;
+            pn_tmp.pw = (uint8_t)pn_pat_words(pn_tmp.pv, 0u);
             while (pn_tmp.n > P_COUNT_V1 && pn_tmp.v[pn_tmp.n - 1u] == PDESC[pn_tmp.n - 1u].def) pn_tmp.n--;     /* trailing defaults are not stored: a patch without arp keeps its 124 bytes */
             rc = pl_put(id, &pn_tmp);
             pn.save_req = 0;

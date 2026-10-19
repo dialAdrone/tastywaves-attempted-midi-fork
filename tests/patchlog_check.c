@@ -95,7 +95,8 @@ static int fails;
 #define CHECK(c, ...) do { if (!(c)) { fails++; printf("FAIL  "); printf(__VA_ARGS__); printf("\n"); } } while (0)
 
 /* the model: what the log must hold */
-typedef struct { uint8_t have, n; char name[13]; int16_t v[PL_MAXP]; } mp_t;
+typedef struct { uint8_t have, n, pw; char name[13]; int16_t v[PL_MAXP]; int16_t pv[PL_MAXPW]; } mp_t;
+static int pat_on;                               /* mk gives some patches a pattern (the scripted workloads only: the capacity checks count bytes) */
 typedef struct { mp_t p[PL_IDS]; } model_t;
 
 static void mk(pl_patch_t *p, uint32_t n, const char *name)
@@ -105,11 +106,13 @@ static void mk(pl_patch_t *p, uint32_t n, const char *name)
     strncpy(p->name, name, PL_NAME);
     p->n = (uint8_t)n;
     for (i = 0; i < n; i++) p->v[i] = (int16_t)rnd();
+    if (pat_on && rnd() % 3 == 0) { p->pw = (uint8_t)(1 + rnd() % PL_MAXPW); for (i = 0; i < p->pw; i++) p->pv[i] = (int16_t)rnd(); }
 }
 static void model_put(model_t *md, uint32_t id, const pl_patch_t *p)
 {
     memset(&md->p[id], 0, sizeof md->p[id]);
-    md->p[id].have = 1; md->p[id].n = p->n;
+    md->p[id].have = 1; md->p[id].n = p->n; md->p[id].pw = p->pw;
+    memcpy(md->p[id].pv, p->pv, 2u * p->pw);
     strncpy(md->p[id].name, p->name, 12);
     memcpy(md->p[id].v, p->v, 2u * p->n);
 }
@@ -156,7 +159,9 @@ static int do_step(const step_t *s, model_t *md)    /* the call's return code; t
     uint32_t keep = rnd_s;
     int rc;
     rnd_s = s->seed;
+    pat_on = 1;
     mk(&p, s->n, s->name);
+    pat_on = 0;
     rnd_s = keep;
     if (s->del) { rc = pl_del(s->id); if (rc == 0) memset(&md->p[s->id], 0, sizeof md->p[s->id]); }
     else { rc = pl_put(s->id, &p); if (rc == 0) model_put(md, s->id, &p); }
@@ -167,7 +172,9 @@ static void apply_model(const step_t *s, model_t *md)   /* the state the step wo
     pl_patch_t p;
     uint32_t keep = rnd_s;
     rnd_s = s->seed;
+    pat_on = 1;
     mk(&p, s->n, s->name);
+    pat_on = 0;
     rnd_s = keep;
     if (s->del) memset(&md->p[s->id], 0, sizeof md->p[s->id]);
     else model_put(md, s->id, &p);
@@ -194,6 +201,11 @@ int main(void)
         CHECK(pl_get(32, &q) == PL_E_ARGS && pl_put(32, &p) == PL_E_ARGS && pl_del(32) == PL_E_ARGS, "id 32 refused");
         p.n = PL_MAXP + 1;
         CHECK(pl_put(0, &p) == PL_E_ARGS, "too many parameters refused");
+        p.n = 4; p.pw = PL_MAXPW + 1;
+        CHECK(pl_put(0, &p) == PL_E_ARGS, "too many pattern words refused");
+        mk(&p, PL_MAXP, "LARGEST"); p.pw = PL_MAXPW;
+        CHECK(pl_put(5, &p) == 0 && pl_get(5, &q) == 0 && q.pw == PL_MAXPW && !memcmp(q.pv, p.pv, 2 * PL_MAXPW) && q.n == PL_MAXP, "the largest record (80 parameters, 33 pattern words) round-trips");
+        CHECK(pl_del(5) == 0, "and goes again");
         mk(&p, 48, "SECOND");
         CHECK(pl_put(3, &p) == 0, "replace 3");
         model_put(&md, 3, &p);
@@ -243,7 +255,7 @@ int main(void)
             if (pl_put(id2, &p) == 0) { model_put(&md, id2, &p); ok++; }
             else CHECK(pl_put(id2, &p) == PL_E_FULL, "full is reported as full");
         }
-        CHECK(ok == PL_SSZ / pl_reclen(60), "n=60 holds %u patches (%u expected)", ok, PL_SSZ / pl_reclen(60));
+        CHECK(ok == PL_SSZ / pl_reclen(60, 0), "n=60 holds %u patches (%u expected)", ok, PL_SSZ / pl_reclen(60, 0));
         mk(&p, 60, "AGAIN");
         CHECK(pl_put(0, &p) == 0, "replacing an existing patch at capacity works");
         model_put(&md, 0, &p);
@@ -276,7 +288,7 @@ int main(void)
     /* ---- power cut at every flash operation of a workload that includes compaction ---- */
     {
         uint32_t nsteps = 600, runs = 0, bad = 0, total_ops;
-        make_steps(steps, nsteps, 4242, 90);
+        make_steps(steps, nsteps, 4242, 80);
         wipe();
         memset(&md, 0, sizeof md);
         for (i = 0; i < nsteps; i++) do_step(&steps[i], &md);
@@ -414,7 +426,7 @@ int main(void)
     /* ---- a failing flash operation (error return, with no / full / half effect) at every operation ---- */
     {
         uint32_t nsteps = 600, runs = 0, bad = 0, total_ops;
-        make_steps(steps, nsteps, 99, 90);
+        make_steps(steps, nsteps, 99, 80);
         wipe();
         memset(&md, 0, sizeof md);
         for (i = 0; i < nsteps; i++) do_step(&steps[i], &md);
