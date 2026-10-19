@@ -314,14 +314,7 @@ static void voice_out(voice_t *vp, int32_t *mix, uint32_t mode, int32_t g, int32
     a1 = (int32_t)((0xFFFFFFFFu / den) << 12);  /* den >= 65536: no divide by zero; a1 <= 2^28 */
     a2 = (int32_t)(((int64_t)g * a1) >> 28);
     a3 = (int32_t)(((int64_t)g * a2) >> 28);
-    if (mode == 1u) {                           /* band pass: v1 has a peak gain of 1/k (0.7 .. 67): scaled by sqrt(k) so the width changes the tone, not mostly the loudness */
-        uint32_t r = (uint32_t)k, q = 0, bit = 1u << 28;
-        int32_t sq;
-        while (bit > r) bit >>= 2;              /* integer square root of k (Q28) = sqrt(k) in Q14 */
-        while (bit) { if (r >= q + bit) { r -= q + bit; q = (q >> 1) + bit; } else q >>= 1; bit >>= 2; }
-        sq = (int32_t)q;
-        SVF_LOOP((int32_t)(((int64_t)v1 * sq) >> 14))
-    }
+    if (mode == 1u) { SVF_LOOP(v1) }
     else if (mode == 2u) { SVF_LOOP(x - (int32_t)(((int64_t)k * v1) >> 28) - v2) }
     else { SVF_LOOP(v2) }
     vp->s1 = ic1;
