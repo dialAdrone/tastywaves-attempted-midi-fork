@@ -41,26 +41,34 @@ static void fx_slot_run(int32_t *lr, uint32_t n, void *state)
         inc = LFO_INC[(a * 90) >> 7] >> 5;
         d0 = 70; dq = 60; fbk = (b * 205) >> 7;
     }
-    for (i = 0; i < n; i++) {
-        int32_t inl = lr[2u * i], inr = lr[2u * i + 1u], mono = (inl + inr) >> 1, wet[2], k, dl, x;
-        ms += (mt * 256 - ms + 512) >> 10;       /* (rounded: a rising mix reaches its target) */
-        ph += inc;
-        for (k = 0; k < 2; k++) {
-            int32_t lfo = sine(ph + (k ? 0x40000000u : 0u)), pos, fr, i0, i1;
-            dl = d0 * 256 + ((lfo * dq) >> 7);              /* Q8 samples */
-            pos = ((int32_t)w << 8) - dl;
-            pos &= (int32_t)(FX_DLEN << 8) - 1;
-            i0 = pos >> 8; fr = pos & 255;
-            i1 = (i0 + 1) & (int32_t)(FX_DLEN - 1u);
-            wet[k] = (((int32_t)s->buf[i0] * (256 - fr) + (int32_t)s->buf[i1] * fr) >> 8) * 32;
+    for (i = 0; i < n; ) {
+        uint32_t cn = n - i < 16u ? n - i : 16u, c;
+        int32_t dl[2], ds[2], k;
+        for (k = 0; k < 2; k++) {               /* the LFO runs once a 16-sample chunk; the delay slides linearly inside it */
+            int32_t d_a = d0 * 256 + ((sine(ph + (k ? 0x40000000u : 0u)) * dq) >> 7);
+            int32_t d_b = d0 * 256 + ((sine(ph + inc * cn + (k ? 0x40000000u : 0u)) * dq) >> 7);
+            dl[k] = d_a; ds[k] = (d_b - d_a) / (int32_t)cn;
         }
-        x = (mono + (type == FXT_FLANGER ? (s->fb * fbk) >> 8 : 0)) >> 5;
-        s->buf[w] = (int16_t)(x > 32767 ? 32767 : x < -32768 ? -32768 : x);
-        s->fb = wet[0];
-        w = (w + 1u) & (FX_DLEN - 1u);
-        {   int32_t m = ms >> 8;
-            lr[2u * i] = inl + (((wet[0] - inl) * m) >> 7);
-            lr[2u * i + 1u] = inr + (((wet[1] - inr) * m) >> 7);
+        ph += inc * cn;
+        for (c = 0; c < cn; c++, i++) {
+            int32_t inl = lr[2u * i], inr = lr[2u * i + 1u], mono = (inl + inr) >> 1, wet[2], x;
+            ms += (mt * 256 - ms + 512) >> 10;       /* (rounded: a rising mix reaches its target) */
+            for (k = 0; k < 2; k++) {
+                int32_t pos = ((int32_t)w << 8) - dl[k], fr, i0, i1;
+                dl[k] += ds[k];
+                pos &= (int32_t)(FX_DLEN << 8) - 1;
+                i0 = pos >> 8; fr = pos & 255;
+                i1 = (i0 + 1) & (int32_t)(FX_DLEN - 1u);
+                wet[k] = (((int32_t)s->buf[i0] * (256 - fr) + (int32_t)s->buf[i1] * fr) >> 8) * 32;
+            }
+            x = (mono + (type == FXT_FLANGER ? (s->fb * fbk) >> 8 : 0)) >> 5;
+            s->buf[w] = (int16_t)(x > 32767 ? 32767 : x < -32768 ? -32768 : x);
+            s->fb = wet[0];
+            w = (w + 1u) & (FX_DLEN - 1u);
+            {   int32_t m = ms >> 8;
+                lr[2u * i] = inl + (((wet[0] - inl) * m) >> 7);
+                lr[2u * i + 1u] = inr + (((wet[1] - inr) * m) >> 7);
+            }
         }
     }
     s->w = w; s->ph = ph; s->mix_s = ms;
