@@ -478,7 +478,7 @@ static void pn_encoders(void)
         m = m < 0 ? 0 : m >= n ? n - 1 : m;
         pn.mstep = (uint8_t)m;
         if ((d = fm1_enc_take(ENC_KNOB4)) != 0) {
-            x = (int32_t)ml[m] + pn_accel(d);
+            x = (int32_t)ml[m] + pn_accel(d) * 4;       /* 4 values a detent: the lane's 128 values are a long way for one knob */
             ml[m] = (int8_t)(x < -64 ? -64 : x > 63 ? 63 : x);
             pn.touched = 3;
         }
