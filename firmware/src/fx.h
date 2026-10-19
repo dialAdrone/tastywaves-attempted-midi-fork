@@ -157,6 +157,10 @@ static int16_t fx_rv[FX_RVN] __attribute__((section(".pool")));
 #endif
 static struct { uint16_t pos[12]; int32_t lp[8], dc[2]; } fx_rvs;
 
+static inline int32_t fx_mz(int64_t p)         /* p >> 15, rounded toward zero: a loop built on it always decays to silence (rounding to nearest leaves a limit cycle) */
+{
+    return (int32_t)(p < 0 ? -((-p) >> 15) : p >> 15);
+}
 static void fx_reverb(int32_t *lr, uint32_t n, fx_slot_t *s)
 {
     const int32_t *p = es.p + P_FX1_TYPE + 4u * s->idx;
@@ -165,7 +169,7 @@ static void fx_reverb(int32_t *lr, uint32_t n, fx_slot_t *s)
     off[0] = 0;
     for (j = 1; j < 12u; j++) off[j] = off[j - 1u] + FX_RVL[j - 1u];
     for (i = 0; i < n; i++) {
-        int32_t inl = lr[2u * i], inr = lr[2u * i + 1u], x = ((inl + inr) >> 1) >> 8, m, o[2];       /* (headroom: the comb loops gain up to 47 at DC) */
+        int32_t inl = lr[2u * i], inr = lr[2u * i + 1u], x = (inl + inr) / 512, m, o[2];       /* (headroom: the comb loops gain up to 47 at DC) */
         ms += (mt * 256 - ms + 512) >> 10;
         m = ms >> 8;
         for (ch = 0; ch < 2u; ch++) {
@@ -174,22 +178,22 @@ static void fx_reverb(int32_t *lr, uint32_t n, fx_slot_t *s)
             for (j = 0; j < 4u; j++) {
                 uint32_t q = b + j;
                 int32_t y = fx_rv[off[q] + fx_rvs.pos[q]], l = fx_rvs.lp[ch * 4u + j], v;
-                l = y + (int32_t)(((int64_t)(l - y) * dmp + 16384) >> 15);          /* damping: a one-pole low-pass in the loop */
+                l = y + fx_mz((int64_t)(l - y) * dmp);          /* damping: a one-pole low-pass in the loop */
                 fx_rvs.lp[ch * 4u + j] = l;
-                v = x + (int32_t)(((int64_t)l * fbq + 16384) >> 15);
+                v = x + fx_mz((int64_t)l * fbq);
                 fx_rv[off[q] + fx_rvs.pos[q]] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
                 if (++fx_rvs.pos[q] >= FX_RVL[q]) fx_rvs.pos[q] = 0;
                 acc += y;
             }
             for (j = 4; j < 6u; j++) {                                      /* all-pass, gain 0.5 */
                 uint32_t q = b + j;
-                int32_t bo = fx_rv[off[q] + fx_rvs.pos[q]], v = acc + ((bo + 1) >> 1);
+                int32_t bo = fx_rv[off[q] + fx_rvs.pos[q]], v = acc + (bo < 0 ? -((-bo) >> 1) : bo >> 1);
                 fx_rv[off[q] + fx_rvs.pos[q]] = (int16_t)(v > 32767 ? 32767 : v < -32768 ? -32768 : v);
                 if (++fx_rvs.pos[q] >= FX_RVL[q]) fx_rvs.pos[q] = 0;
                 acc = bo - acc;
             }
             fx_rvs.dc[ch] += (acc * 65536 - fx_rvs.dc[ch]) >> 11;   /* a DC trap (Q16): the integer rounding in the loops leaves a small offset */
-            o[ch] = acc - (fx_rvs.dc[ch] >> 16);
+            o[ch] = (acc * 65536 - fx_rvs.dc[ch]) / 65536;
         }
         lr[2u * i] = inl + (((o[0] * 64) * m) >> 7);
         lr[2u * i + 1u] = inr + (((o[1] * 64) * m) >> 7);
