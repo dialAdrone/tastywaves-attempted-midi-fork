@@ -31,10 +31,11 @@
 #define WT_LEVELS_N 7u                           /* fmt 1: the engine's native layout, 7 mip levels with guards */
 #define WT_DATA_BYTES 35648u                     /* 32 frames x 557 int16 (firmware/gen/wt_bench.h layout), at slot offset 0 */
 #define WT_DATA_CHUNKS 140u                      /* of 256 B, the last one 64 B */
-#define WT_STAGE 4u                              /* 0 read-only, 1 test sector, 2.. writer (docs/UPLOAD-DESIGN.md 8.2) */
+#define WT_STAGE 5u                              /* 0 read-only, 1 test sector, 2.. writer (docs/UPLOAD-DESIGN.md 8.2) */
 
 enum { WT_CMD_HELLO = 1, WT_CMD_DIR = 2, WT_CMD_BEGIN = 3, WT_CMD_DATA = 4, WT_CMD_COMMIT = 5, WT_CMD_ABORT = 6,
-       WT_CMD_ERASE = 7, WT_CMD_READ = 8, WT_CMD_AUDITION = 9, WT_CMD_SELFTEST = 10, WT_CMD_XIPCHECK = 11 };
+       WT_CMD_ERASE = 7, WT_CMD_READ = 8, WT_CMD_AUDITION = 9, WT_CMD_SELFTEST = 10, WT_CMD_XIPCHECK = 11,
+       WT_CMD_PDIR = 12, WT_CMD_PGET = 13, WT_CMD_PPUT = 14, WT_CMD_PDEL = 15 };      /* 12..15: the patch commands (patchlink.h), stage 5 */
 enum { WT_OK = 0, WT_E_ARGS = 1, WT_E_RANGE = 2, WT_E_BUSY = 7, WT_E_NOFLASH = 9 };
 
 static uint8_t wt_scanned;
@@ -542,6 +543,7 @@ static void wt_reply(uint32_t cmd, uint32_t rc, uint32_t seq, const uint8_t *pl,
     ota_wire_send(wt_wire, w);
 }
 
+static uint32_t pl_link(uint32_t cmd, const uint8_t *a, uint32_t len, uint8_t *out, uint32_t *n);   /* patchlink.h, after the log */
 static void wt_handle(const uint8_t *r)         /* r: a checked request, r[3] cmd, r[4] seq, r[5..6] len, payload at r + 7 */
 {
     uint32_t cmd = r[3], seq = r[4], len = ota_rd16(r + 5);
@@ -645,6 +647,9 @@ static void wt_handle(const uint8_t *r)         /* r: a checked request, r[3] cm
         }
         n = wt_xipcheck(a[0], out);
         wt_reply(cmd, WT_OK, seq, out, n);
+    } else if (cmd >= WT_CMD_PDIR && cmd <= WT_CMD_PDEL) {    /* the patch library: not while a table upload runs */
+        uint32_t rc = wt.busy ? WT_E_BUSY : pl_link(cmd, a, len, out, &n);
+        wt_reply(cmd, rc, seq, out, rc ? 0u : n);
     } else if (cmd == WT_CMD_AUDITION) {
         wt_reply(cmd, WT_E_BUSY, seq, out, 0);   /* stage 4 */
     } else {

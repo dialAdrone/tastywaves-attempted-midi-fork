@@ -20,6 +20,7 @@ window.addEventListener('unhandledrejection', (e) => out.push('REJECT ' + e.reas
 await wait(100);
 $('btnAccess').click(); await wait(300);
 $('btnConnect').click(); await wait(800);
+out.push('patches=' + document.querySelectorAll('.prow').length, 'patch=' + document.querySelector('.prow .pname').textContent + ' / ' + document.querySelector('.prow .pinfo').textContent);
 out.push('slots=' + document.querySelectorAll('.slot').length, 'slot3=' + document.querySelector('#slot3 .name').textContent, 'status=' + $('status').textContent);
 const bytes = new Uint8Array(await (await fetch('serum16.wav')).arrayBuffer());
 const dt = new DataTransfer(); dt.items.add(new File([bytes], 'Serum Test.wav'));
@@ -36,4 +37,4 @@ sleep 1
 "$CHROME" --headless=new --disable-gpu --no-sandbox --user-data-dir="$D/profile" --virtual-time-budget=60000 --dump-dom http://127.0.0.1:8765/index.html 2>"$D/chrome.err" > "$D/dom.html" || true; grep -v CVDisplayLink "$D/chrome.err" | head -c 1500 >&2
 R=$(sed -n '/<pre id="result">/,/<\/pre>/p' "$D/dom.html" | sed 's/<[^>]*>//g')
 echo "$R"
-echo "$R" | grep -q "slots=8" && echo "$R" | grep -q "slot3=TESTTAB" && echo "$R" | grep -q "sendEnabled=true" && echo "$R" | grep -q "ink=true" && ! echo "$R" | grep -q "ERROR\|REJECT" && echo "web smoke ok" || { echo "web smoke FAILED"; exit 1; }
+echo "$R" | grep -q "slots=8" && echo "$R" | grep -q "patches=1" && echo "$R" | grep -q "SHIM PAD / user table slot 2 · 16 step pattern" && echo "$R" | grep -q "slot3=TESTTAB" && echo "$R" | grep -q "sendEnabled=true" && echo "$R" | grep -q "ink=true" && ! echo "$R" | grep -q "ERROR\|REJECT" && echo "web smoke ok" || { echo "web smoke FAILED"; exit 1; }

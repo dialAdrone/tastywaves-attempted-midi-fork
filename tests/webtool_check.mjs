@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { createInterface } from 'node:readline';
 import { buildTable, readWav, detectFrame, naturalCompare } from '../tools/web/convert.js';
-import { VwLink, slotImage, parseImage, crc32, vwFrame, vwParse, LinkError, HEADER_LEN, DATA_BYTES } from '../tools/web/vwlink.js';
+import { encodeBody, decodeBody, parseBackup, tableRefs, VwLink, slotImage, parseImage, crc32, vwFrame, vwParse, LinkError, HEADER_LEN, DATA_BYTES } from '../tools/web/vwlink.js';
 
 const [py, inDir] = process.argv.slice(2);
 let fails = 0;
@@ -76,7 +76,7 @@ writeFileSync(join(tmp, 'b.vwt'), imgB);
 const fl = new FakeLink([`2:${join(tmp, 'b.vwt')}`]);
 const vw = new VwLink(fl, { tries: 4, timeout: 50 });
 const h = await vw.hello();
-check(h.proto === 1 && h.stage === 4 && h.slots === 8 && h.slotSize === 0x9000 && h.id === 'FM-1_950', 'HELLO from the firmware logic');
+check(h.proto === 1 && h.stage === 5 && h.slots === 8 && h.slotSize === 0x9000 && h.id === 'FM-1_950', 'HELLO from the firmware logic');
 let d = await vw.directory();
 check(d.length === 8 && d[2].valid && d[2].name === 'WE-64' && d[2].crc === crcB && !d[0].valid, 'DIR: slot 2 holds WE-64, others empty');
 const g = await vw.get(2);
@@ -111,6 +111,41 @@ check(vwParse(f) === null || vwParse(f).payload.length === 3, 'frame parses');
 const dmg = f.slice(); dmg[4] ^= 0x10;
 check(vwParse(dmg) === null, 'a damaged frame is rejected');
 check(crc32(new TextEncoder().encode('123456789')) === 0xCBF43926, 'crc32 check value');
+
+
+// ---- the patch library (stage 5) against the firmware logic and the real patch log ----
+{
+  const mk = (name, seed, pat = 0) => encodeBody({ name, params: Array.from({ length: 73 }, (_, i) => (seed * 7 + i * 13) % 300 - 100), pattern: Array.from({ length: pat }, (_, i) => seed + i) });
+  let pd = await vw.patchDirectory();
+  check(pd.length === 32 && pd.every((e) => !e.present), 'PDIR: an empty store lists 32 ids, none present');
+  const a = mk('BRIGHT PAD', 1), b = mk('SUB BASS', 2, 9), c = mk('ARP LEAD', 3, 17);
+  await vw.putPatchBody(0, a); await vw.putPatchBody(1, b); await vw.putPatchBody(5, c);
+  pd = await vw.patchDirectory();
+  check(pd[0].present && pd[0].name === 'BRIGHT PAD' && pd[1].pw === 9 && pd[5].pw === 17 && !pd[2].present, 'PDIR after three puts: names, pattern words');
+  check(decodeBody(await vw.getPatchBody(5)).pattern.length === 17, 'PGET returns the pattern words');
+  await vw.renamePatch(1, 'bass 2 \u00e9');
+  check(decodeBody(await vw.getPatchBody(1)).name === 'bass 2', 'rename keeps printable ASCII only and the patch contents');
+  check(decodeBody(await vw.getPatchBody(1)).params.every((v, i) => v === decodeBody(b).params[i]), 'rename leaves every parameter alone');
+  check(await vw.swapPatches(0, 5) === 'swapped', 'swap through a free id');
+  check(decodeBody(await vw.getPatchBody(0)).name === 'ARP LEAD' && decodeBody(await vw.getPatchBody(5)).name === 'BRIGHT PAD' && !(await vw.patchDirectory())[2].present, 'after the swap the patches changed places and no copy is left');
+  check(await vw.swapPatches(5, 9) === 'moved' && !(await vw.patchDirectory())[5].present && decodeBody(await vw.getPatchBody(9)).name === 'BRIGHT PAD', 'a move to an empty id');
+  const bk = await vw.backup();
+  check(bk.patches.length === 3 && parseBackup(JSON.parse(JSON.stringify(bk))).length === 3, 'backup lists 3 patches and parses back');
+  await vw.deletePatch(0); await vw.deletePatch(1); await vw.deletePatch(9);
+  check((await vw.patchDirectory()).every((e) => !e.present), 'delete removes them');
+  for (const p of parseBackup(bk)) await vw.putPatchBody(p.id, p.body);
+  check(sameAll(await vw.getPatchBody(0), c) && (await vw.getPatchBody(1)).length > 0, 'restore from the backup brings them back unchanged');
+  for (const [fn, what] of [[() => vw.getPatchBody(7), 'get of an empty id'], [() => vw.putPatchBody(32, a), 'put to id 32'], [() => vw.deletePatch(40), 'delete of id 40'],
+      [() => vw.putPatchBody(3, a.subarray(0, 20)), 'put of a short body'], [() => parseBackup({ format: 'x' }), 'a file that is not a backup']]) {
+    let e = null; try { await fn(); } catch (x) { e = x; }
+    check(e instanceof LinkError, `${what} is refused (${e && e.message})`);
+  }
+  check(JSON.stringify(tableRefs([14, 0, 0, 0, 0, 3])) === '[2]' && tableRefs([]).length === 0, 'tableRefs: user slot of osc 1 only');
+  let full = 0;
+  for (let i = 0; i < 32; i++) { try { await vw.putPatchBody(i, mk('FILL ' + i, i, 33)); full++; } catch (x) { if (/full/.test(x.message)) break; throw x; } }
+  check(full >= 14 && full < 32, `a full store says so after ${full} large patches`);
+}
+function sameAll(x, y) { return x.length === y.length && x.every((v, i) => v === y[i]); }
 
 // no answer at all
 const dead = new VwLink({ send: async () => true, recv: async () => null, drain() {} }, { tries: 2, timeout: 5 });

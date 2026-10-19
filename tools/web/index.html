@@ -4,7 +4,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>VAVEWave Tables</title>
+<title>VAVEWave Tables and Patches</title>
 <style>
   :root { --bg:#f6f5f2; --fg:#1d1d1b; --mute:#6b6a66; --card:#fff; --line:#d9d6cf; --accent:#0b6e4f; --accent-fg:#fff; --warn:#a4400d; --bad:#b3261e; }
   @media (prefers-color-scheme: dark) { :root { --bg:#161614; --fg:#ecebe6; --mute:#9a988f; --card:#1f1f1c; --line:#38372f; --accent:#4cc38a; --accent-fg:#06281b; --warn:#f0a15f; --bad:#ff8a80; } }
@@ -34,12 +34,17 @@
   progress { width:100%; height:10px; accent-color:var(--accent); }
   pre { margin:8px 0 0; white-space:pre-wrap; font-size:12px; color:var(--mute); }
   details { margin-top:16px; color:var(--mute); } details p { margin:6px 0; }
+  #patches { display:flex; flex-direction:column; gap:6px; }
+  .prow { display:grid; grid-template-columns:3em minmax(8em,14em) 1fr auto; gap:10px; align-items:center; padding:8px 12px; }
+  .pid { font-family: ui-monospace, Menlo, monospace; color:var(--mute); } .pname { font-weight:700; font-family: ui-monospace, Menlo, monospace; } .pinfo { font-size:12px; }
+  .prow button { padding:3px 9px; font-size:13px; }
+  @media (max-width:640px) { .prow { grid-template-columns:3em 1fr; } .prow .pinfo, .prow .row { grid-column:1 / -1; } }
   .hide { display:none; }
 </style>
 </head>
 <body>
 <main>
-  <h1>VAVEWave Tables</h1>
+  <h1>VAVEWave Tables and Patches</h1>
   <p class="sub">Send wavetables (Serum, WaveEdit, Ableton, Surge) to the 8 user slots of your FM-1. The conversion runs in this page; nothing is uploaded to a server.</p>
 
   <div class="card">
@@ -55,6 +60,16 @@
     <h2>Slots on the FM-1</h2>
     <div id="slots"></div>
     <div class="row" style="margin-top:10px"><button id="btnRefresh">Refresh</button><span id="fw" class="mute"></span></div>
+
+    <div id="patchSec" class="hide">
+      <h2>Patches on the FM-1</h2>
+      <div id="patches"></div>
+      <div class="row" style="margin-top:10px">
+        <button id="btnBackup">Backup all…</button>
+        <button id="btnRestore">Restore from a file…</button><input id="restoreFile" type="file" accept=".json" class="hide">
+        <span id="pcount" class="mute"></span>
+      </div>
+    </div>
 
     <h2>Add a table</h2>
     <div class="card">
@@ -84,6 +99,7 @@
     <p>Sending takes about 5 seconds. Keys up and no sound; do not unplug the FM-1 meanwhile. If the cable is pulled or power is lost the slot simply stays empty; nothing else is touched.</p>
     <p>Sending into a slot that holds a table replaces it. Use Save on that slot first to keep a copy as a .vwt file; the same file can be sent back later.</p>
     <p>Only harmonics 1 to 64 of each cycle are kept (the engine's limit). A file with more than 32 frames is spread evenly over 32; with fewer, frames are blended.</p>
+    <p>Patches: rename, reorder (the order of the PRESETS list on the FM-1), delete, back up to a JSON file and restore. A backup holds every parameter and any saved pattern of every user patch. Restoring puts each patch back under its own number and keeps the ones not in the file. A patch refers to a user table by slot number, not by content: backing up tables is the Save button on each slot.</p>
     <p>The tables are your own files; this page and the firmware ship none.</p>
   </details>
 </main>

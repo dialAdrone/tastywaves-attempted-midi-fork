@@ -167,9 +167,9 @@ static void pn_pat_apply(const pl_patch_t *t)    /* a loaded record's pattern (i
     if (!t->pw) return;
     n = (uint16_t)t->pv[0];
     if (n < 1u || n > SEQ_MAXN || t->pw < 1u + n) return;
-    sq.rec = 0;
     sq.len = 0;                                  /* the ISR plays nothing while the arrays change */
     __asm__ volatile("" ::: "memory");
+    sq.rec = 0;
     for (i = 0; i < n; i++) {
         uint32_t v = (uint16_t)t->pv[1u + i];
         sq.note[i] = (uint8_t)(v & 127u);

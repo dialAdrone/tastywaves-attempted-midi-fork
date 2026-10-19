@@ -163,3 +163,29 @@ match its parameter count and skips the record, so a downgrade hides patches tha
 - **Modified**: a changed pattern or lane makes SAVE blink, like a parameter edit.
 - **Capacity**: live data is capped at one sector (4,096 B). A record with a 16 step pattern is about 200 B, so about 20 such patches fit
   (STORE FULL after that); plain patches are not affected.
+- **Downgrade**: going back to a firmware older than S4 hides patches saved with a pattern, and that firmware's next compaction erases them for good. Back up with the web library (section 12) before downgrading.
+- **Known, accepted**: loading a pattern while keys are held for transposition can leave one held key sounding as a plain note until released (a 1-2 microsecond window per block); SAVE blinks for a pattern edit made with SEQ off although such a pattern is not stored.
+
+## 12. Patch library over the VW link (T17 stage P2)
+
+VW link stage 5 (HELLO reports stage 5) adds four commands, handled by `patchlink.h` and answered only when no table upload runs
+(rc 7 busy). The firmware writes only through `pl_put` / `pl_del`, so every guarantee of sections 4 and 5 holds (record written
+whole or not at all, old version kept on a cut). A patch body (what PGET returns and PPUT sends after the id) is
+`name[12] | n | pw | int16 v[n] | int16 pattern[pw]`, little endian; values are not interpreted (the panel clamps on load).
+
+| cmd | name | payload | reply |
+| --- | --- | --- | --- |
+| 12 | PDIR | start, count (1..16) | per id 16 B: id, present, n, pw, name[12] |
+| 13 | PGET | id | the body (rc 10: none) |
+| 14 | PPUT | id, body | rc 0, 11 store full, 4 flash error, 1 bad shape (n > 80, pw > 33, wrong length, non-printable name, id > 31) |
+| 15 | PDEL | id | rc 0 (also when there was none) |
+
+The panel learns of a change through `pl_link_dirty` and refreshes the names it shows; a patch already loaded stays as it is in RAM.
+Writes may glitch the sound (a compaction erase is a 17 ms gap, as with SAVE), so restore with the FM-1 quiet.
+
+The web tool (`tools/web`, section "Patches on the FM-1"): list with the user tables and pattern each patch uses; **rename** (get, new
+name, put); **reorder** (the list order is the id order: swap two ids; with a free id as a parking place no patch exists only in
+the browser's memory, without one the page says that a power cut in that moment could have lost one); **delete**; **backup** (JSON:
+format, version, per patch id, name and body in hex); **restore** (each patch back under its own id, confirm first, patches not in
+the file stay, every write read back). Tests: `tests/wtlink_check.c` (the commands on the real log), `tests/webtool_check.mjs`
+(the library against the firmware logic), `tests/web_smoke.sh` (the page).

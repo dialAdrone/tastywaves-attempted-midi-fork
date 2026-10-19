@@ -6,10 +6,10 @@
 //   transport.drain()                   drop anything received so far
 
 export const SLOTS = 8, HEADER_AT = 0x8F00, HEADER_LEN = 64, DATA_BYTES = 35648, FMT = 1, FRAMES = 32, LEVELS = 7;
-export const CMD = { HELLO: 1, DIR: 2, BEGIN: 3, DATA: 4, COMMIT: 5, ABORT: 6, ERASE: 7, READ: 8, SELFTEST: 10, XIPCHECK: 11 };
+export const CMD = { HELLO: 1, DIR: 2, BEGIN: 3, DATA: 4, COMMIT: 5, ABORT: 6, ERASE: 7, READ: 8, SELFTEST: 10, XIPCHECK: 11, PDIR: 12, PGET: 13, PPUT: 14, PDEL: 15 };
 export const RC_TEXT = {
   1: 'bad arguments', 2: 'range or alignment', 3: 'erase failed', 4: 'program failed', 5: 'verify failed',
-  6: 'no BEGIN or timeout', 7: 'refused (keys down, sound playing, or this firmware cannot do that)', 8: 'CRC mismatch', 9: 'no flash' };
+  6: 'no BEGIN or timeout', 7: 'refused (keys down, sound playing, or this firmware cannot do that)', 8: 'CRC mismatch', 9: 'no flash', 10: 'no such patch', 11: 'the patch store is full (delete a patch first)' };
 
 export class LinkError extends Error {}
 
@@ -84,6 +84,36 @@ export function parseImage(img) {
   if (img[6] !== FMT || img[7] !== FRAMES || img[8] !== LEVELS || dv.getUint32(18, true) !== DATA_BYTES || crc32(img.subarray(HEADER_LEN)) !== dv.getUint32(22, true)) throw new LinkError('data');
   return { name: latin1(img.subarray(10, 18)), frames: img[7], levels: img[8], crc: dv.getUint32(22, true), data: img.subarray(HEADER_LEN) };
 }
+
+// ---- patches (VW link stage 5, firmware/src/patchlink.h): a body is name[12] | n | pw | int16 v[n] | int16 pattern[pw], little endian ----
+export const PATCH_IDS = 32, PATCH_NAME = 12, MAX_PARAMS = 80, MAX_PATTERN = 33, P_TABLE1 = 0, P_TABLE2 = 5;
+export function cleanPatchName(name) { return name.replace(/[^\x20-\x7e]/g, '').slice(0, PATCH_NAME).replace(/\s+$/, '') || 'PATCH'; }
+export function encodeBody({ name, params, pattern = [] }) {
+  if (params.length > MAX_PARAMS || pattern.length > MAX_PATTERN) throw new LinkError('patch too large');
+  const b = new Uint8Array(PATCH_NAME + 2 + 2 * params.length + 2 * pattern.length), dv = new DataView(b.buffer);
+  const nm = cleanPatchName(name);
+  for (let i = 0; i < nm.length; i++) b[i] = nm.charCodeAt(i);
+  b[PATCH_NAME] = params.length; b[PATCH_NAME + 1] = pattern.length;
+  let o = PATCH_NAME + 2;
+  for (const v of params) { dv.setInt16(o, v, true); o += 2; }
+  for (const v of pattern) { dv.setInt16(o, v, true); o += 2; }
+  return b;
+}
+export function decodeBody(b) {
+  if (b.length < PATCH_NAME + 2) throw new LinkError('patch body too short');
+  const n = b[PATCH_NAME], pw = b[PATCH_NAME + 1];
+  if (n > MAX_PARAMS || pw > MAX_PATTERN || b.length !== PATCH_NAME + 2 + 2 * n + 2 * pw) throw new LinkError('patch body has the wrong size');
+  const dv = new DataView(b.buffer, b.byteOffset, b.length), params = [], pattern = [];
+  let o = PATCH_NAME + 2;
+  for (let i = 0; i < n; i++, o += 2) params.push(dv.getInt16(o, true));
+  for (let i = 0; i < pw; i++, o += 2) pattern.push(dv.getInt16(o, true));
+  return { name: latin1(b.subarray(0, PATCH_NAME)), params, pattern };
+}
+// which user table slots a patch plays (a table value of 12 or more is user slot value - 12; missing parameters are the defaults, table 0)
+export function tableRefs(params) {
+  return [params[P_TABLE1] || 0, params[P_TABLE2] || 0].filter((t) => t >= 12).map((t) => t - 12);
+}
+const sameBytes = (a, b) => a.length === b.length && a.every((v, i) => v === b[i]);
 
 export class VwLink {
   constructor(transport, { tries = 4, timeout = 1500 } = {}) { this.t = transport; this.tries = tries; this.timeout = timeout; this.seq = 0; }
@@ -183,4 +213,71 @@ export class VwLink {
     await this.request(CMD.ERASE, Uint8Array.of(slot));
     if ((await this.directory(slot, 1))[0].valid) throw new LinkError('the slot still reads as valid');
   }
+
+  // ---- patch library ----
+  async patchDirectory() {
+    const out = [];
+    for (const start of [0, 16]) {
+      const d = await this.request(CMD.PDIR, Uint8Array.of(start, 16));
+      if (d.length !== 256) throw new LinkError('unexpected PDIR reply');
+      for (let i = 0; i < 16; i++) {
+        const e = d.subarray(16 * i, 16 * i + 16);
+        out.push({ id: e[0], present: !!e[1], n: e[2], pw: e[3], name: latin1(e.subarray(4, 16)) });
+      }
+    }
+    return out;
+  }
+  async getPatchBody(id) { return (await this.request(CMD.PGET, Uint8Array.of(id))).slice(); }
+  // write and read back; throws if the log does not hold exactly this body afterwards
+  async putPatchBody(id, body) {
+    if (!(id >= 0 && id < PATCH_IDS)) throw new LinkError('patch id must be 0..' + (PATCH_IDS - 1));
+    decodeBody(body);
+    await this.request(CMD.PPUT, cat(Uint8Array.of(id), body), { timeout: 5000 });
+    if (!sameBytes(await this.getPatchBody(id), body)) throw new LinkError('read-back of patch ' + (id + 1) + ' differs from what was sent');
+  }
+  async deletePatch(id) {
+    if (!(id >= 0 && id < PATCH_IDS)) throw new LinkError('patch id must be 0..' + (PATCH_IDS - 1));
+    await this.request(CMD.PDEL, Uint8Array.of(id), { timeout: 5000 });
+    if ((await this.patchDirectory())[id].present) throw new LinkError('the patch is still there after delete');
+  }
+  async renamePatch(id, name) {
+    const p = decodeBody(await this.getPatchBody(id));
+    await this.putPatchBody(id, encodeBody({ ...p, name }));
+  }
+  // exchange two ids (the order of the list on the panel). With a free id as a parking place no patch is ever only in the
+  // computer's memory; without one the direct exchange has a moment where a power cut would lose one of them (caller warns).
+  async swapPatches(a, b, dir) {
+    const d = dir || await this.patchDirectory();
+    const ba = await this.getPatchBody(a), bb = d[b].present ? await this.getPatchBody(b) : null;
+    const free = d.findIndex((e, i) => !e.present && i !== a && i !== b);
+    if (!bb) { await this.putPatchBody(b, ba); await this.deletePatch(a); return 'moved'; }
+    if (free >= 0) {
+      try {
+        await this.putPatchBody(free, ba);
+        await this.putPatchBody(a, bb);
+        await this.putPatchBody(b, ba);
+      } finally { try { await this.deletePatch(free); } catch (e) { /* the copy stays: harmless, delete it by hand */ } }
+      return 'swapped';
+    }
+    await this.putPatchBody(a, bb);
+    await this.putPatchBody(b, ba);
+    return 'swapped-direct';
+  }
+  // backup of every patch as a JSON-able object; restore of one
+  async backup() {
+    const d = await this.patchDirectory(), patches = [];
+    for (const e of d) if (e.present) patches.push({ id: e.id, name: e.name, body: Array.from(await this.getPatchBody(e.id)).map((v) => v.toString(16).padStart(2, '0')).join('') });
+    return { format: 'vavewave-patches', version: 1, patches };
+  }
+}
+export function parseBackup(obj) {
+  if (!obj || obj.format !== 'vavewave-patches' || obj.version !== 1 || !Array.isArray(obj.patches)) throw new LinkError('not a VAVEWave patch backup');
+  const seen = new Set();
+  return obj.patches.map((p) => {
+    if (!Number.isInteger(p.id) || p.id < 0 || p.id >= PATCH_IDS || seen.has(p.id) || typeof p.body !== 'string' || !/^([0-9a-f]{2})+$/.test(p.body)) throw new LinkError('damaged entry in the backup');
+    seen.add(p.id);
+    const body = Uint8Array.from(p.body.match(/../g).map((h) => parseInt(h, 16)));
+    const d = decodeBody(body);
+    return { id: p.id, name: d.name, body };
+  });
 }

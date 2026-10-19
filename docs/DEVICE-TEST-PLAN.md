@@ -274,3 +274,19 @@ Flash `build/vavewave.fwsc`. TYPE now also has PHASER, DELAY, REVERB. DELAY and 
 | 17.5 | Load the saved patch, change one lane value, look at SAVE | SAVE blinks (a lane edit counts); SAVE again replaces it, reload shows the new value |
 | 17.6 | Save several patches with 16 step patterns (about 20) | each is saved; when the store is full the message says STORE FULL (delete one to go on) |
 | 17.7 | A patch saved with SEQ off after recording a pattern | no pattern comes back with it (patterns are saved only with SEQ on) |
+
+## 18. Patch library in the web tool (P2)
+
+Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". Keep the FM-1 quiet while writing.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 18.1 | Connect with several user patches saved (one with a SEQ pattern, one using a user table) | each patch listed as U01.. with its name; the pattern patch says "N step pattern", the table patch "user table slot n" |
+| 18.2 | Rename a patch to "TEST NAME" | the list shows it; on the FM-1 PRESETS shows the new name; loading it sounds the same as before |
+| 18.3 | Move a patch down one place (▼) | the two patches change places; on the FM-1 the PRESETS order changed; both still sound right |
+| 18.4 | Backup all, save the file | a JSON file |
+| 18.5 | Delete one patch in the page, then on the FM-1 browse PRESETS | it is gone from the list |
+| 18.6 | Restore the backup file | the deleted patch is back under its number, the others unchanged (names, sounds, patterns) |
+| 18.7 | On the FM-1 save a new patch while the page is open, press Refresh | it appears |
+| 18.8 | Fill the store (about 20 pattern patches), Restore a backup that does not fit | the page reports the store is full; patches already there still load |
+| 18.9 | Pull the cable during a restore, reconnect | every patch is either the old or the new version, nothing half written; the FM-1 works |

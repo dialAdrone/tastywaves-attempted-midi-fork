@@ -167,6 +167,11 @@ static void app_main(void)
         uint32_t keys, down, up, rel, b, hb, lit, base, edit_held, m, save_shown, rec_pass;
         uint8_t st, d1, d2;
         platform_poll();
+        if (pl_link_dirty) {                    /* the computer wrote or deleted patches (patchlink.h): the names the panel shows */
+            uint32_t pm = pl_link_dirty, pi;
+            pl_link_dirty = 0;
+            for (pi = 0; pi < PL_IDS; pi++) if (pm >> pi & 1u) pn_ucache(pi);
+        }
 
         {
             uint32_t w = wt_ui_poll();          /* a table upload (wtlink.h) owns the screen */

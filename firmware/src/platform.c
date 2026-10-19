@@ -183,6 +183,7 @@ static int settings_save(const void *p, uint32_t n)   /* p in RAM, n <= 256 */
 
 /* ---- user patches: the log of docs/PATCH-STORAGE-DESIGN.md (the app saves, lists and deletes through pl_*) */
 #include "patchlog.h"
+#include "patchlink.h"                        /* the VW link's patch commands (wtlink.h calls pl_link) */
 
 /* ---- MIDI over USB: 4-byte USB-MIDI packets, cable 0 */
 static int midi_get(uint8_t *st, uint8_t *d1, uint8_t *d2)   /* 1: a message (status, data 1, data 2) */

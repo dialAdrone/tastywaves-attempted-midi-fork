@@ -135,6 +135,7 @@ static int fl_write(uint32_t off, const uint8_t *s, uint32_t n)
     return 0;
 }
 #include "patchlog.h"
+#include "patchlink.h"
 static const char *host_patches_file;
 static void host_patches_save(void)
 {

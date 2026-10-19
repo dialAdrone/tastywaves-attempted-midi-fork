@@ -61,7 +61,7 @@ static uint32_t fm1_ticks(void) { ticks += 24u * 50u; return ticks; }
 static uint32_t wt_oob, wt_erases, wt_progs;
 static int fl_erase4k(uint32_t off, uint32_t *took)
 {
-    if (!(off >= 0xDF000u && off + 0x1000u <= 0xE0000u) && !(off >= 0x97000u && off + 0x1000u <= 0xDF000u)) wt_oob++;
+    if (!(off >= 0xDF000u && off + 0x1000u <= 0xE0000u) && !(off >= 0x97000u && off + 0x1000u <= 0xDF000u) && !(off >= 0xE5000u && off + 0x1000u <= 0xE9000u)) wt_oob++;
     if (off & 0xFFFu) wt_oob++;
     wt_erases++;
     if (fault == 1 && off >= 0xDF000u) return -3;
@@ -75,7 +75,7 @@ static int fl_erase4k(uint32_t off, uint32_t *took)
 static int fl_write(uint32_t off, const uint8_t *s, uint32_t n)
 {
     uint32_t i;
-    if (!(off >= 0xDF000u && off + n <= 0xE0000u) && !(off >= 0x97000u && off + n <= 0xDF000u)) wt_oob++;
+    if (!(off >= 0xDF000u && off + n <= 0xE0000u) && !(off >= 0x97000u && off + n <= 0xDF000u) && !(off >= 0xE5000u && off + n <= 0xE9000u)) wt_oob++;
     if (fault == 2 && off == 0xDF000u + 3u * 256u) return -3;
     if (fault == 6 && off == 0x97000u + 256u * 2u) return -3;     /* chunk 2 does not program */
     if (fault == 8 && off == 0x97000u + 0x8F00u && n == 64u) return -3;     /* the header does not program */
@@ -90,6 +90,10 @@ static void fl_plain_window_init(void) { xip_inits++; }
 static const volatile uint8_t *fl_xip_vptr(uint32_t off) { return xip_base + off; }
 static const int16_t *fl_xip_i16(uint32_t off) { return (const int16_t *)(xip_base + off); }
 #include "../firmware/src/wtlink.h"
+#define PL_W_LO 0x000E5000u
+#define PL_W_HI 0x000E9000u
+#include "../firmware/src/patchlog.h"
+#include "../firmware/src/patchlink.h"
 
 static void send(const uint8_t *msg, uint32_t n)       /* decoded message -> pending SysEx frame */
 {
@@ -140,6 +144,7 @@ static int serve(int argc, char **argv)
     int i;
     xip_base = flash;
     memset(flash, 0xFF, sizeof flash);
+    pl_init();
     for (i = 2; i < argc; i++) {
         unsigned k = (unsigned)atoi(argv[i]);
         const char *path = strchr(argv[i], ':') + 1;
@@ -553,13 +558,101 @@ static int check_main(void)
         if (n >= 3 && (i & 1)) { m[0] = 0x7D; m[1] = 'V'; m[2] = 'W'; }
         if (n >= 9 && (i & 2)) { uint32_t s = 0, l = n - 8; m[5] = l; m[6] = 0; for (j = 3; j < n - 1u; j++) s += m[j]; m[n - 1] = (uint8_t)~s; }
         out_n = 0; send(m, n); wt_service();
-        if (out_n) { CHECK(reply(&rc, &seq) && rc <= 9); }
+        if (out_n) { CHECK(reply(&rc, &seq) && rc <= 11); }
         if (in_ready) in_ready = 0;
         if (!(i % 500)) {                                              /* random header sectors */
             for (j = 0; j < WT_SLOTS; j++) { uint32_t t; for (t = 0; t < 64; t++) flash[wt_slot_at(j) + t] = (uint8_t)rand(); }
             wt_scan();
             for (j = 0; j < WT_SLOTS; j++) CHECK(!wt_dir[j].valid);
         }
+    }
+
+    /* ---- stage 5: the patch commands (patchlink.h) over the wire, on the real log ---- */
+    {
+        uint8_t pl_a[300], body[300];
+        uint32_t bl, pl_rc, j;
+        memset(flash + 0xE5000u, 0xFF, 0x4000u);
+        wt_oob = 0;
+        pl_init();
+        out_n = 0; a[0] = 0; a[1] = 16; request(WT_CMD_PDIR, 20, a, 2); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 256 && rep[8 + 1] == 0 && rep[8 + 16 * 15] == 15);   /* nothing saved yet */
+        out_n = 0; a[0] = 3; request(WT_CMD_PGET, 21, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == PLK_E_NONE && rep_n == 0);
+        /* put patch 3: 73 parameters and a 5 step pattern (6 words) */
+        memset(body, 0, sizeof body);
+        memcpy(body, "LINK TEST", 9);
+        body[12] = 73; body[13] = 6;
+        for (j = 0; j < 73u; j++) { body[14 + 2 * j] = (uint8_t)(j + 1u); body[15 + 2 * j] = (uint8_t)(j & 1u ? 0xFF : 0); }
+        for (j = 0; j < 6u; j++) { body[14 + 146 + 2 * j] = (uint8_t)(0x40 + j); body[15 + 146 + 2 * j] = (uint8_t)(0x20 + j); }
+        bl = 14 + 146 + 12;
+        pl_a[0] = 3; memcpy(pl_a + 1, body, bl);
+        out_n = 0; request(WT_CMD_PPUT, 22, pl_a, 1 + bl); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 0);
+        CHECK(pl_link_dirty == 8u); pl_link_dirty = 0;
+        out_n = 0; a[0] = 3; request(WT_CMD_PGET, 23, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0 && rep_n == bl && !memcmp(rep + 8, body, bl));
+        out_n = 0; a[0] = 0; a[1] = 8; request(WT_CMD_PDIR, 24, a, 2); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 128 && rep[8 + 16 * 3 + 1] == 1 && rep[8 + 16 * 3 + 2] == 73 && rep[8 + 16 * 3 + 3] == 6 &&
+              !memcmp(rep + 8 + 16 * 3 + 4, "LINK TEST", 9) && rep[8 + 16 * 2 + 1] == 0);
+        /* the panel's own view of it */
+        { pl_patch_t q; CHECK(pl_get(3, &q) == PL_OK && q.n == 73 && q.pw == 6 && q.v[0] == 1 && q.pv[5] == (int16_t)0x2545); }
+        /* refused shapes */
+        out_n = 0; pl_a[0] = 32; request(WT_CMD_PPUT, 25, pl_a, 1 + bl); wt_service();
+        CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
+        out_n = 0; pl_a[0] = 4; request(WT_CMD_PPUT, 26, pl_a, bl); wt_service();                          /* one byte short */
+        CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
+        pl_a[0] = 4; memcpy(pl_a + 1, body, bl); pl_a[1 + 12] = 81;
+        out_n = 0; request(WT_CMD_PPUT, 27, pl_a, 1 + bl); wt_service();                                   /* 81 parameters */
+        CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
+        memcpy(pl_a + 1, body, bl); pl_a[1 + 13] = 34;
+        out_n = 0; request(WT_CMD_PPUT, 28, pl_a, 1 + bl); wt_service();                                   /* 34 pattern words */
+        CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
+        memcpy(pl_a + 1, body, bl); pl_a[1 + 2] = 7;
+        out_n = 0; request(WT_CMD_PPUT, 29, pl_a, 1 + bl); wt_service();                                   /* a control character in the name */
+        CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
+        out_n = 0; a[0] = 0; a[1] = 17; request(WT_CMD_PDIR, 30, a, 2); wt_service();
+        CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
+        out_n = 0; a[0] = 20; a[1] = 16; request(WT_CMD_PDIR, 31, a, 2); wt_service();
+        CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
+        CHECK(pl_present() == 8u && pl_link_dirty == 0);
+        /* rename = a put with the same body and a new name; the id keeps its place */
+        memcpy(pl_a + 1, body, bl); memset(pl_a + 1, 0, 12); memcpy(pl_a + 1, "RENAMED", 7); pl_a[0] = 3;
+        out_n = 0; request(WT_CMD_PPUT, 32, pl_a, 1 + bl); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0);
+        { pl_patch_t q; CHECK(pl_get(3, &q) == PL_OK && !strcmp(q.name, "RENAMED") && q.n == 73); }
+        /* an upload in progress blocks the patch commands */
+        wt.busy = 1; wt.t_last = fm1_ms;
+        out_n = 0; a[0] = 3; request(WT_CMD_PGET, 33, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == WT_E_BUSY);
+        wt.busy = 0;
+        /* a patch of the front panel (no pattern) reads and writes back unchanged */
+        { pl_patch_t q; memset(&q, 0, sizeof q); strcpy(q.name, "PANEL"); q.n = 60; q.v[59] = -5; CHECK(pl_put(9, &q) == PL_OK); }
+        out_n = 0; a[0] = 9; request(WT_CMD_PGET, 34, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0 && rep_n == 14 + 120 && rep[8 + 13] == 0 && (int16_t)(rep[8 + 14 + 118] | rep[8 + 14 + 119] << 8) == -5);
+        memcpy(pl_a + 1, rep + 8, rep_n); pl_a[0] = 10;
+        out_n = 0; request(WT_CMD_PPUT, 35, pl_a, 1 + 14 + 120); wt_service();                            /* copy it to id 10 */
+        CHECK(reply(&rc, &seq) && rc == 0 && (pl_present() & 0x600u) == 0x600u);
+        /* delete */
+        out_n = 0; a[0] = 3; request(WT_CMD_PDEL, 36, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0 && !(pl_present() >> 3 & 1u));
+        out_n = 0; a[0] = 3; request(WT_CMD_PDEL, 37, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0);                                                                  /* deleting nothing is fine */
+        out_n = 0; a[0] = 33; request(WT_CMD_PDEL, 38, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
+        /* fill the store: STORE FULL is reported, the patches already there stay readable */
+        pl_a[0] = 0; memcpy(pl_a + 1, body, bl);
+        for (j = 0; j < 32u; j++) {
+            pl_a[0] = (uint8_t)j;
+            out_n = 0; request(WT_CMD_PPUT, 40, pl_a, 1 + bl); wt_service();
+            CHECK(reply(&rc, &seq) && (rc == 0 || rc == PLK_E_FULL));
+            if (rc) break;
+        }
+        CHECK(j < 32u && j >= 14u);                                                                          /* 4096 / 176 B: about 23 patches fit, never 32 */
+        out_n = 0; a[0] = 0; request(WT_CMD_PGET, 41, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0 && rep_n == bl);
+        CHECK(wt_oob == 0);
+        pl_link_dirty = 0;
+        (void)pl_rc;
     }
     CHECK(flash_writes == 0 && wt_oob == 0);
     printf("wtlink: %d checks, %d FAIL\n", n_ok, n_fail);

@@ -21,3 +21,4 @@ for p in sorted(Path("build/host").glob("patches-*.ppm")):
     Image.open(p).resize((480, 480), Image.NEAREST).save(p.with_suffix(".png"))
     p.unlink()
 PY
+sh tests/run_seqstore.sh

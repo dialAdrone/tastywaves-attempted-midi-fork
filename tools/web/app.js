@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-3.0-only
 // The page of tools/web/index.html: Web MIDI transport, slot list, file drop, conversion preview, send / save / erase.
-import { VwLink, LinkError, slotImage, parseImage, cleanName } from './vwlink.js';
+import { VwLink, LinkError, slotImage, parseImage, cleanName, decodeBody, tableRefs, parseBackup, cleanPatchName } from './vwlink.js';
 import { buildTable, naturalCompare } from './convert.js';
 
 const $ = (id) => document.getElementById(id);
@@ -52,6 +52,7 @@ async function connectFm1() {
     fw = await vw.hello();
     $('main').classList.remove('hide');
     await refresh();
+    await refreshPatches();
     status(`Connected: ${fw.id}, VW link v${fw.proto}, firmware stage ${fw.stage}.`);
   } catch (e) { vw = null; $('main').classList.add('hide'); status(e.message, 'bad'); }
   setBusy(false);
@@ -75,6 +76,71 @@ async function refresh() {
   tgt.replaceChildren(...dir.map((e) => new Option(`${e.slot}: ${e.valid ? e.name : 'empty'}`, e.slot)));
   tgt.value = keep || (dir.find((e) => !e.valid) || dir[0]).slot;
   $('fw').textContent = `${dir.filter((e) => e.valid).length} of ${dir.length} slots in use`;
+}
+
+// ---- the patch library (VW link stage 5): list, rename, reorder, delete, backup, restore ----
+let patches = [], pdir = [];
+async function refreshPatches() {
+  const box = $('patches');
+  $('patchSec').classList.toggle('hide', fw.stage < 5);
+  if (fw.stage < 5) return;
+  pdir = await vw.patchDirectory();
+  patches = [];
+  for (const e of pdir) if (e.present) patches.push({ id: e.id, name: e.name, ...decodeBody(await vw.getPatchBody(e.id)) });
+  const rows = patches.map((p, k) => {
+    const d = document.createElement('div'); d.className = 'card prow';
+    const tr = tableRefs(p.params), steps = p.pattern.length ? p.pattern[0] : 0;
+    const info = [tr.length ? 'user table slot ' + tr.join(', ') : 'factory tables', steps ? `${steps} step pattern` : ''].filter(Boolean).join(' · ');
+    d.innerHTML = '<span class="pid"></span><span class="pname"></span><span class="pinfo mute"></span><span class="row"></span>';
+    d.querySelector('.pid').textContent = 'U' + String(p.id + 1).padStart(2, '0');
+    d.querySelector('.pname').textContent = p.name;
+    d.querySelector('.pinfo').textContent = info;
+    const mkb = (t, f, off) => { const b = Object.assign(document.createElement('button'), { textContent: t }); b.onclick = f; b.disabled = !!off; return b; };
+    d.querySelector('.row').append(mkb('Rename…', () => renamePatch(p)), mkb('▲', () => movePatch(k, -1), k === 0), mkb('▼', () => movePatch(k, 1), k === patches.length - 1), mkb('Delete', () => deletePatch(p)));
+    return d;
+  });
+  box.replaceChildren(...(rows.length ? rows : [Object.assign(document.createElement('div'), { className: 'mute', textContent: 'No user patches saved yet (SAVE on the FM-1 makes one).' })]));
+  $('pcount').textContent = `${patches.length} of 32 patches saved`;
+}
+async function renamePatch(p) {
+  const n = prompt('New name (up to 12 characters, plain ASCII)', p.name);
+  if (n === null) return;
+  await guarded('Rename', async () => { await vw.renamePatch(p.id, cleanPatchName(n)); await refreshPatches(); status(`U${String(p.id + 1).padStart(2, '0')} is now "${cleanPatchName(n)}".`); });
+}
+async function movePatch(k, dir) {
+  const a = patches[k], b = patches[k + dir];
+  if (!b) return;
+  await guarded('Move', async () => {
+    const how = await vw.swapPatches(a.id, b.id, pdir);
+    await refreshPatches();
+    status(how === 'swapped-direct' ? 'Swapped (no free patch id: a power cut right now could have lost one; make a backup first next time).' : `"${a.name}" and "${b.name}" changed places.`);
+  });
+}
+async function deletePatch(p) {
+  if (!confirm(`Delete patch U${String(p.id + 1).padStart(2, '0')} "${p.name}" from the FM-1?\nUse Backup first if you may want it again.`)) return;
+  await guarded('Delete', async () => { await vw.deletePatch(p.id); await refreshPatches(); status(`Patch "${p.name}" deleted.`); });
+}
+async function backupPatches() {
+  await guarded('Backup', async () => {
+    status('Reading the patches…');
+    const bk = await vw.backup();
+    download(`vavewave-patches-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(bk));
+    status(`${bk.patches.length} patches saved to a file.`);
+  });
+}
+async function restorePatches(file) {
+  if (!file) return;
+  let list;
+  try { list = parseBackup(JSON.parse(await file.text())); } catch (e) { status('Restore: ' + (e instanceof LinkError ? e.message : 'the file is not a patch backup'), 'bad'); return; }
+  const clash = list.filter((p) => pdir[p.id] && pdir[p.id].present);
+  if (!confirm(`Restore ${list.length} patches from "${file.name}"?` + (clash.length ? `\n${clash.length} of them REPLACE patches now on the FM-1 (same number): ${clash.map((p) => 'U' + String(p.id + 1).padStart(2, '0')).join(' ')}. Patches not in the file are kept.` : '') +
+    '\nKeep the FM-1 quiet and plugged in while it runs; a sound may glitch.')) return;
+  await guarded('Restore', async () => {
+    let k = 0;
+    for (const p of list) { status(`Writing ${p.name}…`); await vw.putPatchBody(p.id, p.body); progress(++k / list.length); }
+    await refreshPatches();
+    status(`${list.length} patches restored and read back.`);
+  });
 }
 
 function progress(f) { $('bar').value = f; }
@@ -173,7 +239,10 @@ function draw(raw) {                                  // 32 frames, level 0 (256
 // ---- wiring ----
 $('btnAccess').onclick = connectMidi;
 $('btnConnect').onclick = connectFm1;
-$('btnRefresh').onclick = () => guarded('Refresh', async () => { await refresh(); status('Slots refreshed.'); });
+$('btnRefresh').onclick = () => guarded('Refresh', async () => { await refresh(); await refreshPatches(); status('Refreshed.'); });
+$('btnBackup').onclick = backupPatches;
+$('btnRestore').onclick = () => $('restoreFile').click();
+$('restoreFile').onchange = (e) => { restorePatches(e.target.files[0]); e.target.value = ''; };
 $('btnFiles').onclick = () => $('files').click();
 $('files').onchange = (e) => loadFiles(e.target.files);
 $('btnSend').dataset.need = $('btnSave').dataset.need = 'built';

@@ -15,10 +15,15 @@ const output = {
   send(pkt) {
     const d = unpack7(pkt.subarray(1, pkt.length - 1)), cmd = d[3], seq = d[4], pl = d.subarray(7, d.length - 1);
     let p = new Uint8Array(0);
-    if (cmd === 1) { p = new Uint8Array(16); p.set([1, 4, 8, 64, 0, 0x90, 0, 0]); p.set(enc.encode('FM-1_950'), 8); }
+    if (cmd === 1) { p = new Uint8Array(16); p.set([1, 5, 8, 64, 0, 0x90, 0, 0]); p.set(enc.encode('FM-1_950'), 8); }
     else if (cmd === 2) {
       const start = pl[0], n = pl[1]; p = new Uint8Array(16 * n);
       for (let i = 0; i < n; i++) { const e = p.subarray(16 * i, 16 * i + 16); e[0] = start + i; if (start + i === 3) { e[1] = 1; e[2] = 32; e[3] = 7; e.set(enc.encode('TESTTAB'), 4); e.set([0x78, 0x56, 0x34, 0x12], 12); } }
+    } else if (cmd === 12) {                           // PDIR: patch id 2 is "SHIM PAD" with a 16 step pattern
+      const start = pl[0]; p = new Uint8Array(256);
+      for (let i = 0; i < 16; i++) { const e = p.subarray(16 * i, 16 * i + 16); e[0] = start + i; if (start + i === 2) { e[1] = 1; e[2] = 73; e[3] = 17; e.set(enc.encode('SHIM PAD'), 4); } }
+    } else if (cmd === 13) {                           // PGET: osc 1 plays user table slot 2 (value 14)
+      p = new Uint8Array(12 + 2 + 146 + 34); p.set(enc.encode('SHIM PAD'), 0); p[12] = 73; p[13] = 17; p[14] = 14; p[14 + 146] = 16;
     } else if (cmd === 8) p = new Uint8Array(pl[3] | pl[4] << 8);
     setTimeout(() => input.onmidimessage && input.onmidimessage({ data: pack(reply(cmd, seq, p)) }), 1);
   },

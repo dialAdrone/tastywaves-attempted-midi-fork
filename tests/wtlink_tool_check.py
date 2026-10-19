@@ -75,7 +75,7 @@ with tempfile.TemporaryDirectory() as t:
     link = FakeLink([f'2:{td / "a.vwt"}'])
     vw = fast(link)
     h = vw.hello()
-    check(h['proto'] == 1 and h['stage'] == 4 and h['slots'] == 8 and h['slot_size'] == 0x9000 and h['id'] == 'FM-1_950',
+    check(h['proto'] == 1 and h['stage'] == 5 and h['slots'] == 8 and h['slot_size'] == 0x9000 and h['id'] == 'FM-1_950',
           'HELLO: protocol, stage 4, 8 slots, identity')
     d = vw.directory()
     check([e['valid'] for e in d] == [False, False, True, False, False, False, False, False], 'DIR: only slot 2 holds a table')
