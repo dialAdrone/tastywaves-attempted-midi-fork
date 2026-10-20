@@ -649,15 +649,13 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         for (i = 0; i < n && i < 32u; i++) if (sq.vel[i]) m |= 1u << i;
         v->seq_mask = m; v->seq_len = (uint8_t)n; v->seq_rec = sq.rec; v->seq_on = (uint8_t)(sq_tap.on != 0u && sq.len != 0u);
         v->seq_pos = sq.rec ? sq.cur : (uint8_t)sq_tap.step;
-        {   int32_t tr = qs.trans;                      /* the held key's transposition: the tiles show what sounds */
-            uint32_t tm = 0;
+        {   uint32_t tm = 0;                            /* the tiles show the stored notes; a held key's transposition is not shown */
             for (i = 0; i < n && i < 32u; i++) {
-                int32_t nn = (int32_t)sq.note[i] + (sq.rec ? 0 : tr);
-                v->seq_note[i] = (uint8_t)(sq.vel[i] && nn >= 0 && nn <= 127 ? nn + 1 : 0);
+                v->seq_note[i] = (uint8_t)(sq.vel[i] && sq.note[i] <= 127u ? sq.note[i] + 1 : 0);
                 if (sq.tie[i] && sq.vel[i]) tm |= 1u << i;
             }
             for (; i < 32u; i++) v->seq_note[i] = 0;
-            v->seq_tie = tm; v->seq_tr = (uint8_t)(tr != 0 && !sq.rec);
+            v->seq_tie = tm; v->seq_tr = 0;
         }
     }
     if (pn.page == UI_P_FX && pn.sub >= 2u) {           /* an effect slot: the labels follow its type, an empty slot shows nothing */

@@ -203,7 +203,7 @@ Flash `build/vavewave.fwsc`. One pattern of up to 32 steps lives in RAM (it is l
 | 13.5 | Short press REC again | recording ends; the pattern length is the steps entered (grid shows it) |
 | 13.6 | Short press SEQ | SEQ LED on; the pattern plays at the tempo, rests are silent, a tied note runs on |
 | 13.7 | RATE, GATE, SWING, TEMPO knobs on the SEQ page | speed, note length and shuffle change live |
-| 13.8 | Hold a key while it plays | the pattern is transposed by (that key minus C4); let go: back as recorded. A latched key (PLAY) keeps it transposed |
+| 13.8 | Hold a key while it plays | the pattern is transposed by (that key minus C4); let go: back as recorded. The tiles keep showing the recorded notes (no change, no gold). A latched key (PLAY) keeps it transposed |
 | 13.9 | Short press SEQ again | stops; keys sound as plain notes again |
 | 13.10 | Hold REC (0.7 s) | pattern cleared (LEN 0, NO PATTERN) |
 | 13.11 | Record 32 steps | recording ends by itself at 32 |
