@@ -158,8 +158,9 @@ largest record is 80 parameters + 33 words = 254 B. A firmware that does not kno
 match its parameter count and skips the record, so a downgrade hides patches that have a pattern.
 
 - **Save**: the pattern goes in only when the sequencer is on (SEQ) and a pattern exists. A patch without it is as small as before.
-- **Load**: a patch with a pattern replaces the pattern in RAM (the ISR plays nothing while the arrays change). A patch without
-  one leaves the pattern as it is: the sequencer is a performance switch, like the arp, so changing the sound does not stop the tune.
+- **Load**: a patch with a pattern replaces the pattern in RAM (the ISR plays nothing while the arrays change). A user patch
+  saved without one empties the pattern (the sequencer stays on but is silent until you record one); the factory presets leave it as it is.
+  (Earlier builds kept the old pattern playing under the new sound; changed after a device test.)
 - **Modified**: a changed pattern or lane makes SAVE blink, like a parameter edit.
 - **Capacity**: live data is capped at one sector (4,096 B). A record with a 16 step pattern is about 200 B, so about 20 such patches fit
   (STORE FULL after that); plain patches are not affected.

@@ -273,6 +273,7 @@ Flash `build/vavewave.fwsc`. TYPE now also has PHASER, DELAY, REVERB. DELAY and 
 | 17.4 | Record a different pattern, then PRESETS to the saved one | the saved pattern replaces it |
 | 17.5 | Load the saved patch, change one lane value, look at SAVE | SAVE blinks (a lane edit counts); SAVE again replaces it, reload shows the new value |
 | 17.6 | Save several patches with 16 step patterns (about 20) | each is saved; when the store is full the message says STORE FULL (delete one to go on) |
+| 17.6b | While a pattern plays, switch to a user patch saved without a pattern | the pattern is emptied and the sound stops sequencing; switching to a factory preset leaves the pattern playing |
 | 17.7 | A patch saved with SEQ off after recording a pattern | no pattern comes back with it (patterns are saved only with SEQ on) |
 
 ## 18. Patch library in the web tool (P2)

@@ -161,12 +161,11 @@ static uint32_t pn_pat_sum(void)                 /* a cheap fingerprint of the p
     for (i = 0; i < n; i++) h = (h * 31u + (uint16_t)w[i]) ^ (h >> 27);
     return h;
 }
-static void pn_pat_apply(const pl_patch_t *t)    /* a loaded record's pattern (if it has a good one) becomes the pattern */
+static void pn_pat_apply(const pl_patch_t *t)    /* a loaded user patch's pattern becomes the pattern; a patch saved without one empties it */
 {
     uint32_t n, i;
-    if (!t->pw) return;
-    n = (uint16_t)t->pv[0];
-    if (n < 1u || n > SEQ_MAXN || t->pw < 1u + n) return;
+    n = t->pw ? (uint16_t)t->pv[0] : 0u;
+    if (t->pw && (n < 1u || n > SEQ_MAXN || t->pw < 1u + n)) return;       /* a damaged pattern: leave the one in RAM */
     sq.len = 0;                                  /* the ISR plays nothing while the arrays change */
     __asm__ volatile("" ::: "memory");
     sq.rec = 0;
@@ -180,7 +179,7 @@ static void pn_pat_apply(const pl_patch_t *t)    /* a loaded record's pattern (i
     for (; i < SEQ_MAXN; i++) { sq.note[i] = 0; sq.vel[i] = 0; sq.tie[i] = 0; ml[i] = 0; }
     sq.cur = (uint8_t)n;
     __asm__ volatile("" ::: "memory");
-    sq.len = (uint8_t)n;
+    sq.len = (uint8_t)n;                         /* 0 = no pattern: the sequencer is silent until one is recorded */
 }
 
 static void pn_snapshot(void)
