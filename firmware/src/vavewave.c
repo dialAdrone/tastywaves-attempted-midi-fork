@@ -213,16 +213,21 @@ static void app_main(void)
                 for (k = 0; k < 16u; k++) lat[k] = nl[k];
             }
         }
-        if (b & (1u << BTN_REC)) { rec_arm = 1; t_rec = fm1_ms; }
+        if (pn.clr && (b & ~(1u << BTN_REC) || fm1_ms - pn.t_clr > 5000u)) pn.clr = 0;    /* "CLEAR PATTERN?": any other button or 5 s cancels */
+        if (b & (1u << BTN_REC) && pn.clr) {    /* REC again: clear the pattern */
+            pn.clr = 0;
+            sq.len = 0; sq.cur = 0;
+            for (k = 0; k < SEQ_MAXN; k++) { sq.note[k] = 0; sq.vel[k] = 0; sq.tie[k] = 0; ml[k] = 0; }
+            pn_msg("CLEARED", 0, 0);
+        } else if (b & (1u << BTN_REC)) { rec_arm = 1; t_rec = fm1_ms; }
         if (rec_arm) {
             if (!(hb >> BTN_REC & 1u)) {        /* a short press: step input on / off (off keeps what was entered as the pattern) */
                 rec_arm = 0;
-                if (!sq.rec) { sq.cur = 0; sq.rec = 1; pn.page = UI_P_SEQ; pn.sub = 0; pn.touched = 4; }   /* (and its page shows the steps) */
+                if (!sq.rec) { sq.cur = 0; sq.rec = 1; pn_goto(UI_P_SEQ, 0); }   /* (and its page shows the steps) */
                 else { if (sq.cur) sq.len = sq.cur; sq.rec = 0; sq_run = 1; }
-            } else if (fm1_ms - t_rec >= 700u) {    /* held: clear the pattern */
+            } else if (fm1_ms - t_rec >= 700u) {    /* held: ask first (REC again clears the pattern) */
                 rec_arm = 0;
-                sq.len = 0; sq.cur = 0;
-                for (k = 0; k < SEQ_MAXN; k++) { sq.note[k] = 0; sq.vel[k] = 0; sq.tie[k] = 0; ml[k] = 0; }
+                if (sq.len || sq.rec) { pn.clr = 1; pn.t_clr = fm1_ms; }
             }
         }
         rec_pass = sq.rec;                      /* (a button that ends or enters the last step does nothing else in this pass) */
@@ -275,7 +280,7 @@ static void app_main(void)
         for (k = 0; k < 27u; k++) {             /* (a key stops the note it started: the octave may change meanwhile) */
             if (down >> k & 1u) {
                 int chip = k == 1u ? 0 : k == 3u ? 1 : k == 5u ? 2 : k == 8u ? 3 : -1;   /* the OP1..OP4 black keys */
-                if (edit_held && chip >= 0) { pn.page = UI_P_EDIT; pn.sub = (uint8_t)chip; pn.touched = 4; }
+                if (edit_held && chip >= 0) pn_goto(UI_P_EDIT, (uint32_t)chip);
                 else if (latch && !rec_pass) {    /* latched: the same note again lets it go; the key's release does nothing */
                     uint32_t n = base + k;
                     if (lat[n >> 3] >> (n & 7u) & 1u) { lat[n >> 3] &= (uint8_t)~(1u << (n & 7u)); stop((uint8_t)n); midi_send(0x80, n, 0); }

@@ -292,3 +292,19 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 18.8 | Press a key (hold it) and try Rename in the page | refused: keys down or sound playing; release and it works |
 | 18.8b | Fill the store (about 20 pattern patches), Restore a backup that does not fit | the page reports the store is full; patches already there still load |
 | 18.9 | Pull the cable during a restore, reconnect | every patch is either the old or the new version, nothing half written; the FM-1 works |
+
+## 19. Navigation U1: tab strip, tab memory, help, REC clear asks (docs/UI-NAV-PLAN.md)
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 19.1 | Visit EDIT, FX, ENV, LFO, SEL, GLO; hold ARP and SEQ | every page but HOME shows a tab strip under the knobs with the shown tab filled; the status line reads the page and n/N (e.g. `FX 1/6`, `ENV 2/2`, `SEQ 1/2`; SEL `VOICE`) |
+| 19.2 | Press FX until FX3 (slot 2), go to ENV, press FX | FX opens on FX3 again (the tab is remembered); press FX again: FX4, then FLT1 |
+| 19.3 | EDIT on OSC2, HOME, EDIT | EDIT opens on OSC2; ALGORITHM and SELECT act on osc 2 |
+| 19.4 | Power off and on | every page opens on its first tab again (tab memory is not saved) |
+| 19.5 | Look at each page: pictures, list, SEQ grid, FX slot text | nothing overlaps the strip or the status line; the SEQ grid shows all 4 rows; the lane frame is visible |
+| 19.6 | On FX, hold HOME | HELP 1/2 explains FX (its tabs and knobs, FX AGAIN, delay/reverb once); HOME: HELP 2/2 (buttons); HOME: out |
+| 19.7 | Hold HOME on ENV, GLO, ARP, SEQ, EDIT and on HOME | each help page 1 is about that page; no line runs off the screen |
+| 19.8 | Record a pattern, hold REC | the name line asks `CLEAR PATTERN?`; the pattern keeps playing |
+| 19.9 | Press REC | `CLEARED`, the pattern is gone |
+| 19.10 | Hold REC again, then press any other button (or wait 5 s) | the question goes away, the pattern stays |
+| 19.11 | With no pattern, hold REC | nothing is asked |

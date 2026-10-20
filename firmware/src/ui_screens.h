@@ -20,6 +20,8 @@
 
 #define UI_Y_MID   54u                          /* the middle area: 126 rows */
 #define UI_MID_H   126u
+#define UI_Y_TABS  54u                          /* every page but HOME: the tab strip (18 rows), the page's picture under it */
+#define UI_Y_BODY  72u                          /* the picture: 108 rows to the status line */
 #define UI_Y_LINEA 182u
 #define UI_Y_PATCH 202u
 
@@ -64,6 +66,9 @@ typedef struct {
     uint8_t seq_tr;                             /* SEQ picture: a key is held, the notes shown are transposed */
     char list[8][16];                           /* FX / LFO / SEL / GLO: 4 rows x 2 columns of "LABEL VALUE" (14 chars) */
     char boot[2][32];                           /* GLO set 3 (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
+    const char *const *tabn;                    /* the page's tab names (NULL: no strip, as in the mock-up) */
+    uint8_t ntabs;                              /* tabs on the page; `sub` is the one shown */
+    char help[14][32];                          /* HELP: the lines of the page shown ("LABEL  TEXT": the label is lilac) */
 } ui_view_t;
 
 typedef struct {
@@ -273,15 +278,15 @@ static void ui_wf_arrow(uint32_t f, int draw)
     cv_blit(f * 2u, UI_Y_MID + (uint32_t)(b - 4));
 }
 
-/* ---- ENV: one ADSR curve in a 240 x 63 canvas. Segment widths follow the values (6..50 px), sustain is a fixed
+/* ---- ENV: one ADSR curve in a 240 x 54 canvas. Segment widths follow the values (6..50 px), sustain is a fixed
  * hold. The active envelope is lilac with its area filled, the other is grey. */
 static void ui_env(uint32_t y, const char *name, const uint8_t *e, int active)
 {
-    int32_t x0 = 20, base = 44, top = 12, sl = base - ((int32_t)e[2] * (base - top) >> 7);
+    int32_t x0 = 20, base = 36, top = 10, sl = base - ((int32_t)e[2] * (base - top) >> 7);
     int32_t x1 = x0 + 6 + ((int32_t)e[0] * 44 >> 7), x2 = x1 + 6 + ((int32_t)e[1] * 44 >> 7), x3 = x2 + 36;
     int32_t x4 = x3 + 6 + ((int32_t)e[3] * 44 >> 7), x, yy;
     uint16_t line = active ? UI_ACC : UI_GRAY;
-    cv_begin(240, 63, C_BLACK);
+    cv_begin(240, 54, C_BLACK);
     if (active) {                               /* the area under the curve, a column at a time */
         for (x = x0; x <= x4; x++) {
             if (x <= x1) yy = base + (top - base) * (x - x0) / (x1 - x0);
@@ -299,28 +304,29 @@ static void ui_env(uint32_t y, const char *name, const uint8_t *e, int active)
     cv_rect(x1 - 1, top - 1, 3, 3, active ? C_WHITE : UI_GRAY);
     cv_rect(x2 - 1, sl - 1, 3, 3, active ? C_WHITE : UI_GRAY);
     cv_text(8, 0, &FONT_S, name, active ? UI_ACC : UI_GRAY);
-    cv_text((x0 + x1) / 2 - 4, 47, &FONT_S, "A", UI_GRAY);
-    cv_text((x1 + x2) / 2 - 4, 47, &FONT_S, "D", UI_GRAY);
-    cv_text((x2 + x3) / 2 - 4, 47, &FONT_S, "S", UI_GRAY);
-    cv_text((x3 + x4) / 2 - 4, 47, &FONT_S, "R", UI_GRAY);
+    cv_text((x0 + x1) / 2 - 4, 38, &FONT_S, "A", UI_GRAY);
+    cv_text((x1 + x2) / 2 - 4, 38, &FONT_S, "D", UI_GRAY);
+    cv_text((x2 + x3) / 2 - 4, 38, &FONT_S, "S", UI_GRAY);
+    cv_text((x3 + x4) / 2 - 4, 38, &FONT_S, "R", UI_GRAY);
     cv_blit(0, y);
 }
 
-/* ---- EDIT: oscillator selector chips */
-static void ui_chips(uint32_t y, uint32_t sel)
+/* ---- the tab strip (every page but HOME): all the page's tabs, the one shown filled. One 240 x 18 canvas */
+static void ui_tabs(uint32_t y, const ui_view_t *v)
 {
-    static const char *const N[4] = {"OSC1", "OSC2", "SUB", "NOISE"};
-    uint32_t i;
+    uint32_t i, n = v->ntabs ? v->ntabs : 1u;
+    int32_t w = (232 - 4 * ((int32_t)n - 1)) / (int32_t)n;
     cv_begin(240, 18, C_BLACK);
-    for (i = 0; i < 4u; i++) {
-        int32_t x = 4 + (int32_t)i * 58;
-        if (i == sel) {
-            cv_rect(x, 0, 54, 17, UI_ACC);
-            cv_text(x + (54 - text_w(&FONT_S, N[i])) / 2, 1, &FONT_S, N[i], C_BLACK);
+    for (i = 0; i < n; i++) {
+        int32_t x = 4 + (int32_t)i * (w + 4);
+        const char *t = v->tabn[i];
+        if (i == v->sub) {
+            cv_rect(x, 0, w, 17, UI_ACC);
+            cv_text(x + (w - text_w(&FONT_S, t)) / 2, 1, &FONT_S, t, C_BLACK);
         } else {
-            cv_rect(x, 0, 54, 17, UI_DIM);
-            cv_rect(x + 1, 1, 52, 15, C_BLACK);
-            cv_text(x + (54 - text_w(&FONT_S, N[i])) / 2, 1, &FONT_S, N[i], UI_GRAY);
+            cv_rect(x, 0, w, 17, UI_DIM);
+            cv_rect(x + 1, 1, w - 2, 15, C_BLACK);
+            cv_text(x + (w - text_w(&FONT_S, t)) / 2, 1, &FONT_S, t, UI_GRAY);
         }
     }
     cv_blit(0, y);
@@ -374,39 +380,35 @@ static void ui_patch(uint32_t y, const ui_view_t *v, uint16_t col)
     cv_blit(0, y);
 }
 
-static void ui_left_text(char *out, const ui_view_t *v)       /* the left part of the status line */
+static void ui_left_text(char *out, const ui_view_t *v)       /* the left part of the status line: the page, the tab n/N */
 {
-    static const char *const OSC[4] = {"OSC1", "OSC2", "SUB", "NOISE"};
+    static const char *const PN[UI_P_N] = {"", "EDIT", "FX", "ENV", "LFO", "VOICE", "GLOBAL", "ARP", "SEQ", ""};
     char *d = out;
-    switch (v->page) {
-    case UI_P_EDIT: d = ui_cat(d, OSC[v->sub & 3u]); d = ui_cat(d, " "); ui_cat5(d, v->tname); break;
-    case UI_P_ENV: d = ui_cat(d, "ENV "); ui_cat(d, v->sub ? "FILTER" : "AMP"); break;
-    case UI_P_FX: if (v->sub >= 2u) { d = ui_cat(d, "FX SLOT "); *d++ = (char)('0' + v->sub - 1u); *d = 0; } else ui_cat(d, v->sub ? "FILTER 2/2" : "FILTER 1/2"); break;
-    case UI_P_LFO: ui_cat(d, v->sub ? "LFO 2/2" : "LFO 1/2"); break;
-    case UI_P_SEL: ui_cat(d, "VOICE"); break;
-    case UI_P_ARP: ui_cat(d, v->sub ? "ARP 2/2" : "ARP 1/2"); break;
-    case UI_P_SEQ: ui_cat(d, v->seq_rec ? "SEQ RECORD" : "SEQ"); break;
-    case UI_P_GLO: ui_cat(d, v->sub == 2u ? "BOOT KEYS 3/3" : v->sub ? "GLOBAL 2/3" : "GLOBAL 1/3"); break;
-    default:
+    if (v->page == UI_P_HOME || v->page >= UI_P_HELP) {
         if (v->variant != UI_H_MINIMAL) { d = ui_cat5(d, v->tname); d = ui_cat(d, " "); }
         d = ui_cat(d, "FRM ");
         d = ui_num(d, v->frame + 1);
         d = ui_cat(d, "/");
         ui_num(d, v->nframes);
+        return;
     }
+    d = ui_cat(d, PN[v->page]);
+    if (v->page == UI_P_SEQ && v->seq_rec) d = ui_cat(d, " REC");
+    if (v->ntabs > 1u) { d = ui_cat(d, " "); d = ui_num(d, v->sub + 1); d = ui_cat(d, "/"); d = ui_num(d, v->ntabs); }
+    if (v->page == UI_P_EDIT) { d = ui_cat(d, " "); ui_cat5(d, v->tname); }
 }
 
-/* ---- FX / LFO / SEL / GLO: one picture (240 x 56) and a two column list of the page's eight values (240 x 64) */
+/* ---- FX / LFO / SEL / GLO: one picture (240 x 44, under the tab strip) and a two column list of the page's eight values (240 x 64) */
 static void ui_filter_pic(uint32_t y, const ui_view_t *v)
 {
-    int32_t x, xc = 8 + (int32_t)v->flt_cut * 224 / 127, base = 38, top = 14, bump = (int32_t)v->flt_res * 22 / 127, py = 0;
+    int32_t x, xc = 8 + (int32_t)v->flt_cut * 224 / 127, base = 26, top = 8, bump = (int32_t)v->flt_res * 8 / 127, py = 0;
     static const char *const TK[3] = {"100", "1K", "10K"};
     static const int16_t TX[3] = {60, 134, 209};      /* 100 Hz, 1 kHz, 10 kHz on the 20 Hz .. 19 kHz log axis */
-    cv_begin(240, 56, C_BLACK);
+    cv_begin(240, 44, C_BLACK);
     cv_rect(8, base, 224, 1, UI_DIM);
     for (x = 0; x < 3; x++) {
         cv_rect(TX[x], base, 1, 3, UI_GRAY);
-        cv_text(TX[x] - text_w(&FONT_S, TK[x]) / 2, 40, &FONT_S, TK[x], UI_DIM);
+        cv_text(TX[x] - text_w(&FONT_S, TK[x]) / 2, 28, &FONT_S, TK[x], UI_DIM);
     }
     for (x = 8; x <= 232; x++) {
         int32_t dd = x - xc, ad = dd < 0 ? -dd : dd, yy;
@@ -420,15 +422,15 @@ static void ui_filter_pic(uint32_t y, const ui_view_t *v)
         if (x > 8) cv_line(x - 1, py, x, yy, UI_ACC);
         py = yy;
     }
-    cv_rect(xc, top - 6, 1, base - top + 6, UI_GRAY);
+    cv_rect(xc, 0, 1, base, UI_GRAY);
     cv_blit(0, y);
 }
 
 static void ui_lfo_pic(uint32_t y, uint32_t shape)
 {
-    int32_t x, px = 8, py = 28;
-    cv_begin(240, 56, C_BLACK);
-    cv_rect(8, 28, 224, 1, UI_DIM);
+    int32_t x, px = 8, py = 22;
+    cv_begin(240, 44, C_BLACK);
+    cv_rect(8, 22, 224, 1, UI_DIM);
     for (x = 0; x < 224; x++) {
         int32_t ph = x * 4 / 7, q = ph & 63, st = ph >> 4, val, yy;
         switch (shape) {
@@ -438,7 +440,7 @@ static void ui_lfo_pic(uint32_t y, uint32_t shape)
         case 3: val = q < 32 ? 16384 : -16384; break;
         default: val = (((st * 2654435761u) >> 12) & 31u) * 1024 - 16000; break;   /* S&H: 4 steps a cycle */
         }
-        yy = 28 - (val * 22 >> 14);
+        yy = 22 - (val * 19 >> 14);
         if (x) cv_line(px, py, 8 + x, yy, UI_ACC);
         px = 8 + x;
         py = yy;
@@ -450,35 +452,34 @@ static void ui_drive_pic(uint32_t y, const ui_view_t *v)
 {
     int32_t i, g = 16 + (int32_t)v->drive * 240 / 127, py = 0;             /* gain 1 .. 16, Q4 */
     char t[24], *d = t;
-    cv_begin(240, 56, C_BLACK);
-    cv_rect(8, 28, 100, 1, UI_DIM);
-    cv_rect(58, 3, 1, 50, UI_DIM);
+    cv_begin(240, 44, C_BLACK);
+    cv_rect(8, 22, 100, 1, UI_DIM);
+    cv_rect(58, 2, 1, 40, UI_DIM);
     for (i = 0; i <= 50; i++) {                 /* the right half, mirrored for the left (odd symmetry) */
         int32_t u = i * g * 4096 / 800;         /* x * gain, Q12 */
         int32_t sat = u * 8192 / (4096 + u);    /* a soft knee, x / (1 + x) x 2 */
-        int32_t h = (sat > 4096 ? 4096 : sat) * 24 >> 12;
+        int32_t h = (sat > 4096 ? 4096 : sat) * 19 >> 12;
         if (i) {
-            cv_line(58 + i - 1, 28 - py, 58 + i, 28 - h, UI_ACC);
-            cv_line(58 - i + 1, 28 + py, 58 - i, 28 + h, UI_ACC);
+            cv_line(58 + i - 1, 22 - py, 58 + i, 22 - h, UI_ACC);
+            cv_line(58 - i + 1, 22 + py, 58 - i, 22 + h, UI_ACC);
         }
         py = h;
     }
     d = ui_cat(d, "CPU MAX ");
     d = ui_num(d, v->cpu_max);
     ui_cat(d, "%");
-    cv_text(124, 8, &FONT_S, t, v->cpu_max > 80u ? RGB(255, 90, 90) : UI_GRAY);
-    cv_text(124, 28, &FONT_S, "EDIT+HOME", UI_DIM);
-    cv_text(124, 40, &FONT_S, "RESETS MAX", UI_DIM);
+    cv_text(124, 0, &FONT_S, t, v->cpu_max > 80u ? RGB(255, 90, 90) : UI_GRAY);
+    cv_text(124, 14, &FONT_S, "EDIT+HOME", UI_DIM);
+    cv_text(124, 28, &FONT_S, "RESETS MAX", UI_DIM);
     cv_blit(0, y);
 }
 
 static void ui_boot_pic(uint32_t y, const ui_view_t *v)       /* GLO set 3: what the boot key scan saw */
 {
-    cv_begin(240, 56, C_BLACK);
+    cv_begin(240, 44, C_BLACK);
     cv_text(4, 0, &FONT_S, "BOOT KEYS (SCAN AT POWER-ON)", UI_GRAY);
     cv_text(4, 14, &FONT_S, v->boot[0], UI_TXT);
     cv_text(4, 28, &FONT_S, v->boot[1], UI_TXT);
-    cv_text(4, 42, &FONT_S, "RAW = COLUMN 0..10, BIT = ROW", UI_DIM);
     cv_blit(0, y);
 }
 
@@ -494,37 +495,37 @@ static void ui_seq_grid(uint32_t y, const ui_view_t *v)       /* the pattern: 4 
     static const char NN[12][3] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     uint32_t i, h;
     for (h = 0; h < 2u; h++) {                  /* two canvases of two tile rows (a canvas holds 64 rows at most) */
-    cv_begin(240, 42, C_BLACK);
+    cv_begin(240, 38, C_BLACK);
     for (i = h * 16u; i < h * 16u + 16u; i++) {
-        int32_t x = (int32_t)(i & 7u) * 30, ty = (int32_t)((i >> 3) & 1u) * 21;
+        int32_t x = (int32_t)(i & 7u) * 30, ty = (int32_t)((i >> 3) & 1u) * 19;
         uint32_t cur = i == v->seq_pos && (v->seq_on || v->seq_rec);
         if (v->seq_set) {                       /* the lane: a bar a step from the middle line, the step being edited framed */
-            int32_t mv = (int32_t)v->seq_mod[i] - 64, bh = (mv < 0 ? -mv : mv) * 9 / 64;
+            int32_t mv = (int32_t)v->seq_mod[i] - 64, bh = (mv < 0 ? -mv : mv) * 8 / 64;
             uint32_t on = i < v->seq_len || !v->seq_len;
             uint16_t c = i == v->seq_pos && v->seq_on ? C_WHITE : UI_ACC;
-            cv_rect(x, ty, 29, 20, on ? UI_ACC3 : C_BLACK);
-            cv_rect(x + 3, ty + 10, 23, 1, UI_DIM);
-            if (bh) cv_rect(x + 3, mv > 0 ? ty + 10 - bh : ty + 11, 23, bh, c);
-            if (v->seq_set == 1u && i == v->seq_cur) { cv_rect(x, ty, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty + 19, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty, 1, 20, RGB(255, 200, 90)); cv_rect(x + 28, ty, 1, 20, RGB(255, 200, 90)); }
+            cv_rect(x, ty, 29, 18, on ? UI_ACC3 : C_BLACK);
+            cv_rect(x + 3, ty + 9, 23, 1, UI_DIM);
+            if (bh) cv_rect(x + 3, mv > 0 ? ty + 9 - bh : ty + 10, 23, bh, c);
+            if (v->seq_set == 1u && i == v->seq_cur) { cv_rect(x, ty, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty + 17, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty, 1, 18, RGB(255, 200, 90)); cv_rect(x + 28, ty, 1, 18, RGB(255, 200, 90)); }
         } else if (i < v->seq_len) {
             uint32_t nt = v->seq_note[i];
             uint16_t bg = cur ? C_WHITE : (v->seq_mask >> i & 1u) ? UI_ACC3 : C_BLACK;
             uint16_t fg = cur ? C_BLACK : v->seq_tr ? RGB(255, 200, 90) : UI_ACC;
-            cv_rect(x, ty, 29, 20, bg);
-            if (!(v->seq_mask >> i & 1u)) cv_rect(x + 11, ty + 9, 7, 2, cur ? C_BLACK : UI_DIM);       /* a rest: a dash */
+            cv_rect(x, ty, 29, 18, bg);
+            if (!(v->seq_mask >> i & 1u)) cv_rect(x + 11, ty + 8, 7, 2, cur ? C_BLACK : UI_DIM);       /* a rest: a dash */
             else if (nt) {
                 char t[6], *d = t;
                 int32_t m = (int32_t)nt - 1, o = m / 12 - 1;
                 d = ui_cat(d, NN[m % 12]);
                 if (o < 0) *d++ = '-'; else *d++ = (char)('0' + o);
                 *d = 0;
-                cv_text(x + (29 - text_w(&FONT_S, t)) / 2, ty + 4, &FONT_S, t, fg);
-                if (v->seq_tie >> i & 1u) cv_rect(x, ty + 9, 2, 2, fg);                                  /* tied to the step before */
+                cv_text(x + (29 - text_w(&FONT_S, t)) / 2, ty + 1, &FONT_S, t, fg);
+                if (v->seq_tie >> i & 1u) cv_rect(x, ty + 8, 2, 2, fg);                                  /* tied to the step before */
             }
-        } else if (v->seq_rec && i == v->seq_pos) cv_rect(x, ty, 29, 20, C_WHITE);
-        else cv_rect(x + 12, ty + 9, 5, 2, UI_ACC3);
+        } else if (v->seq_rec && i == v->seq_pos) cv_rect(x, ty, 29, 18, C_WHITE);
+        else cv_rect(x + 12, ty + 8, 5, 2, UI_ACC3);
     }
-    cv_blit(0, y + h * 42u);
+    cv_blit(0, y + h * 38u);
     }
 }
 
@@ -544,46 +545,20 @@ static void ui_list(uint32_t y, const ui_view_t *v)
 
 /* ---- HELP (hold HOME): two text pages, one 240 x 16 canvas a line. A line is "LABEL  what it does": the text up
  * to the first double space is drawn lilac, the rest white; a line without one is gray (the footer). */
-static const char *const UI_HELP[2][14] = {
-    {"HELP 1/2  BUTTONS",
-     "HOME  3 looks (press again)",
-     "EDIT  OSC1 OSC2 SUB NOISE",
-     "FX    FILTER 1, 2",
-     "ENV LFO  ENVELOPES, LFO 1, 2",
-     "SEL   VOICE MODE, QUALITY",
-     "GLO   VOLUME, GLIDE, MIDI",
-     "SAVE  STORE (HOLD: PICK, DEL)",
-     "OCT- OCT+  OCTAVE DOWN, UP",
-     "PLAY  LATCH: KEYS KEEP SOUND",
-     "ARP SEQ  ON/OFF, HOLD: PAGE",
-     "REC   STEPS, HOLD: CLEAR",
-     "EDIT+F# G# A# C#  PICK OSC",
-     "HOME: NEXT PAGE, THEN EXIT"},
-    {"HELP 2/2  KNOBS",
-     "ALGORITHM  WAVETABLE",
-     "SELECT     POSITION IN TABLE",
-     "PRESETS    FACTORY + USER",
-     "HOME  CUT RESO ATK REL",
-     "EDIT  POS DETUNE LEVEL BEND",
-     "FX    CUT RESO FENV KEYTRK",
-     "FX 2  MODE FVEL E>POS E>BEND",
-     "ENV   ATK DEC SUS REL",
-     "LFO   SHAPE RATE >POS >PITCH",
-     "LFO 2  SHAPE RATE >CUT >AMP",
-     "SEL   MODE BEND> QUAL CURVE",
-     "GLO   VOLUME DRIVE GLIDE PB",
-     "GLO 2  MW>POS MW>VIB AT VEL"}};
-
-static void ui_help(uint32_t page)
+/* ---- HELP: 14 text lines the panel fills (panel.h pn_help): "LABEL  TEXT", the label lilac; a line with no double space is
+ * grey (the first white); a line starting with a space continues the one above, plain */
+static void ui_help(const ui_view_t *v)
 {
     uint32_t i, n, m;
     char lab[32];
     for (i = 0; i < 14u; i++) {
-        const char *t = UI_HELP[page & 1u][i];
+        const char *t = v->help[i];
         for (n = 0; t[n] && !(t[n] == ' ' && t[n + 1u] == ' '); n++) {}
         cv_begin(240, 16, C_BLACK);
-        if (!t[n]) {
-            cv_text(4, 0, &FONT_S, t, UI_GRAY);
+        if (t[0] == ' ') {                      /* a continued line: plain text */
+            cv_text(4, 0, &FONT_S, t + 1, UI_TXT);
+        } else if (!t[n]) {
+            cv_text(4, 0, &FONT_S, t, i ? UI_GRAY : UI_TXT);
         } else {
             for (m = 0; m < n && m < 31u; m++) lab[m] = t[m];
             lab[m] = 0;
@@ -612,7 +587,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         s->tname[0] = 0xFF;                     /* never equal */
     }
     if (v->page == UI_P_HELP) {                 /* text only: no knob columns, status line or patch name */
-        if (full || s->sub != v->sub) ui_help(v->sub);
+        if (full || s->sub != v->sub) ui_help(v);
         s->page = v->page; s->variant = v->variant; s->sub = v->sub;
         return;
     }
@@ -629,6 +604,8 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
     s->kbip = v->kbip;
     s->ksmall = v->ksmall;
     s->touched = v->touched;
+
+    if (v->page != UI_P_HOME && v->tabn && (full || s->sub != v->sub)) ui_tabs(UI_Y_TABS, v);
 
     frame_new = full || s->table != v->table || s->frame != v->frame || s->tname[0] != v->tname[0];
     if (v->page == UI_P_HOME && v->variant == UI_H_WATERFALL) {
@@ -665,18 +642,17 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         left_y = 200;
     } else if (v->page == UI_P_EDIT) {
         if (frame_new || s->wave_key != v->wave_key || s->sub != v->sub)
-            ui_wave(UI_Y_MID, 56, v->wave ? v->wave : v->frames + (uint32_t)v->frame * v->stride, UI_ACC);
-        if (full || s->pos != v->pos) ui_posbar(112, 16, v->pos);
-        if (full || s->sub != v->sub) ui_chips(131, v->sub);
+            ui_wave(UI_Y_BODY + 2u, 50, v->wave ? v->wave : v->frames + (uint32_t)v->frame * v->stride, UI_ACC);
+        if (full || s->pos != v->pos) ui_posbar(126, 14, v->pos);
         if (full) {
-            ui_text_line(153, "ALG TABLE   SEL POSITION", UI_GRAY);
-            ui_text_line(166, "EDIT + OP KEYS: OSC", UI_DIM);
+            ui_text_line(146, "ALG TABLE   SEL POSITION", UI_GRAY);
+            ui_text_line(162, "EDIT + OP KEYS: OSC", UI_DIM);
         }
     } else if (v->page == UI_P_ENV) {
         for (i = 0; i < 2u; i++)
             if (full || s->sub != v->sub || s->env[i][0] != v->env[i][0] || s->env[i][1] != v->env[i][1] ||
                 s->env[i][2] != v->env[i][2] || s->env[i][3] != v->env[i][3])
-                ui_env(UI_Y_MID + i * 64u, i ? "FILTER ENV" : "AMP ENV", v->env[i], v->sub == i);
+                ui_env(UI_Y_BODY + i * 54u, i ? "FILTER ENV" : "AMP ENV", v->env[i], v->sub == i);
     } else if (v->page != UI_P_HOME) {          /* FX, LFO, SEL, GLO */
         uint32_t pk = v->page == UI_P_FX ? (v->set >= 2u ? 0x50000000u | v->set : (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16)
                     : v->page == UI_P_LFO ? v->lfo_shape : v->page == UI_P_ARP ? 0x20000000u : v->page == UI_P_SEQ ? (v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ v->seq_tie * 2654435761u ^ (uint32_t)v->seq_tr << 8 ^ ui_seq_h(v) ^ 0x40000000u) : v->page == UI_P_SEL ? v->voices | (uint32_t)v->voices_max << 8
@@ -686,26 +662,29 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         if (full || s->pic_key != pk || ((v->page == UI_P_SEL || v->page == UI_P_ARP || v->page == UI_P_SEQ || v->page == UI_P_FX) && !ui_eq(s->ptxt, v->ptxt)) || ((v->page == UI_P_ARP || v->page == UI_P_SEQ || (v->page == UI_P_FX && v->set >= 2u)) && !(ui_eq(s->info, v->info) && ui_eq(s->info2, v->info2)))) {
             switch (v->page) {
             case UI_P_FX:
-                if (v->set >= 2u) { cv_begin(240, 62, C_BLACK); cv_blit(0, 54); draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1); ui_text_line(96, v->info, UI_GRAY); ui_text_line(112, v->info2, UI_DIM); }
-                else ui_filter_pic(UI_Y_MID, v);
+                if (v->set >= 2u) {             /* the slot's effect, big, and the chain: the whole body (no list) */
+                    cv_begin(240, 54, C_BLACK); cv_blit(0, UI_Y_BODY); cv_blit(0, UI_Y_BODY + 54u);
+                    draw_text_box(0, 80, 240, &FONT_L, v->ptxt, UI_ACC, 1); ui_text_line(118, v->info, UI_GRAY); ui_text_line(134, v->info2, UI_DIM);
+                }
+                else ui_filter_pic(UI_Y_BODY, v);
                 break;
-            case UI_P_LFO: ui_lfo_pic(UI_Y_MID, v->lfo_shape); break;
-            case UI_P_SEL:
-                draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1);
-                ui_dots(100, v->voices, v->voices_max);
+            case UI_P_LFO: ui_lfo_pic(UI_Y_BODY, v->lfo_shape); break;
+            case UI_P_SEL:                      /* (the big text's box has empty bottom rows: the line under it may overlap them) */
+                draw_text_box(0, UI_Y_BODY, 240, &FONT_L, v->ptxt, UI_ACC, 1);
+                ui_dots(102, v->voices, v->voices_max);
                 break;
             case UI_P_ARP:
-                draw_text_box(0, 58, 240, &FONT_L, v->ptxt, UI_ACC, 1);
-                ui_text_line(96, v->info, UI_GRAY);
+                draw_text_box(0, UI_Y_BODY, 240, &FONT_L, v->ptxt, UI_ACC, 1);
+                ui_text_line(100, v->info, UI_GRAY);
                 break;
-            case UI_P_SEQ:
-                draw_text_box(0, 54, 240, &FONT_L, v->ptxt, UI_ACC, 1);
-                ui_text_line(82, v->info, UI_GRAY);
-                ui_seq_grid(98, v);
+            case UI_P_SEQ:                      /* the state small (the strip took the big text's rows), the steps, the grid */
+                ui_text_line(UI_Y_BODY, v->ptxt, UI_ACC);
+                ui_text_line(UI_Y_BODY + 16u, v->info, UI_GRAY);
+                ui_seq_grid(104, v);
                 break;
             default:
-                if (v->sub == 2u) ui_boot_pic(UI_Y_MID, v);
-                else ui_drive_pic(UI_Y_MID, v);
+                if (v->sub == 2u) ui_boot_pic(UI_Y_BODY, v);
+                else ui_drive_pic(UI_Y_BODY, v);
                 break;
             }
             s->pic_key = pk;
@@ -715,7 +694,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         }
         if (lch) {
             if (v->page == UI_P_SEQ) {}
-            else if (v->page == UI_P_FX && v->set >= 2u) { cv_begin(240, 64, C_BLACK); cv_blit(0, 116); }
+            else if (v->page == UI_P_FX && v->set >= 2u) {}         /* (the slot picture covers the body) */
             else ui_list(116, v);
             for (i = 0; i < 8u; i++) ui_copy(s->list[i], v->list[i], 16);
             s->set = v->set;

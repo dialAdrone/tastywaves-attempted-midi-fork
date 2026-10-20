@@ -106,6 +106,12 @@ static const kdef_t PG[UI_P_N][6][4] = {
                   {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), K("GLIDE", P_MOD_GLIDE, F_TXT, 1, TX_ONOFF), KN}},       /* set 2: the modulation lane (SELECT picks the step, VALUE is drawn and edited by hand: pn_encoders) */
 };
 
+/* the tab names the strip shows (and HELP lists), per page and set */
+static const char *const TABN[UI_P_N][6] = {
+    [UI_P_HOME] = {"HOME"}, [UI_P_EDIT] = {"OSC1", "OSC2", "SUB", "NOISE"}, [UI_P_FX] = {"FLT1", "FLT2", "FX1", "FX2", "FX3", "FX4"},
+    [UI_P_ENV] = {"AMP", "FILTER"}, [UI_P_LFO] = {"POS PITCH", "CUT AMP"}, [UI_P_SEL] = {"VOICE"}, [UI_P_GLO] = {"OUTPUT", "CONTROL", "BOOT"},
+    [UI_P_ARP] = {"ARP", "TIME"}, [UI_P_SEQ] = {"NOTES", "LANE"}, [UI_P_HELP] = {"HELP"}};
+
 static const char *const TXT[TX_N][8] = {
     {"LP", "BP", "HP"}, {"POLY", "MONO", "LEGATO"}, {"BOTH", "OSC1", "OSC2"}, {"HI", "ECO"}, {"LIN", "EXP"},
     {"SINE", "TRI", "SAW", "SQUARE", "S&H"},
@@ -118,6 +124,10 @@ static struct {
     uint8_t slot, browse, browse_pend;          /* entry loaded (0..7 factory, 8.. user); entry shown in the name line; load pending */
     uint8_t save_req, home_arm;                 /* HOME pressed and not yet decided: short press or hold */
     uint8_t mstep;                              /* SEQ set 2: the lane step the VALUE knob edits (0..31) */
+    uint8_t tab[UI_P_N];                        /* the tab each page shows when it opens again (this session only, not saved) */
+    uint8_t help_from;                          /* the page HELP explains (the one HOME was pressed on) */
+    uint8_t clr;                                /* REC held: "CLEAR PATTERN?" asked, REC again clears */
+    uint32_t t_clr;
     uint8_t seq_arm;                            /* SEQ pressed and not yet decided (short: on / off, hold: the page) */
     uint32_t t_seq, t_seq_tog;
     uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: on / off, hold: the page); the mode it switches back to */
@@ -375,11 +385,17 @@ static int32_t pn_accel(int32_t d)              /* a quick turn goes faster: d *
     return a > 1 ? d * a : d;
 }
 
-static void pn_page(uint32_t page)              /* a page button: the page, or its next set when already there */
+static void pn_goto(uint32_t page, uint32_t sub) /* show this page and tab; the tab is remembered for the page */
 {
-    if (pn.page == page) pn.sub = (uint8_t)((pn.sub + 1u) % NSUB[page]);
-    else { pn.page = (uint8_t)page; pn.sub = 0; }
+    pn.page = (uint8_t)page;
+    pn.sub = (uint8_t)(sub < NSUB[page] ? sub : 0u);
+    pn.tab[page] = pn.sub;
     pn.touched = 4;
+}
+static void pn_page(uint32_t page)              /* a page button: the page on the tab it was left on, or its next tab when already there */
+{
+    if (pn.page == page) pn_goto(page, (pn.sub + 1u) % NSUB[page]);
+    else pn_goto(page, pn.tab[page]);
 }
 
 /* ---- SAVE: a short press saves to the patch's own user id (or the first free one, from a factory patch); holding SAVE and
@@ -468,8 +484,10 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
             else { pn.page = UI_P_HOME; pn.sub = 0; pn.touched = 4; }
         } else if (pn.page == UI_P_HOME) {                          /* decided on release: a hold is HELP */
             pn.home_arm = 1;
+            pn.help_from = UI_P_HOME;
             pn.t_home = fm1_ms;
         } else {
+            pn.help_from = pn.page;                                 /* a hold explains the page it was pressed on */
             pn.page = UI_P_HOME; pn.sub = 0; pn.touched = 4;
             pn.home_arm = 2;                                        /* only a hold counts */
             pn.t_home = fm1_ms;
@@ -598,6 +616,85 @@ static void pn_name(char *d, uint32_t e)
     ui_copy(d, PRESET[e].name, 12);
 }
 
+/* ---- HELP: page 1 explains the page HOME was held on (its tabs and knobs, from PG, so it cannot go stale), page 2 the buttons */
+#define PN_HW 29u                                /* characters a help line holds (240 px, 8 px each, 4 px margin) */
+static void pn_hl(char *d, const char *lab, const char *txt)       /* "LABEL  TEXT" in one line */
+{
+    uint32_t n = 0;
+    while (*lab && n < PN_HW) d[n++] = *lab++;
+    if (*txt) { d[n++] = ' '; d[n++] = ' '; }
+    while (*txt && n < PN_HW) d[n++] = *txt++;
+    d[n] = 0;
+}
+static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
+{
+    static const char *const PNAME[UI_P_N] = {"HOME", "EDIT: OSCILLATORS", "FX: FILTER, EFFECTS", "ENV: ENVELOPES", "LFO", "SEL: VOICE", "GLO: GLOBAL", "ARP", "SEQ: SEQUENCER", ""};
+    static const char *const BTN[UI_P_N] = {"HOME", "EDIT", "FX", "ENV", "LFO", "SEL", "GLO", "ARP", "SEQ", ""};
+    static const char *const GEN[13] = {
+        "HELP 2/2  BUTTONS",
+        "HOME  BACK HOME, HOLD: HELP",
+        "PAGE BUTTON  OPEN, AGAIN: TAB",
+        "ARP SEQ  ON/OFF, HOLD: PAGE",
+        "SAVE  STORE (HOLD: PICK, DEL)",
+        "PLAY  LATCH, SEQ: START/STOP",
+        "REC  STEPS, HOLD: CLEAR",
+        "OCT- OCT+  OCTAVE DOWN, UP",
+        "ALGORITHM  WAVETABLE",
+        "SELECT  POSITION IN TABLE",
+        "PRESETS  FACTORY + USER",
+        "KNOB 1-4  VALUES ON TOP",
+        "HOME: NEXT PAGE, THEN EXIT"};
+    uint32_t i, l = 0, t;
+    char txt[40], *d;
+    for (i = 0; i < 14u; i++) v->help[i][0] = 0;
+    if (sub) {
+        for (i = 0; i < 13u; i++) pn_hl(v->help[i], GEN[i], "");
+        return;
+    }
+    if (pg >= UI_P_HELP) pg = UI_P_HOME;
+    d = ui_cat(txt, "HELP 1/2  ");
+    ui_cat(d, PNAME[pg]);
+    pn_hl(v->help[l++], txt, "");
+    for (t = 0; t < NSUB[pg] && l < 9u; t++) {             /* a line per tab: its name, then the four knobs */
+        d = txt;
+        for (i = 0; i < 4u; i++) {
+            const char *lab = PG[pg][t][i].fmt == F_NONE ? 0 : PG[pg][t][i].lab;
+            if (pg == UI_P_FX && t >= 2u) lab = i ? (i == 3u ? "MIX" : i == 1u ? "A" : "B") : "TYPE";
+            if (pg == UI_P_SEQ && t == 1u && i == 3u) lab = "VALUE";
+            if (!lab) continue;
+            if (d != txt) *d++ = ' ';
+            d = ui_cat(d, lab);
+        }
+        if (pg == UI_P_GLO && t == 2u) ui_cat(txt, "KEY SCAN AT POWER-ON");
+        if (pg == UI_P_FX && t >= 3u) { if (t == 3u) { pn_hl(v->help[l++], "FX2-FX4", "THE SAME"); } continue; }
+        {   const char *lab = pg == UI_P_HOME ? "KNOBS" : TABN[pg][t];
+            uint32_t ll = 0, tl = 0;
+            while (lab[ll]) ll++;
+            while (txt[tl]) tl++;
+            if (ll + 2u + tl <= PN_HW) pn_hl(v->help[l++], lab, txt);
+            else { pn_hl(v->help[l++], lab, " "); v->help[l][0] = ' '; pn_hl(v->help[l] + 1, txt, ""); l++; }      /* too long: the knobs on the next line (a leading space: plain text) */
+        }
+    }
+    if (pg != UI_P_HOME && NSUB[pg] > 1u) { d = ui_cat(txt, BTN[pg]); ui_cat(d, " AGAIN"); pn_hl(v->help[l++], txt, "NEXT TAB"); }
+    switch (pg) {
+    case UI_P_HOME: pn_hl(v->help[l++], "HOME", "NEXT LOOK"); break;
+    case UI_P_EDIT: pn_hl(v->help[l++], "ALGORITHM", "TABLE OF THIS OSC"); pn_hl(v->help[l++], "EDIT+F# G# A# C#", "PICK OSC"); break;
+    case UI_P_FX: pn_hl(v->help[l++], "DELAY REVERB", "ONE SLOT EACH"); pn_hl(v->help[l++], "CHAIN", "SLOT 1 > 2 > 3 > 4"); break;
+    case UI_P_ENV: pn_hl(v->help[l++], "FILTER ENV", "ALSO E>POS E>BEND (FX)"); break;
+    case UI_P_GLO: pn_hl(v->help[l++], "EDIT+HOME", "RESET CPU MAX"); break;
+    case UI_P_ARP: pn_hl(v->help[l++], "TAP ARP", "ON / OFF"); pn_hl(v->help[l++], "HOLD ARP", "THIS PAGE"); break;
+    case UI_P_SEQ:
+        pn_hl(v->help[l++], "TAP SEQ", "ON / OFF, HOLD: PAGE");
+        pn_hl(v->help[l++], "REC", "STEP INPUT ON / OFF");
+        pn_hl(v->help[l++], "HOLD REC", "CLEAR (REC AGAIN)");
+        pn_hl(v->help[l++], "LANE", "SELECT PICKS THE STEP");
+        break;
+    default: break;
+    }
+    if (pg != UI_P_EDIT && pg != UI_P_SEQ && l < 13u) pn_hl(v->help[l++], "ALG SEL", "TABLE, POSITION");
+    pn_hl(v->help[13], "HOME: NEXT PAGE, THEN EXIT", "");
+}
+
 /* ---- the view (ui_screens.h reads it): everything the screen shows, from the patch and the page */
 static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32_t flash)
 {
@@ -607,6 +704,9 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
     v->page = pn.page;
     v->variant = pn.look;
     v->sub = pn.sub;
+    v->tabn = TABN[pn.page];
+    v->ntabs = NSUB[pn.page];
+    if (pn.page == UI_P_HELP) pn_help(v, pn.help_from, pn.sub);
     v->touched = pn.touched;
     v->voices = (uint8_t)(voices > 99u ? 99u : voices);
     v->voices_max = ENG_NV;
@@ -630,6 +730,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
     if (pn.sv == SV_PICK) { char *d = ui_cat(v->patch, "SAVE TO "); pn_uid(d, pn.tgt); if (pl_present() >> pn.tgt & 1u) ui_cat(d + 3, "*"); }
     else if (pn.sv == SV_CONFIRM) { char *d = ui_cat(v->patch, "REPLACE "); d = ui_cat(d, "") ; pn_uid(d, pn.tgt); ui_cat(d + 3, "?"); }
     else if (pn.sv == SV_DEL) { char *d = ui_cat(v->patch, "DELETE "); pn_uid(d, pn.slot - PN_PRESETS); ui_cat(d + 3, "?"); }
+    else if (pn.clr) ui_copy(v->patch, "CLEAR PATTERN?", 16);
     else pn_name(v->patch, pn.browse);
     ui_copy(v->fmsg, pn.fmsg, 12);
 
@@ -740,8 +841,8 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             if (pn.sub == 1u) ui_copy(v->ptxt, TXT[TX_MOD][patch_get(P_MOD)], 8);           /* the lane: its target, big */
 
             if (pn.sub == 1u) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)(pn.mstep < 32u ? pn.mstep : 31u) + 1); d = ui_cat(d, "  SELECT KNOB MOVES"); }
-            else if (sq.rec) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, " OF 32  PLAY=REST SEQ=TIE"); }
-            else if (!sq.len) ui_cat(d, "NO PATTERN  REC TO ENTER STEPS");
+            else if (sq.rec) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, "/32  PLAY=REST SEQ=TIE"); }
+            else if (!sq.len) ui_cat(d, "NO PATTERN: PRESS REC");
             else { d = ui_cat(d, "LEN "); d = ui_num(d, sq.len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); } }
         }
         if (pn.page == UI_P_ARP) {

@@ -69,7 +69,8 @@ tr = [(t, n) for t, k, n in q if k == 'on' and 3200 < t < 4300]
 d = n0 + 1 - 60
 check(len(tr) >= 4 and all(n - d in (n0, n4, n7) for t, n in tr[:4]), 'a held key transposes the pattern by (key - 60 = %d)' % d)
 check(not any(t > 4500 and t < 5100 and False for t, k, n in q) and any(4400 < t < 5200 and k == 'on' and n in (n0, n4, n7) for t, k, n in q), 'key released: the pattern plays as recorded again')
-check(not any(t > 6300 and k == 'on' for t, k, n in q), 'REC held clears the pattern: silence')
+check(any(5900 < t < 6200 and k == 'on' for t, k, n in q), 'REC held alone only asks: the pattern still plays')
+check(not any(t > 6300 and k == 'on' for t, k, n in q), 'REC held, then REC again, clears the pattern: silence')
 q2 = load('build/host/seq2.log')
 check(any(800 < t < 1900 and k == 'on' for t, k, n in q2), 'sequencer plays after REC ends')
 check(not any(2150 < t < 2950 and k == 'on' for t, k, n in q2), 'PLAY stops the sequencer (SEQ still on)')

@@ -47,8 +47,9 @@ HOME knobs: CUTOFF RESO ATK REL (ATK / REL as times, like on ENV, because they a
 
 ## B. Pages (knobs are fixed per page and set)
 
-Same button again = the next set (EDIT: next oscillator chip; HOME: next look). The set a page is on is not remembered:
-a page always opens on its first set.
+Same button again = the next set (tab). Since U1 (docs/UI-NAV-PLAN.md) every page but HOME shows a tab strip at y 54..71
+(all tab names, the shown one filled; replaces the EDIT chips), its picture starts at y 72, and a page opens on the tab it
+was left on (session only). The status line reads `PAGE n/N`. Hold HOME: help for the page it was pressed on.
 
 | page (button) | set | KNOB1 | KNOB2 | KNOB3 | KNOB4 | middle |
 | --- | --- | --- | --- | --- | --- | --- |

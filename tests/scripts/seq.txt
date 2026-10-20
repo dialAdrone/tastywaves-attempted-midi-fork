@@ -15,7 +15,8 @@
 # a held key transposes it (key 1 is one semitone above key 0)
 3100 keys 0x2
 4300 keys 0
-# REC held clears the pattern
+# REC held asks (CLEAR PATTERN?), REC again clears the pattern
 5200 bdown 13
 6000 bup 13
+6200 btn 13
 7000 end
