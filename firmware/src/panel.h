@@ -141,7 +141,7 @@ static const uint8_t LOOK_NEXT[UI_H_N] = {UI_H_MINIMAL, UI_H_WATERFALL, UI_H_SPE
  * step: note (bits 0-6), sounds (7; clear = rest), tied (8), lane value + 64 (9-15). Only a patch saved with the sequencer on and a
  * pattern recorded has them. Loading a patch with a pattern replaces the pattern in RAM; a patch without one leaves it as it is
  * (the sequencer is a performance switch, like the arp: changing the patch does not stop the tune). */
-static uint32_t pn_pat_words(int16_t *w, uint32_t any)    /* the words for the pattern now (0: none: a save keeps one only with the sequencer on, `any` ignores that) */
+static uint32_t pn_pat_words(int16_t *w, uint32_t any)    /* the words for the pattern now (0: none; `any` 0 also gives none with the sequencer off) */
 {
     uint32_t n = sq.len > SEQ_MAXN ? SEQ_MAXN : sq.len, i;
     if ((!any && !patch_get(P_SEQ)) || !n) return 0;
@@ -791,7 +791,7 @@ static int pn_save_poll(app_set_t *st, uint32_t *dirty)
             pn_tmp.name[i] = 0;
             for (i = 0; i < P_COUNT; i++) pn_tmp.v[i] = (int16_t)patch.p[i];
             pn_tmp.n = P_COUNT;
-            pn_tmp.pw = (uint8_t)pn_pat_words(pn_tmp.pv, 0u);
+            pn_tmp.pw = (uint8_t)pn_pat_words(pn_tmp.pv, 1u);
             while (pn_tmp.n > P_COUNT_V1 && pn_tmp.v[pn_tmp.n - 1u] == PDESC[pn_tmp.n - 1u].def) pn_tmp.n--;     /* trailing defaults are not stored: a patch without arp keeps its 124 bytes */
             rc = pl_put(id, &pn_tmp);
             pn.save_req = 0;

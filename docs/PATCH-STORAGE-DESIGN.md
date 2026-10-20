@@ -157,7 +157,7 @@ word per step: note (bits 0-6), sounds (bit 7; clear = rest), tied (bit 8), lane
 largest record is 80 parameters + 33 words = 254 B. A firmware that does not know PW (older than S4) finds a length that does not
 match its parameter count and skips the record, so a downgrade hides patches that have a pattern.
 
-- **Save**: the pattern goes in only when the sequencer is on (SEQ) and a pattern exists. A patch without it is as small as before.
+- **Save**: the pattern goes in whenever one exists, SEQ on or off. A patch without it is as small as before.
 - **Load**: a patch with a pattern replaces the pattern in RAM (the ISR plays nothing while the arrays change). A user patch
   saved without one empties the pattern (the sequencer stays on but is silent until you record one); the factory presets leave it as it is.
   (Earlier builds kept the old pattern playing under the new sound; changed after a device test.)
@@ -165,7 +165,7 @@ match its parameter count and skips the record, so a downgrade hides patches tha
 - **Capacity**: live data is capped at one sector (4,096 B). A record with a 16 step pattern is about 200 B, so about 20 such patches fit
   (STORE FULL after that); plain patches are not affected.
 - **Downgrade**: going back to a firmware older than S4 hides patches saved with a pattern, and that firmware's next compaction erases them for good. Back up with the web library (section 12) before downgrading.
-- **Known, accepted**: loading a pattern while keys are held for transposition can leave one held key sounding as a plain note until released (a 1-2 microsecond window per block); SAVE blinks for a pattern edit made with SEQ off although such a pattern is not stored.
+- **Known, accepted**: loading a pattern while keys are held for transposition can leave one held key sounding as a plain note until released (a 1-2 microsecond window per block).
 
 ## 12. Patch library over the VW link (T17 stage P2)
 
