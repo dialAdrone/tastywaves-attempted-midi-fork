@@ -291,7 +291,7 @@ static void platform_poll(void)
     }
     if (fm1_ms >= 30000u && bootguard.pending)
         bootguard_clear(&bootguard);            /* 30 s up: this firmware boots */
-    if ((a = fm1_adc_read(FM1_ADC_MASTER)) >= 0) {
+    if (lcd_idle() && (a = fm1_adc_read(FM1_ADC_MASTER)) >= 0) {   /* not while the screen's SPI DMA runs: it disturbs the reading (and master_q12 scales every sample) */
         uint32_t k10;
         knob_avg += (a * 16 - knob_avg) / 8;
         k10 = (uint32_t)(knob_avg / 16);

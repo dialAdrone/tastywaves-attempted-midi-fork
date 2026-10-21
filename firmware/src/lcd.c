@@ -28,6 +28,11 @@ static void lcd_sync(void)          /* finish the running transfer (before touch
     lcd_busy = 0;
 }
 
+static int lcd_idle(void)           /* no pixel transfer running (does not wait, does not end it) */
+{
+    return !lcd_busy || fm1_lcd_done();
+}
+
 static void lcd_cmd(uint8_t c)
 {
     lcd_sync();
