@@ -297,14 +297,21 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 
 | # | Do | Expect |
 | --- | --- | --- |
-| 19.1 | Visit EDIT, FX, ENV, LFO, SEL, GLO; hold ARP and SEQ | every page but HOME shows a tab strip under the knobs with the shown tab filled; the status line reads the page and n/N (e.g. `FX 1/6`, `ENV 2/2`, `SEQ 1/2`; SEL `VOICE`) |
-| 19.2 | Press FX until FX3 (slot 2), go to ENV, press FX | FX opens on FX3 again (the tab is remembered); press FX again: FX4, then FLT1 |
+| 19.1 | Visit EDIT, FX, ENV, LFO, SEL, GLO; hold ARP and SEQ | every page but HOME shows a tab strip under the knobs with the shown tab filled; the status line reads the page and n/N (e.g. `FX 1/5`, `ENV 2/2`, `SEQ 1/2`; SEL `VOICE`, LFO `LFO`, ARP `ARP`) |
+| 19.2 | Press FX until FX3 (slot 2), go to ENV, press FX | FX opens on FX3 again (the tab is remembered); press FX again: FX4, then FILT 1/2 |
 | 19.3 | EDIT on OSC2, HOME, EDIT | EDIT opens on OSC2; ALGORITHM and SELECT act on osc 2 |
 | 19.4 | Power off and on | every page opens on its first tab again (tab memory is not saved) |
-| 19.5 | Look at each page: pictures, list, SEQ grid, FX slot text | nothing overlaps the strip or the status line; the SEQ grid shows all 4 rows; the lane frame is visible |
+| 19.5 | Look at each page: pictures, SEQ grid, FX slot chain | nothing overlaps the strip or the status line; the SEQ grid shows all 4 rows; the lane frame is visible |
 | 19.6 | On FX, hold HOME | HELP 1/2 explains FX (its tabs and knobs, FX AGAIN, delay/reverb once); HOME: HELP 2/2 (buttons); HOME: out |
 | 19.7 | Hold HOME on ENV, GLO, ARP, SEQ, EDIT and on HOME | each help page 1 is about that page; no line runs off the screen |
 | 19.8 | Record a pattern, hold REC | the name line asks `CLEAR PATTERN?`; the pattern keeps playing |
 | 19.9 | Press REC | `CLEARED`, the pattern is gone |
 | 19.10 | Hold REC again, then press any other button (or wait 5 s) | the question goes away, the pattern stays |
 | 19.11 | With no pattern, hold REC | nothing is asked |
+| 19.12 | Every page | no list of the knob values in the middle any more: the picture fills y 66..199; knob values and the patch name are in the middle-size font; status reads `CPU 16%` (a space) |
+| 19.13 | FX: press FX twice | the FILT tab stays filled and its tag changes `1/2` -> `2/2` (CUTOFF.. then MODE..); third press: FX1. Same on LFO (`SET 1/2`, `SET 2/2`) and ARP |
+| 19.14 | FX FILT: turn CUTOFF, RESO, FENV, MODE | the curve follows; FENV draws an arrow from the cutoff line (right = up, left = down) |
+| 19.15 | FX1: set TYPE to CHORUS, look at FX2 | the chain shows CHO in slot 1, slot 2 filled (the one shown); DELAY / REVERB FREE under it |
+| 19.16 | GLO CONTROL: turn MW>POS from 0 up | the WHEEL > POS line goes from grey to thicker lilac |
+| 19.17 | ARP: change MODE, OCT, GATE, SWING | the 16-step picture follows (rows = notes over the octaves, bar length = gate, odd steps late with swing); OFF shows `ARP OFF` |
+| 19.18 | Turn a knob fast on FX FILT while playing | the picture keeps up (at most ~16 redraws a second); notes do not stutter |

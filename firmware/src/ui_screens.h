@@ -3,12 +3,14 @@
  * patch, no globals but the shadow struct. Included from tests/ui_demo.c (host mock-up, fake values) and, through
  * panel.h, from vavewave.c (the real app: panel.h fills the view from the patch).
  *
- * Needs: gfx.c (cv_begin / cv_rect / cv_line / cv_text / cv_blit, cv_oy, FONT_S / FONT_L, RGB) and BTN_* (platform.c).
+ * Needs: gfx.c (cv_begin / cv_rect / cv_line / cv_text / cv_blit, cv_oy, FONT_S / FONT_M / FONT_L, RGB) and BTN_* (platform.c).
  * Integer only. Main loop only (never from the ISR).
  *
- * Layout (all pages): y 0..51 four knob columns (60 px each), y 54..179 the middle (126 rows, page dependent),
- * y 182 a status line, y 202 the patch name. Every piece has a "shadow" copy of what it last drew
- * (ui_shadow_t) and is redrawn only when its inputs change. Canvas rule: w * h <= CV_MAX (240 x 64). */
+ * Layout: y 0..35 four knob columns (60 px each: label, value, bar), then on every page but HOME the tab strip
+ * (y 38, with the set tag under the tab shown when a tab has two knob sets) and the page's picture (y 66..199, the
+ * biggest thing on the screen; the knob values are not repeated in it); HOME: the middle y 56..181. y 202 the status
+ * line, y 218 the patch name. Every piece has a "shadow" copy of what it last drew (ui_shadow_t) and is redrawn only
+ * when its inputs change. Canvas rule: w * h <= CV_MAX (240 x 64): a taller picture is drawn in strips (ui_pic). */
 #pragma once
 
 #define UI_ACC  RGB(180, 140, 255)              /* lilac, as the logo */
@@ -18,12 +20,15 @@
 #define UI_GRAY RGB(130, 130, 142)
 #define UI_DIM  RGB(58, 58, 72)
 
-#define UI_Y_MID   54u                          /* the middle area: 126 rows */
-#define UI_MID_H   126u
-#define UI_Y_TABS  54u                          /* every page but HOME: the tab strip (18 rows), the page's picture under it */
-#define UI_Y_BODY  72u                          /* the picture: 108 rows to the status line */
-#define UI_Y_LINEA 182u
-#define UI_Y_PATCH 202u
+#define UI_KNOB_H  36u                          /* the knob row: label (FONT_S), value (FONT_M), bar */
+#define UI_Y_MID   56u                          /* HOME: the middle area, 126 rows */
+#define UI_Y_TABS  38u                          /* every page but HOME: the tab strip (15 rows), the set tag under it (13 rows) */
+#define UI_TABS_H  28u
+#define UI_Y_BODY  66u                          /* the page's picture: 134 rows to the status line */
+#define UI_BODY_H  134u
+#define UI_Y_LINEA 202u                         /* the status line, 14 rows */
+#define UI_Y_PATCH 218u                         /* the patch name (FONT_M), 22 rows */
+#define UI_PIC_MS  60u                          /* a changing picture is redrawn at most this often (a full one is ~40 ms of SPI) */
 
 enum { UI_P_HOME, UI_P_EDIT, UI_P_FX, UI_P_ENV, UI_P_LFO, UI_P_SEL, UI_P_GLO, UI_P_ARP, UI_P_SEQ, UI_P_HELP, UI_P_N };
 enum { UI_H_WATERFALL, UI_H_SPECTRUM, UI_H_MINIMAL, UI_H_N };
@@ -51,10 +56,13 @@ typedef struct {
     uint32_t ms;                                /* the clock (ms): the waterfall redraws once the position rests; 0 in the mock-up */
     uint8_t cpu_max, flash;                     /* worst CPU % since reset; flash: 1 = "SAVED" instead of the patch name */
     uint8_t latch;                              /* LATCH is on: the voice counter on the status line reads L instead of V, in the accent colour */
-    uint8_t nsets, set;                         /* FX / LFO / GLO: knob sets on the page, the one shown */
     uint8_t flt_cut, flt_res, flt_mode;         /* FX picture: cutoff, resonance 0..127, mode 0 LP 1 BP 2 HP */
+    int8_t flt_env;                             /* FX picture: the envelope's reach on the cutoff, -64..63 semitones */
     uint8_t lfo_shape, drive;                   /* LFO picture (0 sine 1 tri 2 saw 3 square 4 S&H), GLO picture 0..127 */
-    char ptxt[8];                               /* SEL picture: the voice mode, big; ARP picture: the arp mode */
+    uint8_t mod[4];                             /* GLO CONTROL picture: wheel > pos, wheel > vibrato, aftertouch > cutoff, velocity > level, 0..127 */
+    uint8_t fxt[4];                             /* FX slot picture: the four slots' effect types (0 off) */
+    uint8_t arp_mode, arp_oct, arp_gate, arp_swing;     /* ARP picture: mode (0 off), octaves 1..4, gate 1..127, swing 0..50 */
+    char ptxt[8];                               /* SEQ picture: the state (OFF PLAY STOP RECORD) or the lane's target */
     char info2[40];                             /* FX slot pictures: the once-only effects */
     char info[40];                              /* ARP and SEQ pictures: tempo and rate; steps */
     uint8_t seq_len, seq_pos, seq_rec, seq_on;  /* SEQ picture: steps, the step playing / being recorded, step input on, running */
@@ -64,10 +72,10 @@ typedef struct {
     uint8_t seq_mod[32];                        /* SEQ picture, MOD set: the lane, 0..127 (64 = neutral) */
     uint8_t seq_set, seq_cur;                   /* SEQ picture: the MOD set is shown; the lane step being edited */
     uint8_t seq_tr;                             /* SEQ picture: a key is held, the notes shown are transposed */
-    char list[8][16];                           /* FX / LFO / SEL / GLO: 4 rows x 2 columns of "LABEL VALUE" (14 chars) */
     char boot[2][32];                           /* GLO set 3 (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
     const char *const *tabn;                    /* the page's tab names (NULL: no strip, as in the mock-up) */
-    uint8_t ntabs;                              /* tabs on the page; `sub` is the one shown */
+    uint8_t ntabs, tab;                         /* tabs on the page, the one shown */
+    uint8_t tsets, tset;                        /* knob sets of the tab shown (2: the set tag "1/2" under it), the one shown */
     char help[14][32];                          /* HELP: the lines of the page shown ("LABEL  TEXT": the label is lilac) */
 } ui_view_t;
 
@@ -77,11 +85,12 @@ typedef struct {
     char patch[16], tname[9], fmsg[12], linea[48], kval[4][8];
     const char *klabel[4];
     uint8_t kfrac[4], env[2][4], harm[16];
-    uint8_t flash, latch, nsets, set;
+    uint8_t flash, latch;
     uint32_t wave_key, pic_key;
     uint32_t t_chg;                             /* waterfall: ms of the last frame change */
+    uint32_t t_pic;                             /* ms the page's picture was last drawn */
     uint8_t wf_arrow, wf_frame;                 /* waterfall: frame of the arrow on screen, of the white trace */
-    char list[8][16], ptxt[8], info[40], info2[40];
+    char ptxt[8], info[40], info2[40];
 } ui_shadow_t;
 
 /* ---- small helpers (own copies: ui.h's s_cat / s_num belong to the sine build) */
@@ -123,26 +132,26 @@ static void ui_fmt_time(char *d, uint32_t v)
     else { d = ui_num(d, (int32_t)((ms10 + 5000u) / 10000u)); ui_cat(d, "S"); }
 }
 
-/* ---- the four knob columns: label (FONT_S), value (FONT_L, or FONT_S when long), bar. 60 x 52 canvas, 6 KB each */
+/* ---- the four knob columns: label (FONT_S), value (FONT_M, or FONT_S when long), bar. 60 x 36 canvas, 4.3 KB each */
 static void ui_knob(uint32_t i, const ui_view_t *v)
 {
     const char *val = v->kval[i];
     int32_t n = 0, w, fill;
     uint16_t col = v->touched == i ? UI_ACC : UI_TXT;
     while (val[n]) n++;
-    cv_begin(60, 52, C_BLACK);
-    cv_text((60 - text_w(&FONT_S, v->klabel[i])) / 2, 0, &FONT_S, v->klabel[i], UI_GRAY);
-    if (n <= 3 && !(v->ksmall >> i & 1u)) cv_text((60 - text_w(&FONT_L, val)) / 2, 14, &FONT_L, val, col);
-    else cv_text((60 - text_w(&FONT_S, val)) / 2, 22, &FONT_S, val, col);
-    cv_rect(4, 48, 52, 3, UI_DIM);
+    cv_begin(60, UI_KNOB_H, C_BLACK);           /* (the fonts' capitals: FONT_S rows 2..11, FONT_M rows 4..18 of the cell) */
+    cv_text((60 - text_w(&FONT_S, v->klabel[i])) / 2, -1, &FONT_S, v->klabel[i], UI_GRAY);
+    if (n <= 4 && !(v->ksmall >> i & 1u)) cv_text((60 - text_w(&FONT_M, val)) / 2, 9, &FONT_M, val, col);
+    else cv_text((60 - text_w(&FONT_S, val)) / 2, 12, &FONT_S, val, col);
+    cv_rect(4, 31, 52, 3, UI_DIM);
     w = (int32_t)v->kfrac[i] * 52 >> 8;
     if (v->kbip >> i & 1u) {                    /* from the middle */
         fill = w - 26;
-        if (fill >= 0) cv_rect(30, 48, fill + 1, 3, v->touched == i ? UI_ACC : UI_ACC2);
-        else cv_rect(30 + fill, 48, -fill, 3, v->touched == i ? UI_ACC : UI_ACC2);
-        cv_rect(30, 46, 1, 7, UI_GRAY);
+        if (fill >= 0) cv_rect(30, 31, fill + 1, 3, v->touched == i ? UI_ACC : UI_ACC2);
+        else cv_rect(30 + fill, 31, -fill, 3, v->touched == i ? UI_ACC : UI_ACC2);
+        cv_rect(30, 29, 1, 7, UI_GRAY);
     } else
-        cv_rect(4, 48, w, 3, v->touched == i ? UI_ACC : UI_ACC2);
+        cv_rect(4, 31, w, 3, v->touched == i ? UI_ACC : UI_ACC2);
     cv_blit(i * 60u, 0);
 }
 
@@ -159,19 +168,40 @@ static void ui_posbar(uint32_t y, uint32_t h, uint32_t pos)
     cv_blit(0, y);
 }
 
-/* ---- one cycle of the current frame, 256 samples over 239 px */
-static void ui_wave(uint32_t y, uint32_t h, const int16_t *s, uint16_t col)
+/* ---- one cycle of the current frame, 256 samples over 239 px, h rows (into the canvas begun; thick: 2 px lines) */
+static void ui_wave_in(uint32_t h, const int16_t *s, uint16_t col, int thick)
 {
     int32_t i, mid = (int32_t)h / 2, amp = mid - 3, px = 0, py = mid;
-    cv_begin(240, h, C_BLACK);
     cv_rect(0, mid, 240, 1, UI_DIM);
     for (i = 0; i < 256; i++) {
         int32_t x = i * 239 >> 8, yy = mid - ((int32_t)s[i] * amp >> 15);
-        if (i) cv_line(px, py, x, yy, col);
+        if (i) { cv_line(px, py, x, yy, col); if (thick) cv_line(px, py + 1, x, yy + 1, col); }
         px = x;
         py = yy;
     }
+}
+
+static void ui_wave(uint32_t y, uint32_t h, const int16_t *s, uint16_t col)
+{
+    cv_begin(240, h, C_BLACK);
+    ui_wave_in(h, s, col, 0);
     cv_blit(0, y);
+}
+
+/* ---- a picture taller than a canvas: drawn in strips of 64 rows, each from the same function with cv_oy = -strip
+ * top (the drawing clips to the strip). Each strip costs the whole drawing again; the pictures are cheap. */
+typedef void (*ui_pic_fn)(const ui_view_t *v);
+static void ui_pic(uint32_t y, uint32_t h, ui_pic_fn f, const ui_view_t *v)
+{
+    uint32_t top;
+    for (top = 0; top < h; top += 64u) {
+        cv_begin(240, h - top < 64u ? h - top : 64u, C_BLACK);
+        cv_oy = -(int32_t)top;
+        f(v);
+        cv_oy = 0;
+        cv_blit(0, y + top);
+        platform_poll();                        /* keep USB and the watchdog fed between the strips */
+    }
 }
 
 /* ---- the harmonic spectrum: 16 bars of a 64-sample DFT (mip level 2 keeps exactly harmonics 1..16).
@@ -278,55 +308,66 @@ static void ui_wf_arrow(uint32_t f, int draw)
     cv_blit(f * 2u, UI_Y_MID + (uint32_t)(b - 4));
 }
 
-/* ---- ENV: one ADSR curve in a 240 x 54 canvas. Segment widths follow the values (6..50 px), sustain is a fixed
- * hold. The active envelope is lilac with its area filled, the other is grey. */
-static void ui_env(uint32_t y, const char *name, const uint8_t *e, int active)
+/* ---- ENV: the envelope of the tab shown, the whole picture (ui_pic). Segment widths follow the values (6..60 px),
+ * sustain is a fixed hold; the area under the curve filled. */
+static void ui_env_fn(const ui_view_t *v)
 {
-    int32_t x0 = 20, base = 36, top = 10, sl = base - ((int32_t)e[2] * (base - top) >> 7);
-    int32_t x1 = x0 + 6 + ((int32_t)e[0] * 44 >> 7), x2 = x1 + 6 + ((int32_t)e[1] * 44 >> 7), x3 = x2 + 36;
-    int32_t x4 = x3 + 6 + ((int32_t)e[3] * 44 >> 7), x, yy;
-    uint16_t line = active ? UI_ACC : UI_GRAY;
-    cv_begin(240, 54, C_BLACK);
-    if (active) {                               /* the area under the curve, a column at a time */
-        for (x = x0; x <= x4; x++) {
-            if (x <= x1) yy = base + (top - base) * (x - x0) / (x1 - x0);
-            else if (x <= x2) yy = top + (sl - top) * (x - x1) / (x2 - x1);
-            else if (x <= x3) yy = sl;
-            else yy = sl + (base - sl) * (x - x3) / (x4 - x3);
-            cv_rect(x, yy, 1, base - yy + 1, UI_ACC3);
-        }
+    const uint8_t *e = v->env[v->sub & 1u];
+    int32_t x0 = 12, base = 110, top = 12, sl = base - ((int32_t)e[2] * (base - top) >> 7);
+    int32_t x1 = x0 + 6 + ((int32_t)e[0] * 54 >> 7), x2 = x1 + 6 + ((int32_t)e[1] * 54 >> 7), x3 = x2 + 40;
+    int32_t x4 = x3 + 6 + ((int32_t)e[3] * 54 >> 7), x, yy;
+    for (x = x0; x <= x4; x++) {                /* the area under the curve, a column at a time */
+        if (x <= x1) yy = base + (top - base) * (x - x0) / (x1 - x0);
+        else if (x <= x2) yy = top + (sl - top) * (x - x1) / (x2 - x1);
+        else if (x <= x3) yy = sl;
+        else yy = sl + (base - sl) * (x - x3) / (x4 - x3);
+        cv_rect(x, yy, 1, base - yy + 1, UI_ACC3);
     }
-    cv_rect(8, base, 224, 1, UI_DIM);
-    cv_line(x0, base, x1, top, line);
-    cv_line(x1, top, x2, sl, line);
-    cv_line(x2, sl, x3, sl, line);
-    cv_line(x3, sl, x4, base, line);
-    cv_rect(x1 - 1, top - 1, 3, 3, active ? C_WHITE : UI_GRAY);
-    cv_rect(x2 - 1, sl - 1, 3, 3, active ? C_WHITE : UI_GRAY);
-    cv_text(8, 0, &FONT_S, name, active ? UI_ACC : UI_GRAY);
-    cv_text((x0 + x1) / 2 - 4, 38, &FONT_S, "A", UI_GRAY);
-    cv_text((x1 + x2) / 2 - 4, 38, &FONT_S, "D", UI_GRAY);
-    cv_text((x2 + x3) / 2 - 4, 38, &FONT_S, "S", UI_GRAY);
-    cv_text((x3 + x4) / 2 - 4, 38, &FONT_S, "R", UI_GRAY);
-    cv_blit(0, y);
+    cv_rect(4, base, 232, 1, UI_DIM);
+    for (x = 0; x < 2; x++) {                   /* 2 px lines */
+        cv_line(x0, base - x, x1, top - x, UI_ACC);
+        cv_line(x1, top - x, x2, sl - x, UI_ACC);
+        cv_line(x2, sl - x, x3, sl - x, UI_ACC);
+        cv_line(x3, sl - x, x4, base - x, UI_ACC);
+    }
+    cv_rect(x1 - 2, top - 2, 5, 5, C_WHITE);
+    cv_rect(x2 - 2, sl - 2, 5, 5, C_WHITE);
+    cv_rect(x3 - 2, sl - 2, 5, 5, C_WHITE);
+    cv_text((x0 + x1) / 2 - 4, 113, &FONT_S, "A", UI_GRAY);
+    cv_text((x1 + x2) / 2 - 4, 113, &FONT_S, "D", UI_GRAY);
+    cv_text((x2 + x3) / 2 - 4, 113, &FONT_S, "S", UI_GRAY);
+    cv_text((x3 + x4) / 2 - 4, 113, &FONT_S, "R", UI_GRAY);
 }
 
-/* ---- the tab strip (every page but HOME): all the page's tabs, the one shown filled. One 240 x 18 canvas */
+/* ---- the tab strip (every page but HOME): all the page's tabs, the one shown filled; when that tab has two knob
+ * sets, a tag under it says which one ("1/2", "SET 1/2" where it fits). One 240 x 28 canvas */
 static void ui_tabs(uint32_t y, const ui_view_t *v)
 {
     uint32_t i, n = v->ntabs ? v->ntabs : 1u;
     int32_t w = (232 - 4 * ((int32_t)n - 1)) / (int32_t)n;
-    cv_begin(240, 18, C_BLACK);
+    cv_begin(240, UI_TABS_H, C_BLACK);
     for (i = 0; i < n; i++) {
         int32_t x = 4 + (int32_t)i * (w + 4);
         const char *t = v->tabn[i];
-        if (i == v->sub) {
-            cv_rect(x, 0, w, 17, UI_ACC);
-            cv_text(x + (w - text_w(&FONT_S, t)) / 2, 1, &FONT_S, t, C_BLACK);
+        if (i == v->tab) {
+            cv_rect(x, 0, w, 15, UI_ACC);
+            cv_text(x + (w - text_w(&FONT_S, t)) / 2, 0, &FONT_S, t, C_BLACK);
+            if (v->tsets > 1u) {
+                char g[12], *d = g;
+                if (w >= 64) d = ui_cat(d, "SET ");
+                d = ui_num(d, v->tset + 1);
+                d = ui_cat(d, "/");
+                ui_num(d, v->tsets);
+                cv_rect(x, 15, w, 13, UI_ACC3);
+                cv_rect(x, 15, 1, 13, UI_ACC);
+                cv_rect(x + w - 1, 15, 1, 13, UI_ACC);
+                cv_rect(x, 27, w, 1, UI_ACC);
+                cv_text(x + (w - text_w(&FONT_S, g)) / 2, 14, &FONT_S, g, C_WHITE);
+            }
         } else {
-            cv_rect(x, 0, w, 17, UI_DIM);
-            cv_rect(x + 1, 1, w - 2, 15, C_BLACK);
-            cv_text(x + (w - text_w(&FONT_S, t)) / 2, 1, &FONT_S, t, UI_GRAY);
+            cv_rect(x, 0, w, 15, UI_DIM);
+            cv_rect(x + 1, 1, w - 2, 13, C_BLACK);
+            cv_text(x + (w - text_w(&FONT_S, t)) / 2, 0, &FONT_S, t, UI_GRAY);
         }
     }
     cv_blit(0, y);
@@ -346,7 +387,7 @@ static void ui_dots(uint32_t y, uint32_t used, uint32_t max)
     cv_blit(0, y);
 }
 
-/* the status line: left what this page is, right voices and CPU. One 240 x 16 canvas, 7.6 KB */
+/* the status line: left what this page is, right voices and CPU. One 240 x 14 canvas, 6.7 KB */
 static void ui_linea(uint32_t y, const char *left, const ui_view_t *v)
 {
     char r[24], *d = r;
@@ -355,28 +396,26 @@ static void ui_linea(uint32_t y, const char *left, const ui_view_t *v)
     d = ui_num(d, v->voices);
     d = ui_cat(d, "/");
     d = ui_num(d, v->voices_max);
-    d = ui_cat(d, " CPU");
+    d = ui_cat(d, " CPU ");
     if (v->cpu < 10u) d = ui_cat(d, " ");
     d = ui_num(d, v->cpu);
     ui_cat(d, "%");
-    cv_begin(240, 16, C_BLACK);
+    cv_begin(240, 14, C_BLACK);
     cv_text(4, 0, &FONT_S, left, UI_ACC);
     cv_text(236 - text_w(&FONT_S, r), 0, &FONT_S, r, v->cpu > 80u ? RGB(255, 90, 90) : UI_GRAY);
     if (v->latch) cv_text(236 - text_w(&FONT_S, r), 0, &FONT_S, "L", UI_ACC);
     cv_blit(0, y);
 }
 
-static void ui_patch(uint32_t y, const ui_view_t *v, uint16_t col)
+/* the patch name: FONT_M in a 240 x 22 canvas, or FONT_L (32 rows) on the minimal HOME look */
+static void ui_patch(uint32_t y, const ui_view_t *v, uint16_t col, int big)
 {
-    cv_begin(240, 32, C_BLACK);
-    if (v->flash) {
-        const char *m = v->fmsg[0] ? v->fmsg : "SAVED";
-        cv_text((240 - text_w(&FONT_L, m)) / 2, 0, &FONT_L, m, UI_ACC);
-        cv_blit(0, y);
-        return;
-    }
-    cv_text((240 - text_w(&FONT_L, v->patch)) / 2, 0, &FONT_L, v->patch, col);
-    if (v->modified) cv_rect(0, 13, 5, 6, UI_ACC);       /* edited since loaded / saved */
+    const felucca_font_t *f = big ? &FONT_L : &FONT_M;
+    const char *m = v->flash ? (v->fmsg[0] ? v->fmsg : "SAVED") : v->patch;
+    int32_t ty = big ? 0 : -2;
+    cv_begin(240, big ? 32u : 22u, C_BLACK);
+    cv_text((240 - text_w(f, m)) / 2, ty, f, m, v->flash ? UI_ACC : col);
+    if (!v->flash && v->modified) cv_rect(0, big ? 13 : 6, 5, 6, UI_ACC);      /* edited since loaded / saved */
     cv_blit(0, y);
 }
 
@@ -385,8 +424,8 @@ static void ui_left_text(char *out, const ui_view_t *v)       /* the left part o
     static const char *const PN[UI_P_N] = {"", "EDIT", "FX", "ENV", "LFO", "VOICE", "GLOBAL", "ARP", "SEQ", ""};
     char *d = out;
     if (v->page == UI_P_HOME || v->page >= UI_P_HELP) {
-        if (v->variant != UI_H_MINIMAL) { d = ui_cat5(d, v->tname); d = ui_cat(d, " "); }
-        d = ui_cat(d, "FRM ");
+        if (v->variant != UI_H_MINIMAL) { d = ui_cat5(d, v->tname); d = ui_cat(d, " "); }     /* (with the table name: no FRM, the line is full) */
+        else d = ui_cat(d, "FRM ");
         d = ui_num(d, v->frame + 1);
         d = ui_cat(d, "/");
         ui_num(d, v->nframes);
@@ -394,93 +433,175 @@ static void ui_left_text(char *out, const ui_view_t *v)       /* the left part o
     }
     d = ui_cat(d, PN[v->page]);
     if (v->page == UI_P_SEQ && v->seq_rec) d = ui_cat(d, " REC");
-    if (v->ntabs > 1u) { d = ui_cat(d, " "); d = ui_num(d, v->sub + 1); d = ui_cat(d, "/"); d = ui_num(d, v->ntabs); }
+    if (v->ntabs > 1u) { d = ui_cat(d, " "); d = ui_num(d, v->tab + 1); d = ui_cat(d, "/"); d = ui_num(d, v->ntabs); }
     if (v->page == UI_P_EDIT) { d = ui_cat(d, " "); ui_cat5(d, v->tname); }
 }
 
-/* ---- FX / LFO / SEL / GLO: one picture (240 x 44, under the tab strip) and a two column list of the page's eight values (240 x 64) */
-static void ui_filter_pic(uint32_t y, const ui_view_t *v)
+/* ---- the pages' pictures: each fills the body (240 x UI_BODY_H, drawn by ui_pic in strips), y 0 = the body's top */
+static void ui_filter_fn(const ui_view_t *v)    /* FX FILTER: the response, the cutoff line, the envelope's reach as an arrow */
 {
-    int32_t x, xc = 8 + (int32_t)v->flt_cut * 224 / 127, base = 26, top = 8, bump = (int32_t)v->flt_res * 8 / 127, py = 0;
+    int32_t x, xc = 8 + (int32_t)v->flt_cut * 224 / 127, base = 108, top = 16, bump = (int32_t)v->flt_res * 44 / 127, py = 0;
+    int32_t xe = xc + (int32_t)v->flt_env * 15 / 8;         /* semitones: the 224 px axis is ~120 semitones */
     static const char *const TK[3] = {"100", "1K", "10K"};
     static const int16_t TX[3] = {60, 134, 209};      /* 100 Hz, 1 kHz, 10 kHz on the 20 Hz .. 19 kHz log axis */
-    cv_begin(240, 44, C_BLACK);
     cv_rect(8, base, 224, 1, UI_DIM);
     for (x = 0; x < 3; x++) {
-        cv_rect(TX[x], base, 1, 3, UI_GRAY);
-        cv_text(TX[x] - text_w(&FONT_S, TK[x]) / 2, 28, &FONT_S, TK[x], UI_DIM);
+        cv_rect(TX[x], base, 1, 4, UI_GRAY);
+        cv_text(TX[x] - text_w(&FONT_S, TK[x]) / 2, 112, &FONT_S, TK[x], UI_GRAY);
     }
     for (x = 8; x <= 232; x++) {
         int32_t dd = x - xc, ad = dd < 0 ? -dd : dd, yy;
-        if (v->flt_mode == 0) yy = top + (dd > 0 ? dd * 5 / 9 : 0);               /* 12 dB / octave ~ 0.55 px / px */
-        else if (v->flt_mode == 2) yy = top + (dd < 0 ? -dd * 5 / 9 : 0);
-        else yy = top + 8 + ad * 5 / 18;                                          /* band pass: 6 dB / octave */
-        if (ad < 16) yy -= bump * (16 - ad) / 16;                                 /* the resonance peak */
+        if (v->flt_mode == 0) yy = top + (dd > 0 ? dd * 5 / 3 : 0);               /* 12 dB / octave */
+        else if (v->flt_mode == 2) yy = top + (dd < 0 ? -dd * 5 / 3 : 0);
+        else yy = top + 24 + ad * 5 / 6;                                          /* band pass: 6 dB / octave */
+        if (ad < 24) yy -= bump * (24 - ad) / 24;                                 /* the resonance peak */
         if (yy < 0) yy = 0;
         if (yy > base) yy = base;
         cv_rect(x, yy, 1, base - yy + 1, UI_ACC3);
-        if (x > 8) cv_line(x - 1, py, x, yy, UI_ACC);
+        if (x > 8) { cv_line(x - 1, py, x, yy, UI_ACC); cv_line(x - 1, py + 1, x, yy + 1, UI_ACC); }
         py = yy;
     }
     cv_rect(xc, 0, 1, base, UI_GRAY);
-    cv_blit(0, y);
+    if (xe < 8) xe = 8;
+    if (xe > 232) xe = 232;
+    if (xe != xc) {                             /* the envelope sweeps the cutoff from xc to xe */
+        int32_t dir = xe > xc ? -1 : 1;
+        cv_rect(xe < xc ? xe : xc, 4, (xe > xc ? xe - xc : xc - xe) + 1, 1, UI_ACC2);
+        cv_line(xe, 4, xe + 4 * dir, 0, UI_ACC2);
+        cv_line(xe, 4, xe + 4 * dir, 8, UI_ACC2);
+        for (x = 6; x < base; x += 4) cv_rect(xe, x, 1, 2, UI_ACC2);
+    }
 }
 
-static void ui_lfo_pic(uint32_t y, uint32_t shape)
+static void ui_lfo_fn(const ui_view_t *v)       /* LFO: two cycles of the shape */
 {
-    int32_t x, px = 8, py = 22;
-    cv_begin(240, 44, C_BLACK);
-    cv_rect(8, 22, 224, 1, UI_DIM);
+    int32_t x, px = 8, py = 62;
+    cv_rect(8, 62, 224, 1, UI_DIM);
     for (x = 0; x < 224; x++) {
         int32_t ph = x * 4 / 7, q = ph & 63, st = ph >> 4, val, yy;
-        switch (shape) {
+        switch (v->lfo_shape) {
         case 0: val = UI_SIN64[q]; break;
         case 1: val = q < 16 ? q * 1024 : q < 48 ? (32 - q) * 1024 : (q - 64) * 1024; break;
         case 2: val = -16384 + q * 512; break;
         case 3: val = q < 32 ? 16384 : -16384; break;
         default: val = (((st * 2654435761u) >> 12) & 31u) * 1024 - 16000; break;   /* S&H: 4 steps a cycle */
         }
-        yy = 22 - (val * 19 >> 14);
-        if (x) cv_line(px, py, 8 + x, yy, UI_ACC);
+        yy = 62 - (val * 54 >> 14);
+        if (x) { cv_line(px, py, 8 + x, yy, UI_ACC); cv_line(px, py + 1, 8 + x, yy + 1, UI_ACC); }
         px = 8 + x;
         py = yy;
     }
-    cv_blit(0, y);
 }
 
-static void ui_drive_pic(uint32_t y, const ui_view_t *v)
+static void ui_drive_fn(const ui_view_t *v)     /* GLO OUTPUT: the drive's curve; the worst CPU load since reset */
 {
-    int32_t i, g = 16 + (int32_t)v->drive * 240 / 127, py = 0;             /* gain 1 .. 16, Q4 */
-    char t[24], *d = t;
-    cv_begin(240, 44, C_BLACK);
-    cv_rect(8, 22, 100, 1, UI_DIM);
-    cv_rect(58, 2, 1, 40, UI_DIM);
-    for (i = 0; i <= 50; i++) {                 /* the right half, mirrored for the left (odd symmetry) */
-        int32_t u = i * g * 4096 / 800;         /* x * gain, Q12 */
+    int32_t i, g = 16 + (int32_t)v->drive * 240 / 127, py = 0, cx = 70, cy = 66;   /* gain 1 .. 16, Q4 */
+    char t[8], *d = t;
+    cv_rect(cx - 60, cy, 121, 1, UI_DIM);
+    cv_rect(cx, cy - 60, 1, 121, UI_DIM);
+    for (i = 0; i <= 58; i++) {                 /* the right half, mirrored for the left (odd symmetry) */
+        int32_t u = i * g * 4096 / (58 * 16);   /* x * gain, Q12 */
         int32_t sat = u * 8192 / (4096 + u);    /* a soft knee, x / (1 + x) x 2 */
-        int32_t h = (sat > 4096 ? 4096 : sat) * 19 >> 12;
+        int32_t h = (sat > 4096 ? 4096 : sat) * 56 >> 12;
         if (i) {
-            cv_line(58 + i - 1, 22 - py, 58 + i, 22 - h, UI_ACC);
-            cv_line(58 - i + 1, 22 + py, 58 - i, 22 + h, UI_ACC);
+            cv_line(cx + i - 1, cy - py, cx + i, cy - h, UI_ACC);
+            cv_line(cx + i - 1, cy - py - 1, cx + i, cy - h - 1, UI_ACC);
+            cv_line(cx - i + 1, cy + py, cx - i, cy + h, UI_ACC);
+            cv_line(cx - i + 1, cy + py + 1, cx - i, cy + h + 1, UI_ACC);
         }
         py = h;
     }
-    d = ui_cat(d, "CPU MAX ");
     d = ui_num(d, v->cpu_max);
     ui_cat(d, "%");
-    cv_text(124, 0, &FONT_S, t, v->cpu_max > 80u ? RGB(255, 90, 90) : UI_GRAY);
-    cv_text(124, 14, &FONT_S, "EDIT+HOME", UI_DIM);
-    cv_text(124, 28, &FONT_S, "RESETS MAX", UI_DIM);
-    cv_blit(0, y);
+    cv_text(152, 40, &FONT_S, "CPU MAX", UI_GRAY);
+    cv_text(152, 54, &FONT_M, t, v->cpu_max > 80u ? RGB(255, 90, 90) : UI_TXT);
 }
 
-static void ui_boot_pic(uint32_t y, const ui_view_t *v)       /* GLO set 3: what the boot key scan saw */
+static void ui_ctrl_fn(const ui_view_t *v)      /* GLO CONTROL: what the wheel, aftertouch and velocity reach; a line per route, thicker = more */
 {
-    cv_begin(240, 44, C_BLACK);
-    cv_text(4, 0, &FONT_S, "BOOT KEYS (SCAN AT POWER-ON)", UI_GRAY);
-    cv_text(4, 14, &FONT_S, v->boot[0], UI_TXT);
-    cv_text(4, 28, &FONT_S, v->boot[1], UI_TXT);
-    cv_blit(0, y);
+    static const char *const SRC[3] = {"WHEEL", "AFTERT", "VELO"};
+    static const char *const DST[4] = {"POS", "VIB", "CUTOFF", "LEVEL"};
+    static const uint8_t SY0[3] = {4, 68, 100}, SH[3] = {56, 24, 24}, FROM[4] = {0, 0, 1, 2};
+    int32_t i, k;
+    for (i = 0; i < 3; i++) {
+        int32_t y = SY0[i], h = SH[i];
+        cv_rect(4, y, 80, h, UI_DIM);
+        cv_rect(5, y + 1, 78, h - 2, C_BLACK);
+        cv_text(44 - text_w(&FONT_S, SRC[i]) / 2, y + h / 2 - 7, &FONT_S, SRC[i], UI_TXT);
+    }
+    for (i = 0; i < 4; i++) {
+        int32_t y = 4 + i * 32, a = v->mod[i], s = FROM[i], sy = SY0[s] + SH[s] / 2 + (s == 0 ? (i ? 10 : -10) : 0);
+        int32_t th = a ? 1 + a / 32 : 1;
+        uint16_t c = a ? (a >= 64 ? UI_ACC : UI_ACC2) : UI_DIM;
+        cv_rect(156, y, 80, 24, a ? UI_ACC2 : UI_DIM);
+        cv_rect(157, y + 1, 78, 22, C_BLACK);
+        cv_text(196 - text_w(&FONT_S, DST[i]) / 2, y + 5, &FONT_S, DST[i], a ? UI_TXT : UI_GRAY);
+        for (k = 0; k < th; k++) cv_line(85, sy + k - th / 2, 155, y + 12 + k - th / 2, c);
+    }
+}
+
+static void ui_boot_fn(const ui_view_t *v)      /* GLO BOOT: what the boot key scan saw */
+{
+    cv_text(4, 4, &FONT_S, "BOOT KEYS (SCAN AT POWER-ON)", UI_GRAY);
+    cv_text(4, 24, &FONT_S, v->boot[0], UI_TXT);
+    cv_text(4, 44, &FONT_S, v->boot[1], UI_TXT);
+}
+
+static void ui_fx_fn(const ui_view_t *v)        /* FX slot: the chain of four slots, the one shown filled; where delay and reverb are */
+{
+    static const char *const NM[6] = {"-", "CHO", "FLG", "PHA", "DLY", "REV"};
+    int32_t i, cur = (int32_t)v->sub - 2;
+    for (i = 0; i < 4; i++) {
+        int32_t x = 4 + i * 60, t = v->fxt[i] < 6u ? v->fxt[i] : 0;
+        char n[2] = {(char)('1' + i), 0};
+        cv_text(x + 22, 2, &FONT_S, n, i == cur ? UI_ACC : UI_GRAY);
+        if (i == cur) cv_rect(x, 20, 52, 66, UI_ACC);
+        else { cv_rect(x, 20, 52, 66, t ? UI_ACC2 : UI_DIM); cv_rect(x + 1, 21, 50, 64, t ? UI_ACC3 : C_BLACK); }
+        cv_text(x + (52 - text_w(&FONT_M, NM[t])) / 2, 40, &FONT_M, NM[t], i == cur ? C_BLACK : t ? UI_TXT : UI_DIM);
+        if (i < 3) { cv_line(x + 53, 47, x + 57, 53, UI_GRAY); cv_line(x + 53, 59, x + 57, 53, UI_GRAY); }
+    }
+    cv_text(4, 100, &FONT_S, v->info2, UI_GRAY);
+}
+
+static void ui_sel_fn(const ui_view_t *v)       /* SEL: a block per voice, lit while it sounds */
+{
+    uint32_t i, n = v->voices_max < 12u ? v->voices_max : 12u;
+    for (i = 0; i < n; i++) {
+        int32_t x = 8 + (int32_t)(i % 6u) * 38, y = 8 + (int32_t)(i / 6u) * 62;
+        if (i < v->voices) cv_rect(x, y, 34, 56, UI_ACC);
+        else { cv_rect(x, y, 34, 56, UI_DIM); cv_rect(x + 1, y + 1, 32, 54, C_BLACK); }
+    }
+}
+
+static void ui_arp_fn(const ui_view_t *v)       /* ARP: 16 steps of the pattern a three-note chord plays (gate = note length, swing = late odd steps) */
+{
+    static const uint8_t RND[16] = {2, 0, 5, 1, 4, 3, 0, 5, 2, 4, 1, 3, 5, 0, 2, 4};
+    int32_t oct = v->arp_oct < 1u ? 1 : v->arp_oct > 4u ? 4 : v->arp_oct, n = 3 * oct, s, lh = 96 / n;
+    int32_t gw = (int32_t)v->arp_gate * 13 / 127, sw = (int32_t)v->arp_swing * 14 / 100;
+    cv_text(4, 0, &FONT_S, v->info, UI_GRAY);
+    if (!v->arp_mode) { cv_text((240 - text_w(&FONT_M, "ARP OFF")) / 2, 60, &FONT_M, "ARP OFF", UI_DIM); return; }
+    cv_rect(8, 117, 224, 1, UI_DIM);
+    for (s = 0; s < 16; s++) {
+        int32_t x = 8 + s * 14 + (s & 1 ? sw : 0), k, lo, hi, m = 2 * n - 2 > 0 ? 2 * n - 2 : 1;
+        switch (v->arp_mode) {
+        case 1: lo = s % n; break;                                       /* UP */
+        case 2: lo = n - 1 - s % n; break;                               /* DOWN */
+        case 3: k = s % m; lo = k < n ? k : m - k; break;                /* UP-DN */
+        case 4: k = s % (2 * n); lo = k < n ? k : 2 * n - 1 - k; break;  /* UP-DN2: the ends twice */
+        case 5: lo = RND[s] % n; break;                                  /* RANDOM */
+        case 6: { static const uint8_t PL[3] = {0, 2, 1}; lo = PL[s % 3] + 3 * (s / 3 % oct); break; }   /* PLAYED: in the order played (C G E) */
+        default: lo = -1; break;                                         /* CHORD: all notes each step */
+        }
+        hi = lo < 0 ? n - 1 : lo;
+        if (lo < 0) lo = 0;
+        for (k = lo; k <= hi; k++)
+            cv_rect(x, 116 - (k + 1) * lh + 1, gw < 2 ? 2 : gw, lh - 1 < 2 ? 2 : lh - 1, s ? UI_ACC : C_WHITE);
+    }
+}
+
+static void ui_edit_fn(const ui_view_t *v)      /* EDIT: one cycle of the oscillator's wave (the morph and BEND included), tall */
+{
+    ui_wave_in(112, v->wave ? v->wave : v->frames + (uint32_t)v->frame * v->stride, UI_ACC, 1);
 }
 
 static uint32_t ui_seq_h(const ui_view_t *v)               /* a hash of the notes shown, for the redraw check */
@@ -495,53 +616,39 @@ static void ui_seq_grid(uint32_t y, const ui_view_t *v)       /* the pattern: 4 
     static const char NN[12][3] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     uint32_t i, h;
     for (h = 0; h < 2u; h++) {                  /* two canvases of two tile rows (a canvas holds 64 rows at most) */
-    cv_begin(240, 38, C_BLACK);
+    cv_begin(240, 50, C_BLACK);
     for (i = h * 16u; i < h * 16u + 16u; i++) {
-        int32_t x = (int32_t)(i & 7u) * 30, ty = (int32_t)((i >> 3) & 1u) * 19;
+        int32_t x = (int32_t)(i & 7u) * 30, ty = (int32_t)((i >> 3) & 1u) * 25;
         uint32_t cur = i == v->seq_pos && (v->seq_on || v->seq_rec);
         if (v->seq_set) {                       /* the lane: a bar a step from the middle line, the step being edited framed */
-            int32_t mv = (int32_t)v->seq_mod[i] - 64, bh = (mv < 0 ? -mv : mv) * 8 / 64;
+            int32_t mv = (int32_t)v->seq_mod[i] - 64, bh = (mv < 0 ? -mv : mv) * 11 / 64;
             uint32_t on = i < v->seq_len || !v->seq_len;
             uint16_t c = i == v->seq_pos && v->seq_on ? C_WHITE : UI_ACC;
-            cv_rect(x, ty, 29, 18, on ? UI_ACC3 : C_BLACK);
-            cv_rect(x + 3, ty + 9, 23, 1, UI_DIM);
-            if (bh) cv_rect(x + 3, mv > 0 ? ty + 9 - bh : ty + 10, 23, bh, c);
-            if (v->seq_set == 1u && i == v->seq_cur) { cv_rect(x, ty, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty + 17, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty, 1, 18, RGB(255, 200, 90)); cv_rect(x + 28, ty, 1, 18, RGB(255, 200, 90)); }
+            cv_rect(x, ty, 29, 24, on ? UI_ACC3 : C_BLACK);
+            cv_rect(x + 3, ty + 12, 23, 1, UI_DIM);
+            if (bh) cv_rect(x + 3, mv > 0 ? ty + 12 - bh : ty + 13, 23, bh, c);
+            if (v->seq_set == 1u && i == v->seq_cur) { cv_rect(x, ty, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty + 23, 29, 1, RGB(255, 200, 90)); cv_rect(x, ty, 1, 24, RGB(255, 200, 90)); cv_rect(x + 28, ty, 1, 24, RGB(255, 200, 90)); }
         } else if (i < v->seq_len) {
             uint32_t nt = v->seq_note[i];
             uint16_t bg = cur ? C_WHITE : (v->seq_mask >> i & 1u) ? UI_ACC3 : C_BLACK;
             uint16_t fg = cur ? C_BLACK : v->seq_tr ? RGB(255, 200, 90) : UI_ACC;
-            cv_rect(x, ty, 29, 18, bg);
-            if (!(v->seq_mask >> i & 1u)) cv_rect(x + 11, ty + 8, 7, 2, cur ? C_BLACK : UI_DIM);       /* a rest: a dash */
+            cv_rect(x, ty, 29, 24, bg);
+            if (!(v->seq_mask >> i & 1u)) cv_rect(x + 11, ty + 11, 7, 2, cur ? C_BLACK : UI_DIM);      /* a rest: a dash */
             else if (nt) {
                 char t[6], *d = t;
                 int32_t m = (int32_t)nt - 1, o = m / 12 - 1;
                 d = ui_cat(d, NN[m % 12]);
                 if (o < 0) *d++ = '-'; else *d++ = (char)('0' + o);
                 *d = 0;
-                cv_text(x + (29 - text_w(&FONT_S, t)) / 2, ty + 1, &FONT_S, t, fg);
-                if (v->seq_tie >> i & 1u) cv_rect(x, ty + 8, 2, 2, fg);                                  /* tied to the step before */
+                cv_text(x + (29 - text_w(&FONT_S, t)) / 2, ty + 5, &FONT_S, t, fg);
+                if (v->seq_tie >> i & 1u) cv_rect(x, ty + 11, 2, 2, fg);                                 /* tied to the step before */
             }
-        } else if (v->seq_rec && i == v->seq_pos) cv_rect(x, ty, 29, 18, C_WHITE);
-        else cv_rect(x + 12, ty + 8, 5, 2, UI_ACC3);
+        } else if (v->seq_rec && i == v->seq_pos) cv_rect(x, ty, 29, 24, C_WHITE);
+        else cv_rect(x + 12, ty + 11, 5, 2, UI_ACC3);
     }
-    cv_blit(0, y + h * 38u);
+    cv_blit(0, y + h * 50u);
     }
 }
-
-static void ui_list(uint32_t y, const ui_view_t *v)
-{
-    uint32_t i;
-    cv_begin(240, 64, C_BLACK);
-    for (i = 0; i < 8u; i++) {
-        uint32_t col = i >> 2, row = i & 3u;
-        uint16_t c = col == v->set ? UI_TXT : RGB(95, 95, 110);
-        if (!v->list[i][0]) continue;
-                cv_text(4 + (int32_t)col * 120, (int32_t)row * 16, &FONT_S, v->list[i], c);
-    }
-    cv_blit(0, y);
-}
-
 
 /* ---- HELP (hold HOME): two text pages, one 240 x 16 canvas a line. A line is "LABEL  what it does": the text up
  * to the first double space is drawn lilac, the rest white; a line without one is gray (the footer). */
@@ -628,11 +735,11 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         if (frame_new) {
             ui_wave(UI_Y_MID, 56, v->frames + (uint32_t)v->frame * v->stride, UI_ACC);
             ui_spectrum_calc(v->wave2, s->harm);
-            ui_spectrum(128, s->harm);
+            ui_spectrum(UI_Y_MID + 74u, s->harm);
         }
-        if (full || s->pos != v->pos) ui_posbar(112, 12, v->pos);
+        if (full || s->pos != v->pos) ui_posbar(UI_Y_MID + 58u, 12, v->pos);
     } else if (home3) {
-        if (full || !ui_eq(s->patch, v->patch) || s->flash != v->flash || !ui_eq(s->fmsg, v->fmsg) || s->modified != v->modified) ui_patch(58, v, C_WHITE);
+        if (full || !ui_eq(s->patch, v->patch) || s->flash != v->flash || !ui_eq(s->fmsg, v->fmsg) || s->modified != v->modified) ui_patch(58, v, C_WHITE, 1);
         if (frame_new) {
             draw_text_box(0, 92, 240, &FONT_L, v->tname, UI_ACC, 1);
             ui_wave(156, 40, v->frames + (uint32_t)v->frame * v->stride, UI_ACC2);
@@ -641,63 +748,44 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         if (full || s->voices != v->voices) ui_dots(222, v->voices, v->voices_max);
         left_y = 200;
     } else if (v->page == UI_P_EDIT) {
-        if (frame_new || s->wave_key != v->wave_key || s->sub != v->sub)
-            ui_wave(UI_Y_BODY + 2u, 50, v->wave ? v->wave : v->frames + (uint32_t)v->frame * v->stride, UI_ACC);
-        if (full || s->pos != v->pos) ui_posbar(126, 14, v->pos);
-        if (full) {
-            ui_text_line(146, "ALG TABLE   SEL POSITION", UI_GRAY);
-            ui_text_line(162, "EDIT + OP KEYS: OSC", UI_DIM);
+        if (frame_new || s->wave_key != v->wave_key || s->sub != v->sub) ui_pic(UI_Y_BODY, 114, ui_edit_fn, v);
+        if (full || s->pos != v->pos) ui_posbar(UI_Y_BODY + 116u, 18, v->pos);
+    } else if (v->page != UI_P_HOME) {          /* one picture per page and tab, redrawn when what it shows changes */
+        uint32_t pk, tc;
+        int textch = 0;
+        ui_pic_fn f = 0;
+        switch (v->page) {
+        case UI_P_FX:
+            if (v->sub >= 2u) { f = ui_fx_fn; pk = 0x50000000u | v->sub | (uint32_t)v->fxt[0] << 4 | (uint32_t)v->fxt[1] << 8 | (uint32_t)v->fxt[2] << 12 | (uint32_t)v->fxt[3] << 16; textch = !ui_eq(s->info2, v->info2); }
+            else { f = ui_filter_fn; pk = (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16 | (uint32_t)(uint8_t)v->flt_env << 20; }
+            break;
+        case UI_P_ENV: f = ui_env_fn; pk = (uint32_t)v->sub << 28 ^ (uint32_t)v->env[v->sub & 1u][0] ^ (uint32_t)v->env[v->sub & 1u][1] << 7 ^ (uint32_t)v->env[v->sub & 1u][2] << 14 ^ (uint32_t)v->env[v->sub & 1u][3] << 21; break;
+        case UI_P_LFO: f = ui_lfo_fn; pk = 0x10000000u | v->lfo_shape; break;
+        case UI_P_SEL: f = ui_sel_fn; pk = 0x30000000u | v->voices | (uint32_t)v->voices_max << 8; break;
+        case UI_P_ARP: f = ui_arp_fn; pk = 0x20000000u | v->arp_mode | (uint32_t)v->arp_oct << 4 | (uint32_t)v->arp_gate << 8 | (uint32_t)v->arp_swing << 16; textch = !ui_eq(s->info, v->info); break;
+        case UI_P_SEQ:
+            pk = v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ v->seq_tie * 2654435761u ^ (uint32_t)v->seq_tr << 8 ^ ui_seq_h(v) ^ 0x40000000u;
+            textch = !ui_eq(s->ptxt, v->ptxt) || !ui_eq(s->info, v->info);
+            break;
+        default:                                /* GLO */
+            if (v->sub == 2u) { f = ui_boot_fn; pk = 0x60000000u; }
+            else if (v->sub == 1u) { f = ui_ctrl_fn; pk = 0x70000000u ^ (uint32_t)v->mod[0] ^ (uint32_t)v->mod[1] << 7 ^ (uint32_t)v->mod[2] << 14 ^ (uint32_t)v->mod[3] << 21; }
+            else { f = ui_drive_fn; pk = (uint32_t)v->drive | (uint32_t)v->cpu_max << 8; }
+            break;
         }
-    } else if (v->page == UI_P_ENV) {
-        for (i = 0; i < 2u; i++)
-            if (full || s->sub != v->sub || s->env[i][0] != v->env[i][0] || s->env[i][1] != v->env[i][1] ||
-                s->env[i][2] != v->env[i][2] || s->env[i][3] != v->env[i][3])
-                ui_env(UI_Y_BODY + i * 54u, i ? "FILTER ENV" : "AMP ENV", v->env[i], v->sub == i);
-    } else if (v->page != UI_P_HOME) {          /* FX, LFO, SEL, GLO */
-        uint32_t pk = v->page == UI_P_FX ? (v->set >= 2u ? 0x50000000u | v->set : (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16)
-                    : v->page == UI_P_LFO ? v->lfo_shape : v->page == UI_P_ARP ? 0x20000000u : v->page == UI_P_SEQ ? (v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ v->seq_tie * 2654435761u ^ (uint32_t)v->seq_tr << 8 ^ ui_seq_h(v) ^ 0x40000000u) : v->page == UI_P_SEL ? v->voices | (uint32_t)v->voices_max << 8
-                    : v->sub == 2u ? 0x40000000u : (uint32_t)v->drive | (uint32_t)v->cpu_max << 8;
-        uint32_t lch = full || s->set != v->set;
-        for (i = 0; i < 8u && !lch; i++) lch = !ui_eq(s->list[i], v->list[i]);
-        if (full || s->pic_key != pk || ((v->page == UI_P_SEL || v->page == UI_P_ARP || v->page == UI_P_SEQ || v->page == UI_P_FX) && !ui_eq(s->ptxt, v->ptxt)) || ((v->page == UI_P_ARP || v->page == UI_P_SEQ || (v->page == UI_P_FX && v->set >= 2u)) && !(ui_eq(s->info, v->info) && ui_eq(s->info2, v->info2)))) {
-            switch (v->page) {
-            case UI_P_FX:
-                if (v->set >= 2u) {             /* the slot's effect, big, and the chain: the whole body (no list) */
-                    cv_begin(240, 54, C_BLACK); cv_blit(0, UI_Y_BODY); cv_blit(0, UI_Y_BODY + 54u);
-                    draw_text_box(0, 80, 240, &FONT_L, v->ptxt, UI_ACC, 1); ui_text_line(118, v->info, UI_GRAY); ui_text_line(134, v->info2, UI_DIM);
-                }
-                else ui_filter_pic(UI_Y_BODY, v);
-                break;
-            case UI_P_LFO: ui_lfo_pic(UI_Y_BODY, v->lfo_shape); break;
-            case UI_P_SEL:                      /* (the big text's box has empty bottom rows: the line under it may overlap them) */
-                draw_text_box(0, UI_Y_BODY, 240, &FONT_L, v->ptxt, UI_ACC, 1);
-                ui_dots(102, v->voices, v->voices_max);
-                break;
-            case UI_P_ARP:
-                draw_text_box(0, UI_Y_BODY, 240, &FONT_L, v->ptxt, UI_ACC, 1);
-                ui_text_line(100, v->info, UI_GRAY);
-                break;
-            case UI_P_SEQ:                      /* the state small (the strip took the big text's rows), the steps, the grid */
+        tc = full || s->sub != v->sub;          /* a new tab: at once; else at most every UI_PIC_MS while it changes */
+        if (tc || ((s->pic_key != pk || textch) && (v->ms == 0 || v->ms - s->t_pic >= UI_PIC_MS))) {
+            if (f) ui_pic(UI_Y_BODY, UI_BODY_H, f, v);
+            else {                              /* SEQ: the state and the steps, then the grid */
                 ui_text_line(UI_Y_BODY, v->ptxt, UI_ACC);
                 ui_text_line(UI_Y_BODY + 16u, v->info, UI_GRAY);
-                ui_seq_grid(104, v);
-                break;
-            default:
-                if (v->sub == 2u) ui_boot_pic(UI_Y_BODY, v);
-                else ui_drive_pic(UI_Y_BODY, v);
-                break;
+                ui_seq_grid(UI_Y_BODY + 34u, v);
             }
             s->pic_key = pk;
+            s->t_pic = v->ms;
             ui_copy(s->ptxt, v->ptxt, 8);
             ui_copy(s->info, v->info, 40);
             ui_copy(s->info2, v->info2, 40);
-        }
-        if (lch) {
-            if (v->page == UI_P_SEQ) {}
-            else if (v->page == UI_P_FX && v->set >= 2u) {}         /* (the slot picture covers the body) */
-            else ui_list(116, v);
-            for (i = 0; i < 8u; i++) ui_copy(s->list[i], v->list[i], 16);
-            s->set = v->set;
         }
     }
 
@@ -707,7 +795,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         ui_copy(s->linea, left, 48);
     }
     if (!home3 && (full || !ui_eq(s->patch, v->patch) || s->modified != v->modified || s->flash != v->flash || !ui_eq(s->fmsg, v->fmsg)))
-        ui_patch(UI_Y_PATCH, v, C_WHITE);
+        ui_patch(UI_Y_PATCH, v, C_WHITE, 0);
 
     s->page = v->page; s->variant = v->variant; s->sub = v->sub;
     s->voices = v->voices; s->cpu = v->cpu; s->modified = v->modified;

@@ -106,11 +106,22 @@ static const kdef_t PG[UI_P_N][6][4] = {
                   {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), K("GLIDE", P_MOD_GLIDE, F_TXT, 1, TX_ONOFF), KN}},       /* set 2: the modulation lane (SELECT picks the step, VALUE is drawn and edited by hand: pn_encoders) */
 };
 
-/* the tab names the strip shows (and HELP lists), per page and set */
+/* the tabs the strip shows (and HELP lists): a tab is one picture; it holds one or two knob sets (the page button steps
+ * through the sets in order, the set tag under the tab says which). TABG: the tab of each set; TABN: the tab names */
+static const uint8_t TABG[UI_P_N][6] = {
+    [UI_P_EDIT] = {0, 1, 2, 3}, [UI_P_FX] = {0, 0, 1, 2, 3, 4}, [UI_P_ENV] = {0, 1}, [UI_P_LFO] = {0, 0},
+    [UI_P_GLO] = {0, 1, 2}, [UI_P_ARP] = {0, 0}, [UI_P_SEQ] = {0, 1}, [UI_P_HELP] = {0, 1}};
 static const char *const TABN[UI_P_N][6] = {
-    [UI_P_HOME] = {"HOME"}, [UI_P_EDIT] = {"OSC1", "OSC2", "SUB", "NOISE"}, [UI_P_FX] = {"FLT1", "FLT2", "FX1", "FX2", "FX3", "FX4"},
-    [UI_P_ENV] = {"AMP", "FILTER"}, [UI_P_LFO] = {"POS PITCH", "CUT AMP"}, [UI_P_SEL] = {"VOICE"}, [UI_P_GLO] = {"OUTPUT", "CONTROL", "BOOT"},
-    [UI_P_ARP] = {"ARP", "TIME"}, [UI_P_SEQ] = {"NOTES", "LANE"}, [UI_P_HELP] = {"HELP"}};
+    [UI_P_HOME] = {"HOME"}, [UI_P_EDIT] = {"OSC1", "OSC2", "SUB", "NOISE"}, [UI_P_FX] = {"FILT", "FX1", "FX2", "FX3", "FX4"},
+    [UI_P_ENV] = {"AMP", "FILTER"}, [UI_P_LFO] = {"LFO"}, [UI_P_SEL] = {"VOICE"}, [UI_P_GLO] = {"OUTPUT", "CONTROL", "BOOT"},
+    [UI_P_ARP] = {"ARP"}, [UI_P_SEQ] = {"NOTES", "LANE"}, [UI_P_HELP] = {"HELP", "HELP"}};
+static void pn_tabpos(uint32_t pg, uint32_t sub, uint8_t *tab, uint8_t *ntabs, uint8_t *tset, uint8_t *tsets)   /* where set `sub` sits in the strip */
+{
+    uint32_t i, t = TABG[pg][sub], f = sub, n = 0;
+    while (f && TABG[pg][f - 1u] == t) f--;
+    for (i = 0; i < NSUB[pg]; i++) n += TABG[pg][i] == t;
+    *tab = (uint8_t)t; *ntabs = (uint8_t)(TABG[pg][NSUB[pg] - 1u] + 1u); *tset = (uint8_t)(sub - f); *tsets = (uint8_t)n;
+}
 
 static const char *const TXT[TX_N][8] = {
     {"LP", "BP", "HP"}, {"POLY", "MONO", "LEGATO"}, {"BOTH", "OSC1", "OSC2"}, {"HI", "ECO"}, {"LIN", "EXP"},
@@ -667,8 +678,12 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
         }
         if (pg == UI_P_GLO && t == 2u) ui_cat(txt, "KEY SCAN AT POWER-ON");
         if (pg == UI_P_FX && t >= 3u) { if (t == 3u) { pn_hl(v->help[l++], "FX2-FX4", "THE SAME"); } continue; }
-        {   const char *lab = pg == UI_P_HOME ? "KNOBS" : TABN[pg][t];
+        {   char lab[16];
             uint32_t ll = 0, tl = 0;
+            uint8_t tb, nt, ts, nts;
+            pn_tabpos(pg, t, &tb, &nt, &ts, &nts);
+            d = ui_cat(lab, pg == UI_P_HOME ? "KNOBS" : TABN[pg][tb]);
+            if (nts > 1u) { *d++ = ' '; d = ui_num(d, ts + 1); }       /* a tab of two sets: "FILTER 1", "FILTER 2" */
             while (lab[ll]) ll++;
             while (txt[tl]) tl++;
             if (ll + 2u + tl <= PN_HW) pn_hl(v->help[l++], lab, txt);
@@ -705,7 +720,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
     v->variant = pn.look;
     v->sub = pn.sub;
     v->tabn = TABN[pn.page];
-    v->ntabs = NSUB[pn.page];
+    pn_tabpos(pn.page, pn.sub, &v->tab, &v->ntabs, &v->tset, &v->tsets);
     if (pn.page == UI_P_HELP) pn_help(v, pn.help_from, pn.sub);
     v->touched = pn.touched;
     v->voices = (uint8_t)(voices > 99u ? 99u : voices);
@@ -805,25 +820,19 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         }
     }
     if (pn.page == UI_P_FX || pn.page == UI_P_LFO || pn.page == UI_P_SEL || pn.page == UI_P_GLO || pn.page == UI_P_ARP || pn.page == UI_P_SEQ) {
-        uint32_t s, n = NSUB[pn.page];
-        v->nsets = (uint8_t)n;
-        v->set = pn.sub;
         v->flt_cut = (uint8_t)patch_get(P_CUTOFF);
         v->flt_res = (uint8_t)patch_get(P_RESO);
         v->flt_mode = (uint8_t)patch_get(P_FMODE);
         v->lfo_shape = (uint8_t)patch_get(P_LFO_SHAPE);
         v->drive = (uint8_t)patch_get(P_DRIVE);
-        if (pn.page == UI_P_FX && pn.sub >= 2u) {      /* the slot's effect, big; the chain below */
-            static const char *const NM[6] = {"OFF", "CHO", "FLG", "PHA", "DLY", "REV"};
-            char *d = v->info;
+        v->flt_env = (int8_t)patch_get(P_FENV);
+        v->mod[0] = (uint8_t)patch_get(P_MW_POS); v->mod[1] = (uint8_t)patch_get(P_MW_VIB);
+        v->mod[2] = (uint8_t)patch_get(P_AT_CUT); v->mod[3] = (uint8_t)patch_get(P_VEL_AMP);
+        v->arp_mode = (uint8_t)patch_get(P_ARP); v->arp_oct = (uint8_t)patch_get(P_ARP_OCT);
+        v->arp_gate = (uint8_t)patch_get(P_ARP_GATE); v->arp_swing = (uint8_t)patch_get(P_ARP_SWING);
+        if (pn.page == UI_P_FX && pn.sub >= 2u) {      /* the chain of slots; where delay and reverb are */
             uint32_t c;
-            d = ui_cat(d, "SLOT "); d = ui_num(d, (int32_t)pn.sub - 1);
-            d = ui_cat(d, "  ");
-            for (c = 0; c < 4u; c++) {
-                uint32_t ty = (uint32_t)patch_get(P_FX1_TYPE + 4u * c);
-                d = ui_cat(d, NM[ty < 6u ? ty : 0u]);
-                if (c < 3u) d = ui_cat(d, ">");
-            }
+            for (c = 0; c < 4u; c++) v->fxt[c] = (uint8_t)patch_get(P_FX1_TYPE + 4u * c);
             {   char *e = v->info2;                 /* the once-only effects: where they are, or free */
                 uint32_t t, own;
                 for (t = 4; t < 6u; t++) {
@@ -834,7 +843,6 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
                 }
             }
         }
-        ui_copy(v->ptxt, pn.page == UI_P_FX ? TXT[TX_FXT][patch_get(P_FX1_TYPE + 4u * (pn.sub >= 2u ? pn.sub - 2u : 0u))] : pn.page == UI_P_ARP ? TXT[TX_ARP][patch_get(P_ARP)] : TXT[TX_VMODE][patch_get(P_VMODE)], 8);
         if (pn.page == UI_P_SEQ) {
             char *d = v->info;
             ui_copy(v->ptxt, sq.rec ? "RECORD" : patch_get(P_SEQ) ? (sq_run || !sq.len ? "PLAY" : "STOP") : "OFF", 8);
@@ -858,18 +866,6 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             d = ui_cat(d, "  ");
             d = ui_cat(d, TXT[TX_ARATE][patch_get(P_ARP_RATE)]);
         }
-        for (s = 0; s < 2u; s++)
-            for (i = 0; i < 4u; i++) {
-                char *d = v->list[s * 4u + i];
-                const kdef_t *k = &PG[pn.page][s < n ? s : 0][i];
-                if (s >= n || k->fmt == F_NONE) { d[0] = 0; continue; }
-                {
-                    uint32_t l = 0;
-                    while (k->lab[l] && l < 7u) { d[l] = k->lab[l]; l++; }
-                    while (l < 8u) d[l++] = ' ';                /* label 8, value <= 6: 14 characters, 112 px */
-                    pn_fmt(d + l, k, patch_get(k->id));
-                }
-            }
     }
 }
 

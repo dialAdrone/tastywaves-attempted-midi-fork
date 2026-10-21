@@ -157,6 +157,7 @@ Each stage is shippable alone, host-tested with a screenshot sheet of every page
 section. It ends with updates to `UI-DESIGN.md` and HELP. None of them touches the audio ISR, the patch record or the CC map.
 
 - **U1. The frame (no parameter moves).** Done in code: tab strip at y 54 on every page but HOME (pictures moved to y 72, 44 rows; ENV curves 54 rows; SEQ tiles 18 rows), `PAGE n/N` on the status line, tab memory (`pn.tab`, RAM only), REC hold asks `CLEAR PATTERN?`, HELP page 1 generated per page from `PG` (the page HOME was held on), page 2 the buttons. Tab names for now: EDIT OSC1 OSC2 SUB NOISE; FX FLT1 FLT2 FX1-FX4; ENV AMP FILTER; LFO POS PITCH, CUT AMP; GLO OUTPUT CONTROL BOOT; ARP ARP TIME; SEQ NOTES LANE.
+- **U1b. Picture first (done in code).** The middle list of all eight values is gone (it repeated the knobs); each tab's picture fills y 66..199. Knob row 36 rows (values FONT_M 12x24), tab strip y 38 with a set tag under the tab shown when a tab holds two knob sets, status y 202, patch name FONT_M at y 218. Tabs are pictures now: FX FILT (2 sets) FX1-FX4; LFO one tab (2 sets); ARP one tab (2 sets); the others one set a tab (`TABG` in panel.h). New pictures: FX slot chain, GLO CONTROL routes, ARP pattern, SEL voice blocks; ENV shows the tab's envelope only.
   - Tab strip and `PAGE TAB n/N` on every page.
   - Tab memory.
   - Fix the wrong labels (FX `1/2` of 6, missing counts on ENV and SEQ).

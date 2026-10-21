@@ -7,7 +7,8 @@ into 4-bit-per-pixel data (two pixels a byte, the left one in the high nibble, 0
 of (bw + 1) / 2 bytes, `h` rows, the bitmap starting `pad` pixels left of the pen. Two fonts:
 
     FONT_S  ASCII 32..126, 16 rows, advance 8 (pad 2, bitmap 12 wide)     text, labels, values
-    FONT_L  ASCII 32..95 (capitals, digits, signs), 32 rows, advance 16   big values, the patch name
+    FONT_L  ASCII 32..95 (capitals, digits, signs), 32 rows, advance 16   big text (effect names, HOME)
+    FONT_M  ASCII 32..95, 24 rows, advance 12 (optional, --medium)        knob values, the patch name
 
 The UI lays text out in 8 / 16 px columns, so keep both monospaced at those advances.
 
@@ -23,6 +24,9 @@ The UI lays text out in 8 / 16 px columns, so keep both monospaced at those adva
         center 1: TTF only: centre each glyph in its cell by its own advance (a proportional font in 8 / 16 columns)
     Examples (what the shipped font is, from Terminus 4.49 BDFs):
         tools/gen_font.py firmware/gen/felucca_font.h --small ter-u16n.bdf --large ter-u32n.bdf
+    The shipped font (Spleen, assets/fonts):
+        tools/gen_font.py firmware/gen/felucca_font.h --small assets/fonts/spleen-8x16.bdf \
+            --large assets/fonts/spleen-16x32.bdf --medium assets/fonts/spleen-12x24.bdf
     A TTF (Pillow only; run it as `python -I` on a font you downloaded; it opens the font file and nothing else):
         tools/gen_font.py out.h --small DepartureMono-Regular.otf:size=13.3,thr=110 --large DepartureMono-Regular.otf:size=26.6
 
@@ -33,6 +37,7 @@ import sys
 
 S_DEF = dict(first=32, last=126, h=16, adv=8, size=16.0)
 L_DEF = dict(first=32, last=95, h=32, adv=16, size=32.0)
+M_DEF = dict(first=32, last=95, h=24, adv=12, size=24.0)
 
 
 def parse_spec(spec, defaults):
@@ -206,6 +211,7 @@ def main():
     ap.add_argument("out")
     ap.add_argument("--small", required=True, help="FONT_S spec")
     ap.add_argument("--large", required=True, help="FONT_L spec")
+    ap.add_argument("--medium", default=None, help="FONT_M spec (optional)")
     ap.add_argument("--comment", default=None, help="text of the first line of the header")
     a = ap.parse_args()
     s, l = parse_spec(a.small, S_DEF), parse_spec(a.large, L_DEF)
@@ -219,6 +225,9 @@ def main():
         emit(f, "S", *build(s))
         f.write("\n")
         emit(f, "L", *build(l))
+        if a.medium:
+            f.write("\n")
+            emit(f, "M", *build(parse_spec(a.medium, M_DEF)))
     print("wrote", a.out)
 
 

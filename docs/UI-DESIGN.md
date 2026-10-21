@@ -25,12 +25,20 @@ Tests: `tests/run_panel.sh` (the real app, `tests/scripts/panel_ui.txt` -> `buil
 
 | rows | what |
 | --- | --- |
-| y 0..51 | four knob columns, 60 px each: label (FONT_S), value (FONT_L, FONT_S when > 3 characters or a time / name), bar. The last turned knob is lilac. Matches the stock screen (values on top, over the knobs) |
-| y 54..179 | the middle (126 rows): page dependent |
-| y 182 | status line: left = what this is (table + frame, or page + set), right = `V5/12 CPU 29%` (voices sounding / 12; CPU red above 80 %) |
-| y 202 | patch name, FONT_L, centred (`001 BRIGHT PAD`); a lilac tick at the left edge while the patch differs from what was loaded / saved; `SAVED` for 0.9 s after SAVE |
+| y 0..35 | four knob columns, 60 px each: label (FONT_S), value (FONT_M 12x24, FONT_S when > 4 characters or a time / name), bar. The last turned knob is lilac. Matches the stock screen (values on top, over the knobs) |
+| y 38..65 | every page but HOME: the tab strip (15 rows), the tab shown filled; under it, when that tab holds two knob sets, a tag `1/2` / `SET 2/2` |
+| y 66..199 | every page but HOME: the page's picture (134 rows), the biggest thing on the screen. The knob values are not repeated in it. HOME: the middle y 56..181 |
+| y 202 | status line (14 rows): left = what this is (table + frame, or page + tab n/N), right = `V 5/12 CPU 29%` (voices sounding / 12; CPU red above 80 %) |
+| y 218 | patch name, FONT_M, centred (`001 BRIGHT PAD`); a lilac tick at the left edge while the patch differs from what was loaded / saved; `SAVED` for 0.9 s after SAVE. The minimal HOME look keeps it big (FONT_L) |
 
-FONT_S is 8 px/char, FONT_L 16 px/char: a column holds 7 / 3 characters, the patch line 15. Lower case is folded to
+Pictures: EDIT the oscillator's wave (2 px line) and the position bar; FX FILT the filter response with the cutoff line
+and the envelope's reach as an arrow; FX1-FX4 the chain of four slots (the one shown filled) and where delay and reverb
+are; ENV the envelope of the tab shown; LFO two cycles of the shape; SEL a block per voice; GLO OUTPUT the drive curve
+and CPU MAX, CONTROL the wheel / aftertouch / velocity routes (thicker = more), BOOT the boot key scan; ARP 16 steps of
+the pattern a three-note chord plays (octaves, gate, swing); SEQ the state, the steps and the 4 x 8 grid. A picture
+that keeps changing (a knob turning) is redrawn at most every 60 ms.
+
+FONT_S is 8 px/char, FONT_M 12, FONT_L 16: a column holds 7 / 4 / 3 characters, the patch line 15 (FONT_M) — 20 fit, names are 15. Lower case is folded to
 capitals by the font code, so names may be stored either way.
 
 ## A. HOME looks (renders: `panel-home2_spectrum.png`, `panel-home1_waterfall.png`, `panel-home3_minimal.png`)
@@ -155,6 +163,9 @@ The shipped font is Terminus 8x16 (SIL OFL 1.1; FONT_L is the same bitmap double
 BDF or TTF/OTF to `felucca_font.h` (it reproduces the shipped header from Terminus' `ter-u16n.bdf` byte for byte except
 for one trailing newline). `tests/font_sheet.py` builds the comparison sheets `build/host/fonts/font-sheet-text.png`
 and `font-sheet-screens.png`. The font is NOT replaced: pick from the sheet.
+
+Now shipped: Spleen (BSD-2-Clause) 8x16 (FONT_S), 16x32 (FONT_L) and 12x24 (FONT_M, Spleen 2.0.0, for the knob
+values and the patch name), from `assets/fonts/` with `tools/gen_font.py ... --medium assets/fonts/spleen-12x24.bdf`.
 
 ## Left open
 
