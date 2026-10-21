@@ -61,6 +61,7 @@ typedef struct {
     uint8_t lfo_shape, drive;                   /* LFO picture (0 sine 1 tri 2 saw 3 square 4 S&H), GLO picture 0..127 */
     uint8_t mod[4];                             /* GLO CONTROL picture: wheel > pos, wheel > vibrato, aftertouch > cutoff, velocity > level, 0..127 */
     uint8_t fxt[4];                             /* FX slot picture: the four slots' effect types (0 off) */
+    uint8_t vmode, wdest, qual, ecurve;         /* SEL picture: voice mode (0 poly 1 mono 2 legato), BEND on (0 both 1 osc1 2 osc2), quality (0 hi 1 eco), env curve (0 lin 1 exp) */
     uint8_t arp_mode, arp_oct, arp_gate, arp_swing;     /* ARP picture: mode (0 off), octaves 1..4, gate 1..127, swing 0..50 */
     char ptxt[8];                               /* SEQ picture: the state (OFF PLAY STOP RECORD) or the lane's target */
     char info2[40];                             /* FX slot pictures: the once-only effects */
@@ -461,7 +462,21 @@ static void ui_filter_fn(const ui_view_t *v)    /* FX FILTER: the response, the 
         if (x > 8) { cv_line(x - 1, py, x, yy, UI_ACC); cv_line(x - 1, py + 1, x, yy + 1, UI_ACC); }
         py = yy;
     }
-    cv_rect(xc, 0, 1, base, UI_GRAY);
+    {   /* the cutoff: a white line and its frequency. 0..127 = 20 Hz x 2^(0.94 c / 12): n = 1/16 octaves */
+        static const uint16_t T16[16] = {256, 267, 279, 291, 304, 317, 331, 345, 362, 378, 395, 412, 431, 449, 470, 490};
+        uint32_t n = (uint32_t)v->flt_cut * 94u / 75u, hz = (20u * T16[n & 15u] << (n >> 4)) >> 8;
+        char t[8], *d = t;
+        int32_t tw;
+        if (hz < 1000u) ui_num(d, (int32_t)hz);
+        else if (hz < 10000u) { d = ui_num(d, (int32_t)(hz / 1000u)); *d++ = '.'; *d++ = (char)('0' + hz / 100u % 10u); *d++ = 'K'; *d = 0; }
+        else { d = ui_num(d, (int32_t)((hz + 500u) / 1000u)); ui_cat(d, "K"); }
+        tw = text_w(&FONT_S, t);
+        cv_rect(xc, 10, 2, base - 10, C_WHITE);
+        x = v->flt_mode == 0 ? xc - 5 - tw : xc + 6;               /* on the pass side, under the curve's top */
+        if (x < 8) x = xc + 6;
+        if (x + tw > 236) x = xc - 5 - tw;
+        cv_text(x, 26, &FONT_S, t, C_WHITE);
+    }
     if (xe < 8) xe = 8;
     if (xe > 232) xe = 232;
     if (xe != xc) {                             /* the envelope sweeps the cutoff from xc to xe */
@@ -563,14 +578,54 @@ static void ui_fx_fn(const ui_view_t *v)        /* FX slot: the chain of four sl
     cv_text(4, 100, &FONT_S, v->info2, UI_GRAY);
 }
 
-static void ui_sel_fn(const ui_view_t *v)       /* SEL: a block per voice, lit while it sounds */
+static void ui_sel_fn(const ui_view_t *v)       /* SEL: a panel per knob, in knob order (MODE BEND> top, QUAL CURVE below) */
 {
-    uint32_t i, n = v->voices_max < 12u ? v->voices_max : 12u;
-    for (i = 0; i < n; i++) {
-        int32_t x = 8 + (int32_t)(i % 6u) * 38, y = 8 + (int32_t)(i / 6u) * 62;
-        if (i < v->voices) cv_rect(x, y, 34, 56, UI_ACC);
-        else { cv_rect(x, y, 34, 56, UI_DIM); cv_rect(x + 1, y + 1, 32, 54, C_BLACK); }
+    int32_t i, px, py, x, y;
+    cv_text(4, 0, &FONT_S, "MODE", UI_GRAY);
+    cv_text(124, 0, &FONT_S, "BEND>", UI_GRAY);
+    cv_text(4, 68, &FONT_S, "QUAL", UI_GRAY);
+    cv_text(124, 68, &FONT_S, "CURVE", UI_GRAY);
+    cv_rect(119, 2, 1, 128, UI_DIM);
+    cv_rect(4, 65, 232, 1, UI_DIM);
+    if (v->vmode == 0) {                        /* POLY: the 12 voices, lit while they sound */
+        uint32_t n = v->voices_max < 12u ? v->voices_max : 12u, k;
+        for (k = 0; k < n; k++) {
+            x = 4 + (int32_t)(k % 6u) * 19; y = 16 + (int32_t)(k / 6u) * 24;
+            if (k < v->voices) cv_rect(x, y, 16, 21, UI_ACC);
+            else { cv_rect(x, y, 16, 21, UI_DIM); cv_rect(x + 1, y + 1, 14, 19, C_BLACK); }
+        }
+    } else {                                    /* MONO / LEGATO: one voice; LEGATO ties the notes (a tie under it) */
+        if (v->voices) cv_rect(28, 16, 64, 30, UI_ACC);
+        else { cv_rect(28, 16, 64, 30, UI_DIM); cv_rect(29, 17, 62, 28, C_BLACK); }
+        cv_text(60 - text_w(&FONT_S, v->vmode == 1 ? "MONO" : "LEGATO") / 2, 22, &FONT_S, v->vmode == 1 ? "MONO" : "LEGATO", v->voices ? C_BLACK : UI_GRAY);
+        if (v->vmode == 2) { cv_line(30, 52, 44, 58, UI_ACC); cv_line(44, 58, 76, 58, UI_ACC); cv_line(76, 58, 90, 52, UI_ACC); }
     }
+    for (i = 0; i < 2; i++) {                   /* BEND>: the oscillators it bends, lit */
+        int on = v->wdest == 0 || v->wdest == (uint8_t)(i + 1);
+        x = 126 + i * 56;
+        cv_rect(x, 22, 50, 32, on ? UI_ACC : UI_DIM);
+        if (!on) cv_rect(x + 1, 23, 48, 30, C_BLACK);
+        cv_text(x + 25 - text_w(&FONT_S, i ? "OSC2" : "OSC1") / 2, 30, &FONT_S, i ? "OSC2" : "OSC1", on ? C_BLACK : UI_GRAY);
+    }
+    /* QUAL: a cycle drawn smooth (HI) or as a coarse polyline with its points (ECO) */
+    px = 8; py = 104;
+    for (i = 0; i <= 104; i += v->qual ? 13 : 1) {
+        x = 8 + i; y = 104 - (UI_SIN64[(i * 64 / 104) & 63] * 24 >> 14);
+        if (i) { cv_line(px, py, x, y, UI_ACC); cv_line(px, py + 1, x, y + 1, UI_ACC); }
+        if (v->qual) cv_rect(x - 1, y - 1, 3, 3, C_WHITE);
+        px = x; py = y;
+    }
+    cv_text(116 - text_w(&FONT_S, v->qual ? "ECO" : "HI"), 68, &FONT_S, v->qual ? "ECO" : "HI", UI_GRAY);
+    /* CURVE: the decay / release, straight (LIN) or exponential (EXP, ~ (1 - t)^3) */
+    px = 128; py = 82;
+    for (i = 1; i <= 100; i++) {
+        int32_t r = 100 - i, l = v->ecurve ? r * r * r / 10000 : r;     /* level 0..100 */
+        x = 128 + i; y = 128 - l * 46 / 100;
+        cv_line(px, py, x, y, UI_ACC); cv_line(px, py + 1, x, y + 1, UI_ACC);
+        px = x; py = y;
+    }
+    cv_rect(128, 128, 104, 1, UI_DIM);
+    cv_text(236 - text_w(&FONT_S, v->ecurve ? "EXP" : "LIN"), 68, &FONT_S, v->ecurve ? "EXP" : "LIN", UI_GRAY);
 }
 
 static void ui_arp_fn(const ui_view_t *v)       /* ARP: 16 steps of the pattern a three-note chord plays (gate = note length, swing = late odd steps) */
@@ -761,7 +816,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             break;
         case UI_P_ENV: f = ui_env_fn; pk = (uint32_t)v->sub << 28 ^ (uint32_t)v->env[v->sub & 1u][0] ^ (uint32_t)v->env[v->sub & 1u][1] << 7 ^ (uint32_t)v->env[v->sub & 1u][2] << 14 ^ (uint32_t)v->env[v->sub & 1u][3] << 21; break;
         case UI_P_LFO: f = ui_lfo_fn; pk = 0x10000000u | v->lfo_shape; break;
-        case UI_P_SEL: f = ui_sel_fn; pk = 0x30000000u | v->voices | (uint32_t)v->voices_max << 8; break;
+        case UI_P_SEL: f = ui_sel_fn; pk = 0x30000000u | v->voices | (uint32_t)v->voices_max << 8 | (uint32_t)v->vmode << 16 | (uint32_t)v->wdest << 18 | (uint32_t)v->qual << 20 | (uint32_t)v->ecurve << 21; break;
         case UI_P_ARP: f = ui_arp_fn; pk = 0x20000000u | v->arp_mode | (uint32_t)v->arp_oct << 4 | (uint32_t)v->arp_gate << 8 | (uint32_t)v->arp_swing << 16; textch = !ui_eq(s->info, v->info); break;
         case UI_P_SEQ:
             pk = v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ v->seq_tie * 2654435761u ^ (uint32_t)v->seq_tr << 8 ^ ui_seq_h(v) ^ 0x40000000u;

@@ -314,4 +314,6 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 19.15 | FX1: set TYPE to CHORUS, look at FX2 | the chain shows CHO in slot 1, slot 2 filled (the one shown); DELAY / REVERB FREE under it |
 | 19.16 | GLO CONTROL: turn MW>POS from 0 up | the WHEEL > POS line goes from grey to thicker lilac |
 | 19.17 | ARP: change MODE, OCT, GATE, SWING | the 16-step picture follows (rows = notes over the octaves, bar length = gate, odd steps late with swing); OFF shows `ARP OFF` |
+| 19.19 | SEL: play notes, then turn each knob | MODE panel: POLY shows 12 voice blocks lit by the notes, MONO / LEGATO one voice (LEGATO with a tie); BEND> lights OSC1, OSC2 or both; QUAL HI smooth / ECO a coarse line with points; CURVE LIN straight / EXP curved |
+| 19.20 | FX FILT 1/2: turn CUTOFF from 0 to 100 | a white line with its frequency (20 .. ~19K) moves across the curve; at 70 it reads about 2.5K |
 | 19.18 | Turn a knob fast on FX FILT while playing | the picture keeps up (at most ~16 redraws a second); notes do not stutter |

@@ -31,9 +31,11 @@ Tests: `tests/run_panel.sh` (the real app, `tests/scripts/panel_ui.txt` -> `buil
 | y 202 | status line (14 rows): left = what this is (table + frame, or page + tab n/N), right = `V 5/12 CPU 29%` (voices sounding / 12; CPU red above 80 %) |
 | y 218 | patch name, FONT_M, centred (`001 BRIGHT PAD`); a lilac tick at the left edge while the patch differs from what was loaded / saved; `SAVED` for 0.9 s after SAVE. The minimal HOME look keeps it big (FONT_L) |
 
-Pictures: EDIT the oscillator's wave (2 px line) and the position bar; FX FILT the filter response with the cutoff line
-and the envelope's reach as an arrow; FX1-FX4 the chain of four slots (the one shown filled) and where delay and reverb
-are; ENV the envelope of the tab shown; LFO two cycles of the shape; SEL a block per voice; GLO OUTPUT the drive curve
+Pictures: EDIT the oscillator's wave (2 px line) and the position bar; FX FILT the filter response with the cutoff as a white
+line and its frequency (`2.5K`), the envelope's reach as an arrow; FX1-FX4 the chain of four slots (the one shown filled) and where delay and reverb
+are; ENV the envelope of the tab shown; LFO two cycles of the shape; SEL a panel per knob (MODE: the 12 voices lit
+while they sound, or one MONO / LEGATO voice; BEND>: OSC1 / OSC2 lit; QUAL: a smooth or coarse cycle; CURVE: a
+straight or exponential decay); GLO OUTPUT the drive curve
 and CPU MAX, CONTROL the wheel / aftertouch / velocity routes (thicker = more), BOOT the boot key scan; ARP 16 steps of
 the pattern a three-note chord plays (octaves, gate, swing); SEQ the state, the steps and the 4 x 8 grid. A picture
 that keeps changing (a knob turning) is redrawn at most every 60 ms.
