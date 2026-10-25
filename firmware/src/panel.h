@@ -156,7 +156,7 @@ static struct {
     uint32_t t_clr;
     uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: the page, hold: on / off); the mode it switches back to */
     uint32_t t_arp, t_arp_tog;                  /* press time; time of the last switch */
-    uint8_t seq_arm;                            /* SEQ pressed and not yet decided (short: on + the page, hold: off) */
+    uint8_t seq_arm;                            /* SEQ pressed and not yet decided (short: the page, hold: on / off) */
     uint32_t t_seq, t_seq_tog;
     uint8_t fx_arm;                             /* FX the same (short: the page, hold: bypass the chain) */
     uint32_t t_fx, t_fx_tog;
@@ -533,15 +533,12 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
             pn.base[P_ARP] = (int16_t)patch.p[P_ARP];               /* the button is a performance switch, not a patch edit: SAVE does not light for it */
         }
     }
-    if (b & 1u << BTN_SEQ) {                                     /* SEQ is a switch like ARP: lit, PLAY starts / stops the patterns (from any page) */
+    if (b & 1u << BTN_SEQ) {                                     /* SEQ works as ARP: press = its page, hold = on / off; lit, PLAY starts / stops the patterns (from any page) */
         if (!pn.seq_arm && (!pn.t_seq_tog || fm1_ms - pn.t_seq_tog >= 200u)) { pn.seq_arm = 1; pn.t_seq = fm1_ms; }
     }
     if (pn.seq_arm) {
-        if (!(held >> BTN_SEQ & 1u)) {                              /* released: a short press switches it on (stopped) and opens its page (again: the next tab) */
-            pn.seq_arm = 0;
-            if (!patch_get(P_SEQ)) { patch_set(P_SEQ, 1); pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ]; }
-            pn_page_btn(UI_P_SEQ);
-        } else if (fm1_ms - pn.t_seq >= 500u) {                     /* held: on / off (off stops the patterns; PLAY is LATCH again) */
+        if (!(held >> BTN_SEQ & 1u)) { pn.seq_arm = 0; pn_page_btn(UI_P_SEQ); }     /* released: a short press opens its page (again: the next tab) */
+        else if (fm1_ms - pn.t_seq >= 500u) {                       /* held: on (stopped: PLAY starts it) / off (stops it; PLAY is LATCH again) */
             pn.seq_arm = 0;
             if (patch_get(P_SEQ)) { sq_run = 0; patch_set(P_SEQ, 0); }
             else patch_set(P_SEQ, 1);
@@ -703,7 +700,7 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
         "HOME  BACK HOME, HOLD: HELP",
         "PAGE BUTTON  OPEN, AGAIN: TAB",
         "ARP  PAGE, HOLD: ON/OFF",
-        "SEQ  ON + PAGE, HOLD: OFF",
+        "SEQ  PAGE, HOLD: ON/OFF",
         "FX  PAGE, HOLD: BYPASS",
         "SAVE  STORE (HOLD: PICK, DEL)",
         "PLAY  LATCH; SEQ ON: START/STOP",
@@ -774,7 +771,7 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
     case UI_P_ARP: pn_hl(v->help[l++], "HOLD ARP", "ARP ON / OFF"); break;
     case UI_P_SEQ:
         pn_hl(v->help[l++], "PLAY", "START / STOP BOTH");
-        pn_hl(v->help[l++], "HOLD SEQ", "SEQ OFF (PLAY: LATCH)");
+        pn_hl(v->help[l++], "HOLD SEQ", "ON / OFF (OFF: PLAY=LATCH)");
         pn_hl(v->help[l++], "REC", "STEPS OF THE SEQ SHOWN");
         pn_hl(v->help[l++], "HOLD REC", "CLEAR (REC AGAIN)");
         break;
@@ -1009,7 +1006,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             else if (rl) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, "/32  PLAY=REST SEQ=TIE"); }
             else if (!P->len) ui_cat(d, "NO PATTERN: PRESS REC");
             else { d = ui_cat(d, "LEN "); d = ui_num(d, P->len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }
-                   if (!patch_get(P_SEQ)) ui_cat(d, "  SEQ=ON"); else if (!sq_run) ui_cat(d, "  PLAY=START"); }
+                   if (!patch_get(P_SEQ)) ui_cat(d, "  HOLD SEQ=ON"); else if (!sq_run) ui_cat(d, "  PLAY=START"); }
         }
         if (pn.page == UI_P_ARP) {
             char *d = v->info;

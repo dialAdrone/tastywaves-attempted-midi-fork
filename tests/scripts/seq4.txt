@@ -1,5 +1,7 @@
 # Two sequencers (tests/run_seqstore.sh): SEQ1 = F3 C4 at 1/16, SEQ2 = A3 F4 at 1/8 (patch 75 = P_ARP2_RATE); both play on PLAY;
 # SEQ2's LEVEL 0 (81 = P_SEQ_LVL2) silences it; SEQ2 with its own arp UP (74) and chord MAJ (79) under a plain SEQ1; stop, SAVE -> U01.
+# SEQ switched on (what a SEQ hold does; seq2 holds the button itself)
+10 patch 53 1
 100 btn 11
 200 btn 13
 300 keys 0x1

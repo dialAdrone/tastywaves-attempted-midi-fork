@@ -1,5 +1,7 @@
 # the note pattern is saved with the patch: SEQ on, two steps entered (keys 0 and 4), REC ends, SAVE -> U01.
 # Then a different one-step pattern is recorded and the first patch is not touched.
+# SEQ switched on (what a SEQ hold does; seq2 holds the button itself)
+10 patch 53 1
 300 btn 11
 400 btn 13
 500 keys 0x1

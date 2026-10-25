@@ -1,5 +1,7 @@
 # The sequencer with the arp and CHORD (patch 47 = P_ARP, 73 = P_CHORD): see tests/run_arp_panel.sh. Key 0 = F3 (53), key 7 = C4 (60).
 # a pattern of 2 steps: F3, C4
+# SEQ switched on (what a SEQ hold does; seq2 holds the button itself)
+10 patch 53 1
 50 btn 11
 100 btn 13
 200 keys 0x1

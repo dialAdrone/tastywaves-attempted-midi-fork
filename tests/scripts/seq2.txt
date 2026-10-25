@@ -1,6 +1,8 @@
 # REC on HOME does nothing; on the SEQ page: steps entered, REC ends: the pattern waits (nothing plays); PLAY on the SEQ page starts it, PLAY stops it, PLAY starts
 # it again; on another page PLAY stops it too and starts it again (SEQ stays lit); holding SEQ switches it off, and then PLAY is LATCH
 # (it does not start it). See tests/run_arp_panel.sh.
+# SEQ switched on (what a SEQ hold does; seq2 holds the button itself)
+10 patch 53 1
 50 btn 13
 100 btn 11
 200 btn 13
@@ -18,4 +20,8 @@
 4600 bdown 11
 5300 bup 11
 5600 btn 12
-6500 end
+5800 btn 12
+6000 bdown 11
+6600 bup 11
+6800 btn 12
+7600 end
