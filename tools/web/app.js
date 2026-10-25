@@ -2,6 +2,8 @@
 // The page of tools/web/index.html: Web MIDI transport, slot list, file drop, conversion preview, send / save / erase.
 import { VwLink, LinkError, slotImage, parseImage, cleanName, decodeBody, tableRefs, parseBackup, cleanPatchName } from './vwlink.js';
 import { buildTable, naturalCompare } from './convert.js';
+import { Updater } from './fm1ota.js';              // the FM-1 update protocol, from Felucca (web/fm1ota.js, unchanged)
+import { productOf, logicalImage } from './fm1pkg.js';
 
 const $ = (id) => document.getElementById(id);
 const PORT_RE = /fm-1|felucca|ota|composite|sinco|usb-midi/i;     // the same ports the installer would look at
@@ -279,3 +281,49 @@ drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
 drop.ondragleave = () => drop.classList.remove('over');
 drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); loadFiles(e.dataTransfer.files); };
 status('Use Chrome or Edge (Safari has no Web MIDI). Plug the FM-1 in by USB with TastyWaves running.');
+
+// ---- Install: the release bundled with the page (tools/web_release.sh) over the FM-1's own USB update, as Felucca's installer ----
+let fwImage = null, fwMeta = null, installing = false;
+const istat = (text, cls = 'mute') => { const e = $('installStatus'); e.textContent = text; e.className = cls; };
+(async () => {
+  try {
+    const r = await fetch('firmware/release.json', { cache: 'no-store' });
+    if (!r.ok) throw new Error('no release bundled with this page (tools/web_release.sh)');
+    fwMeta = await r.json();
+    const pkg = new Uint8Array(await (await fetch(fwMeta.pkg, { cache: 'no-store' })).arrayBuffer());
+    if (productOf(pkg) !== fwMeta.product) throw new Error('the bundled package is damaged');
+    fwImage = logicalImage(pkg);
+    $('fwVer').textContent = fwMeta.version;
+    Object.assign($('fwDownload'), { href: fwMeta.pkg, download: `tastywaves-${fwMeta.version}.fwsc` }).classList.remove('hide');
+    $('btnInstall').disabled = !navigator.requestMIDIAccess;
+    if (!navigator.requestMIDIAccess) istat('Use Chrome or Edge (Safari has no Web MIDI).', 'warn');
+  } catch (e) { $('installCard').classList.add('hide'); }
+})();
+window.addEventListener('beforeunload', (e) => { if (installing) { e.preventDefault(); e.returnValue = ''; } });
+$('btnInstall').onclick = async () => {
+  if (installing || !fwImage) return;
+  if (!confirm(`Install TastyWaves ${fwMeta.version} on the connected FM-1?`)) return;
+  let midi = access;
+  if (!midi) {
+    try { midi = await navigator.requestMIDIAccess({ sysex: true }); }
+    catch (e) { istat('MIDI access with SysEx was refused (allow it in the browser\'s site settings).', 'bad'); return; }
+  }
+  if (vw) { vw = null; $('main').classList.add('hide'); status('Disconnected for the install; press Connect FM-1 again afterwards.'); }
+  installing = true; $('btnInstall').disabled = true; $('installBar').classList.remove('hide'); $('installBar').value = 0;
+  const total = 74 + 1167;                     // read requests of the two steps (as Felucca's page counts them)
+  const step = (k, a) => {
+    if (k === 'start') istat('Starting the update…');
+    if (k === 'verify') { istat('Checking the package…'); $('installBar').value = (a / total) * 100; }
+    if (k === 'loader') istat('Waiting for the update loader…');
+    if (k === 'write') { istat('Writing… do not unplug'); $('installBar').value = ((74 + a) / total) * 100; }
+    if (k === 'reboot') istat('Restarting…');
+    if (k === 'done') { $('installBar').value = 100; istat(`Installed: TastyWaves ${fwMeta.version} is running.`, 'ok'); }
+  };
+  try {
+    const up = new Updater(midi, () => {});
+    const ota = await up.find((id) => /^ota-/i.test(id.model));      // an install cut off earlier: finish it
+    if (ota) { ota.link.close(); if (!(await up.resume(fwImage, step, fwMeta.product))) istat('The FM-1 stopped answering. Replug it and press Install again.', 'bad'); }
+    else await up.install(fwImage, fwMeta.product, step);
+  } catch (e) { istat((e && e.message) || String(e), 'bad'); }
+  installing = false; $('btnInstall').disabled = false;
+};

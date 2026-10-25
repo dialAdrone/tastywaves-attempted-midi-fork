@@ -51,14 +51,30 @@ creating pattern-based music and evolving soundscapes. We aim to be the definiti
 | **Patches** | 8 factory patches and 32 of your own, saved on the FM-1 with both sequences |
 | **Sync** | Follows MIDI clock (Start restarts the patterns on the beat) |
 | **USB** | Class-compliant USB-MIDI in and out; the FM-1 is also a 16-bit stereo USB audio input at 44.1 or 48 kHz |
-| **Screen** | An animated splash at power-on (waves crash, the name rises out of the spray); a picture for every page: the wave, the filter response, the envelopes, the LFO, the effects chain, the arpeggio, the pattern; three HOME looks; built-in help |
+| **Help** | Long-press HOME for help: global help, and contextual help for every screen |
 | **Safe** | The FM-1's update path and USB rescue stay intact: you can always install another firmware |
 
 ## Install
 
-You need an M-VAVE FM-1, a USB cable and a computer with Python 3.
+**In your browser (easiest).** Open **[marksweiss.github.io/tastywaves](https://marksweiss.github.io/tastywaves/)**
+in Chrome or Edge, plug the FM-1 in by USB, switch it on and press **Install on the FM-1**. It takes about a minute;
+keep the page open and the cable in. Your saved patches and wavetables are kept.
 
-1. Download `tastywaves-1.0.0.fwsc` from the [Releases](https://github.com/marksweiss/tastywaves/releases) page.
+**Or download the firmware:** [tastywaves-1.0.0.fwsc](https://github.com/marksweiss/tastywaves/releases/download/v1.0.0/tastywaves-1.0.0.fwsc)
+(all versions on the [Releases](https://github.com/marksweiss/tastywaves/releases) page), for any FM-1 installer
+that takes a `.fwsc` file, or the manual install below.
+
+**If something goes wrong:** hold **OCT-** while switching the FM-1 on. It starts in the USB rescue (no sound,
+only the updater), and either install works from there. A firmware that crashes twice at boot lands there by itself.
+
+**Going back:** the [FM-1 Firmware Hub](https://fm1.designburgapps.com) installs the official firmware, or any
+other, over the same USB update path. Back up your patches with the [web tool](#the-web-tool-your-own-wavetables-patch-library) first.
+
+### Manual install
+
+You need a computer with Python 3.
+
+1. Download `tastywaves-1.0.0.fwsc` (above).
 2. Get the installer (this repository) and its two Python packages:
 
    ```sh
@@ -75,12 +91,6 @@ You need an M-VAVE FM-1, a USB cable and a computer with Python 3.
 
    It shows what runs on the FM-1, asks before it writes, and checks the result after the FM-1 restarts.
    `tools/install_fw.sh --info` shows what is installed.
-
-**If something goes wrong:** hold **OCT-** while switching the FM-1 on. It starts in the USB rescue (no sound,
-only the updater), and the install works from there. A firmware that crashes twice at boot lands there by itself.
-
-**Going back:** the [FM-1 Firmware Hub](https://fm1.designburgapps.com) installs the official firmware, or any
-other, over the same USB update path. Back up your patches with the [web tool](#the-web-tool-your-own-wavetables-patch-library) first.
 
 ## Playing it
 
@@ -173,13 +183,11 @@ sequence. The patch store holds about 32 patches without sequences and fewer wit
 
 <p align="center"><img src="docs/images/web-tool.png" width="450" alt="The web tool, here with a simulated FM-1"></p>
 
-A page in your browser that talks to the FM-1 over USB-MIDI. It runs locally; nothing is uploaded anywhere.
+A page in your browser that talks to the FM-1 over USB-MIDI: **[marksweiss.github.io/tastywaves](https://marksweiss.github.io/tastywaves/)**
+(or `tools/web_tool.sh` in this repository, at http://localhost:8000). Everything runs in the page; nothing is
+uploaded anywhere. Use Chrome or Edge (Safari has no Web MIDI), press **Connect to MIDI** and allow SysEx.
 
-```sh
-tools/web_tool.sh                    # in this repository: opens http://localhost:8000 in your browser
-```
-
-Use Chrome or Edge (Safari has no Web MIDI), press **Connect to MIDI** and allow SysEx.
+- **Install:** puts the TastyWaves release bundled with the page on the FM-1 (see [Install](#install)).
 
 - **Wavetables:** drop a wavetable WAV (Serum, WaveEdit, Ableton) or a Surge `.wt` file, check the preview and send
   it to one of the 8 user slots. ALGORITHM lists it after the factory tables. Save a slot to a `.vwt` file to keep it.
@@ -206,6 +214,7 @@ container by itself), plus Python 3 and [uv](https://docs.astral.sh/uv/).
 tools/install.sh        # once: a venv, JieLi's toolchain, three files of the JieLi AC79 SDK; then a build and a host test
 ./build.sh              # -> build/tastywaves.fwsc
 ./build.sh --release 1.0.0    # -> build/tastywaves-1.0.0.fwsc
+tools/web_release.sh 1.0.0    # bundle it with the web tool (its Install button, GitHub Pages)
 tools/install_fw.sh     # install build/tastywaves.fwsc on the connected FM-1
 ```
 
