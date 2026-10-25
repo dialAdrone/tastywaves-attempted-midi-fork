@@ -139,9 +139,9 @@ static struct {
     uint8_t help_from;                          /* the page HELP explains (the one HOME was pressed on) */
     uint8_t clr;                                /* REC held: "CLEAR PATTERN?" asked, REC again clears */
     uint32_t t_clr;
-    uint8_t seq_arm;                            /* SEQ pressed and not yet decided (short: on / off, hold: the page) */
+    uint8_t seq_arm;                            /* SEQ pressed and not yet decided (short: the page, hold: on / off) */
     uint32_t t_seq, t_seq_tog;
-    uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: on / off, hold: the page); the mode it switches back to */
+    uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: the page, hold: on / off); the mode it switches back to */
     uint32_t t_arp, t_arp_tog;                  /* press time; time of the last switch */
     uint8_t sv, act, act_id, tgt;               /* SAVE gesture (SV_*), the request for pn_save_poll (ACT_*, user id), the chosen target id */
     uint32_t t_browse, t_flash, t_save, t_home, t_sv;
@@ -471,22 +471,24 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
         if (!pn.arp_arm && (!pn.t_arp_tog || fm1_ms - pn.t_arp_tog >= 200u)) { pn.arp_arm = 1; pn.t_arp = fm1_ms; }     /* (a bounce right after a switch is not a new press) */
     }
     if (pn.arp_arm) {
-        if (!(held >> BTN_ARP & 1u)) {                              /* released: a short press switches the arp */
+        if (!(held >> BTN_ARP & 1u)) { pn.arp_arm = 0; pn_page(UI_P_ARP); }     /* released: a short press opens its page (again: the next set), as every page button */
+        else if (fm1_ms - pn.t_arp >= 500u) {                       /* held: switches the arp on / off (at once, the release does nothing more) */
             pn.arp_arm = 0;
             if (patch_get(P_ARP)) { pn.arp_last = (uint8_t)patch_get(P_ARP); patch_set(P_ARP, 0); }
             else patch_set(P_ARP, pn.arp_last ? pn.arp_last : 1);
             pn.t_arp_tog = fm1_ms ? fm1_ms : 1u;
             pn.base[P_ARP] = (int16_t)patch.p[P_ARP];               /* the button is a performance switch, not a patch edit: SAVE does not blink for it */
-        } else if (fm1_ms - pn.t_arp >= 500u) { pn.arp_arm = 0; pn_page(UI_P_ARP); }   /* held: its page (again: the next set) */
+        }
     }
     if (b & 1u << BTN_SEQ && !pn.seq_arm && (!pn.t_seq_tog || fm1_ms - pn.t_seq_tog >= 200u)) { pn.seq_arm = 1; pn.t_seq = fm1_ms; }
     if (pn.seq_arm) {
-        if (!(held >> BTN_SEQ & 1u)) {                              /* released: a short press switches the sequencer */
+        if (!(held >> BTN_SEQ & 1u)) { pn.seq_arm = 0; pn_page(UI_P_SEQ); }     /* released: a short press opens its page (again: NOTES / LANE) */
+        else if (fm1_ms - pn.t_seq >= 500u) {                       /* held: switches the sequencer on / off */
             pn.seq_arm = 0;
             patch_set(P_SEQ, patch_get(P_SEQ) ? 0 : 1);
             pn.t_seq_tog = fm1_ms ? fm1_ms : 1u;
             pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ];
-        } else if (fm1_ms - pn.t_seq >= 500u) { pn.seq_arm = 0; pn_page(UI_P_SEQ); }
+        }
     }
     if (b & 1u << BTN_HOME) {
         if (held >> BTN_EDIT & 1u) cpu_reset_req++;                 /* the max starts over */
@@ -645,7 +647,7 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
         "HELP 2/2  BUTTONS",
         "HOME  BACK HOME, HOLD: HELP",
         "PAGE BUTTON  OPEN, AGAIN: TAB",
-        "ARP SEQ  ON/OFF, HOLD: PAGE",
+        "ARP SEQ  PAGE, HOLD: ON/OFF",
         "SAVE  STORE (HOLD: PICK, DEL)",
         "PLAY  LATCH, SEQ: START/STOP",
         "REC  STEPS, HOLD: CLEAR",
@@ -697,9 +699,9 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
     case UI_P_FX: pn_hl(v->help[l++], "DELAY REVERB", "ONE SLOT EACH"); pn_hl(v->help[l++], "CHAIN", "SLOT 1 > 2 > 3 > 4"); break;
     case UI_P_ENV: pn_hl(v->help[l++], "FILTER ENV", "ALSO E>POS E>BEND (FX)"); break;
     case UI_P_GLO: pn_hl(v->help[l++], "EDIT+HOME", "RESET CPU MAX"); break;
-    case UI_P_ARP: pn_hl(v->help[l++], "TAP ARP", "ON / OFF"); pn_hl(v->help[l++], "HOLD ARP", "THIS PAGE"); break;
+    case UI_P_ARP: pn_hl(v->help[l++], "HOLD ARP", "ARP ON / OFF"); break;
     case UI_P_SEQ:
-        pn_hl(v->help[l++], "TAP SEQ", "ON / OFF, HOLD: PAGE");
+        pn_hl(v->help[l++], "HOLD SEQ", "SEQ ON / OFF");
         pn_hl(v->help[l++], "REC", "STEP INPUT ON / OFF");
         pn_hl(v->help[l++], "HOLD REC", "CLEAR (REC AGAIN)");
         pn_hl(v->help[l++], "LANE", "SELECT PICKS THE STEP");
@@ -824,6 +826,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         v->flt_res = (uint8_t)patch_get(P_RESO);
         v->flt_mode = (uint8_t)patch_get(P_FMODE);
         v->lfo_shape = (uint8_t)patch_get(P_LFO_SHAPE);
+        v->lfo_rate = (uint8_t)patch_get(P_LFO_RATE);
         v->drive = (uint8_t)patch_get(P_DRIVE);
         v->flt_env = (int8_t)patch_get(P_FENV);
         v->mod[0] = (uint8_t)patch_get(P_MW_POS); v->mod[1] = (uint8_t)patch_get(P_MW_VIB);

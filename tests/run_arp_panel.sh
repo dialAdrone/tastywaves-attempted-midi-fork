@@ -74,7 +74,8 @@ check(not any(t > 6300 and k == 'on' for t, k, n in q), 'REC held, then REC agai
 q2 = load('build/host/seq2.log')
 check(any(800 < t < 1900 and k == 'on' for t, k, n in q2), 'sequencer plays after REC ends')
 check(not any(2150 < t < 2950 and k == 'on' for t, k, n in q2), 'PLAY stops the sequencer (SEQ still on)')
-check(any(t > 3000 and k == 'on' for t, k, n in q2), 'PLAY starts it again')
+check(any(3000 < t < 4000 and k == 'on' for t, k, n in q2), 'PLAY starts it again')
+check(not any(t > 4150 and k == 'on' for t, k, n in q2), 'SEQ held 500 ms switches the sequencer off')
 print('arp panel: %d failures' % fails)
 raise SystemExit(1 if fails else 0)
 PY

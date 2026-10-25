@@ -1,9 +1,11 @@
 # ARP on, PLAY latched, a chord latched; ARP off (plain latched notes), ARP on again: arpeggio again. See tests/run_arp_panel.sh.
-100 btn 10
+100 patch 47 1
 200 btn 12
 300 keys 0x1
 400 keys 0x10
 500 keys 0
-1200 btn 10
-2000 btn 10
+700 bdown 10
+1250 bup 10
+1500 bdown 10
+2050 bup 10
 3000 end

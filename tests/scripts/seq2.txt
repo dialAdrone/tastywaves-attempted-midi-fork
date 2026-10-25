@@ -1,5 +1,5 @@
-# SEQ on, steps entered, REC ends: it plays; PLAY stops it (silence), PLAY starts it again.
-100 btn 11
+# SEQ on, steps entered, REC ends: it plays; PLAY stops it (silence), PLAY starts it again; SEQ held switches it off (patch 53 = P_SEQ switches it on at the start).
+100 patch 53 1
 200 btn 13
 300 keys 0x1
 400 keys 0
@@ -8,4 +8,6 @@
 700 btn 13
 2000 btn 12
 3000 btn 12
-4000 end
+3500 bdown 11
+4050 bup 11
+4600 end

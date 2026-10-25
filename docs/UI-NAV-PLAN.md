@@ -175,3 +175,5 @@ section. It ends with updates to `UI-DESIGN.md` and HELP. None of them touches t
   - U4.4: hold FX = bypass the chain.
 
 Effort guess: U1 small, U2 medium (mostly tables and pictures), U3 small, U4 each small to medium.
+
+- **U3 part done early (2026-10-24): D1 (a) in code.** ARP and SEQ: a press opens the page (again: the next tab / set), a hold of 500 ms switches on / off (at the half second, the release does nothing more). Help texts follow.

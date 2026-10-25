@@ -59,6 +59,7 @@ typedef struct {
     uint8_t flt_cut, flt_res, flt_mode;         /* FX picture: cutoff, resonance 0..127, mode 0 LP 1 BP 2 HP */
     int8_t flt_env;                             /* FX picture: the envelope's reach on the cutoff, -64..63 semitones */
     uint8_t lfo_shape, drive;                   /* LFO picture (0 sine 1 tri 2 saw 3 square 4 S&H), GLO picture 0..127 */
+    uint8_t lfo_rate;                           /* LFO picture: 0..127, the cycles drawn (1 .. 8, log) */
     uint8_t mod[4];                             /* GLO CONTROL picture: wheel > pos, wheel > vibrato, aftertouch > cutoff, velocity > level, 0..127 */
     uint8_t fxt[4];                             /* FX slot picture: the four slots' effect types (0 off) */
     uint8_t vmode, wdest, qual, ecurve;         /* SEL picture: voice mode (0 poly 1 mono 2 legato), BEND on (0 both 1 osc1 2 osc2), quality (0 hi 1 eco), env curve (0 lin 1 exp) */
@@ -488,12 +489,14 @@ static void ui_filter_fn(const ui_view_t *v)    /* FX FILTER: the response, the 
     }
 }
 
-static void ui_lfo_fn(const ui_view_t *v)       /* LFO: two cycles of the shape */
+static void ui_lfo_fn(const ui_view_t *v)       /* LFO: the shape, 1 cycle at RATE 0 to 8 at RATE 127 (2^(3 r / 127), as the rate's log scale) */
 {
+    static const uint16_t T16[16] = {256, 267, 279, 291, 304, 317, 331, 345, 362, 378, 395, 412, 431, 449, 470, 490};
+    uint32_t n = (uint32_t)v->lfo_rate * 48u / 127u, cyc = (uint32_t)T16[n & 15u] << (n >> 4);   /* cycles x 256 */
     int32_t x, px = 8, py = 62;
     cv_rect(8, 62, 224, 1, UI_DIM);
     for (x = 0; x < 224; x++) {
-        int32_t ph = x * 4 / 7, q = ph & 63, st = ph >> 4, val, yy;
+        int32_t ph = (int32_t)((uint32_t)x * cyc / 896u), q = ph & 63, st = ph >> 4, val, yy;   /* 64 a cycle: x cyc 64 / (224 256) */
         switch (v->lfo_shape) {
         case 0: val = UI_SIN64[q]; break;
         case 1: val = q < 16 ? q * 1024 : q < 48 ? (32 - q) * 1024 : (q - 64) * 1024; break;
@@ -815,7 +818,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             else { f = ui_filter_fn; pk = (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16 | (uint32_t)(uint8_t)v->flt_env << 20; }
             break;
         case UI_P_ENV: f = ui_env_fn; pk = (uint32_t)v->sub << 28 ^ (uint32_t)v->env[v->sub & 1u][0] ^ (uint32_t)v->env[v->sub & 1u][1] << 7 ^ (uint32_t)v->env[v->sub & 1u][2] << 14 ^ (uint32_t)v->env[v->sub & 1u][3] << 21; break;
-        case UI_P_LFO: f = ui_lfo_fn; pk = 0x10000000u | v->lfo_shape; break;
+        case UI_P_LFO: f = ui_lfo_fn; pk = 0x10000000u | v->lfo_shape | (uint32_t)v->lfo_rate << 8; break;
         case UI_P_SEL: f = ui_sel_fn; pk = 0x30000000u | v->voices | (uint32_t)v->voices_max << 8 | (uint32_t)v->vmode << 16 | (uint32_t)v->wdest << 18 | (uint32_t)v->qual << 20 | (uint32_t)v->ecurve << 21; break;
         case UI_P_ARP: f = ui_arp_fn; pk = 0x20000000u | v->arp_mode | (uint32_t)v->arp_oct << 4 | (uint32_t)v->arp_gate << 8 | (uint32_t)v->arp_swing << 16; textch = !ui_eq(s->info, v->info); break;
         case UI_P_SEQ:

@@ -11,7 +11,7 @@
 900 btn 11
 1000 btn 13
 # SEQ on: it plays at 120 BPM, 1/16
-1100 btn 11
+1100 patch 53 1
 # a held key transposes it (key 1 is one semitone above key 0)
 3100 keys 0x2
 4300 keys 0

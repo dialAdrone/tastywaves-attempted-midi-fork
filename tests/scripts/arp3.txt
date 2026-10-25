@@ -1,5 +1,5 @@
 # MIDI clock drives the arp: 0xF8 every 25 ms = 100 BPM, 1/16 = 150 ms. See tests/run_arp_panel.sh.
-100 btn 10
+100 patch 47 1
 200 keys 0x1
 300 midi 0xF8 0 0
 325 midi 0xF8 0 0

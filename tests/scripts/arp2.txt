@@ -1,12 +1,12 @@
-# ARP with latch, then ARP held for its page, then off. See tests/run_arp_panel.sh.
-100 btn 10
+# ARP with latch (switched on directly: patch 47 = P_ARP), then ARP pressed for its page, then held: off. See tests/run_arp_panel.sh.
+100 patch 47 1
 200 btn 12
 300 keys 0x1
 400 keys 0x10
 500 keys 0
 # the latched notes keep going until PLAY lets them go
 1400 btn 12
-1800 bdown 10
-2600 bup 10
-2800 btn 10
+1800 btn 10
+2300 bdown 10
+2850 bup 10
 3200 end

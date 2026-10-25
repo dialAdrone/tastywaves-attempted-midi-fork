@@ -176,16 +176,16 @@ Flash `build/vavewave.fwsc`. The arp is part of the patch (6 new parameters); ol
 
 | # | Do | Expect |
 | --- | --- | --- |
-| 12.1 | Short press ARP | ARP LED on; hold a chord on the keys: the notes play one after another, UP, 120 BPM 1/16 |
+| 12.1 | Hold ARP (half a second) | ARP LED on; hold a chord on the keys: the notes play one after another, UP, 120 BPM 1/16 |
 | 12.2 | Let go of the keys | the arp stops after the last note |
-| 12.3 | Hold ARP (half a second) | the ARP page: MODE RATE OCT GATE (knobs 1-4), hold again: SWING TEMPO |
+| 12.3 | Press ARP | the ARP page: MODE RATE OCT GATE (knobs 1-4), press again: SWING TEMPO (SET 2/2) |
 | 12.4 | Turn MODE through all 8 | UP DOWN UP-DN UP-DN2 RANDOM PLAYED CHORD; each sounds as named; OFF stops it |
 | 12.5 | RATE, OCT, GATE, SWING, TEMPO | faster/slower, more octaves, shorter/longer notes, shuffle, tempo 40..240 |
 | 12.6 | PLAY (latch) on, tap a chord, let go | the arp keeps playing; turn the knobs with both hands (the drone / modulation use); PLAY again stops it |
 | 12.7 | Play MIDI keys from a computer with the arp on | MIDI notes also go into the arp |
 | 12.8 | Send MIDI clock (a DAW, tempo 90 and 140) | the arp follows it (page shows EXT CLOCK); stop the clock: back to the TEMPO knob after half a second |
 | 12.9 | SAVE a patch with the arp on, power-cycle, load it | arp mode, rate, tempo come back; a patch saved before still loads (arp off) |
-| 12.10 | Arp on, press ARP short | arp off; keys held at that moment sound as plain notes and end when released |
+| 12.10 | Arp on, hold ARP | arp off; keys held at that moment sound as plain notes and end when released |
 | 12.11 | CPU on the HOME status line with the arp running and 8 notes held | note the percentage (CPU headroom budget for the effects) |
 | 12.12 | Timing feel | steps are in time (jitter up to 6 ms is known: the clock runs once per audio block) |
 | 12.13 | Hold keys, change patch (PRESETS) and back | no hung notes, no crash |
@@ -201,10 +201,10 @@ Flash `build/vavewave.fwsc`. One pattern of up to 32 steps lives in RAM (it is l
 | 13.3 | Press PLAY | a rest step (PLAY's latch does nothing while recording) |
 | 13.4 | Press SEQ | a tie: the note before goes on through this step |
 | 13.5 | Short press REC again | recording ends; the pattern length is the steps entered (grid shows it) |
-| 13.6 | Short press SEQ | SEQ LED on; the pattern plays at the tempo, rests are silent, a tied note runs on |
+| 13.6 | Hold SEQ (half a second) | SEQ LED on; the pattern plays at the tempo, rests are silent, a tied note runs on |
 | 13.7 | RATE, GATE, SWING, TEMPO knobs on the SEQ page | speed, note length and shuffle change live |
 | 13.8 | Hold a key while it plays | the pattern is transposed by (that key minus C4); let go: back as recorded. The tiles keep showing the recorded notes (no change, no gold). A latched key (PLAY) keeps it transposed |
-| 13.9 | Short press SEQ again | stops; keys sound as plain notes again |
+| 13.9 | Hold SEQ again | stops; keys sound as plain notes again |
 | 13.10 | Hold REC (0.7 s) | pattern cleared (LEN 0, NO PATTERN) |
 | 13.11 | Record 32 steps | recording ends by itself at 32 |
 | 13.12 | SEQ on, ARP on | the sequencer plays (the arp waits); SEQ off: the arp comes back |
@@ -219,7 +219,7 @@ Flash `build/vavewave.fwsc`. The lane is one value a step (shown 0..127, 64 = ne
 
 | # | Do | Expect |
 | --- | --- | --- |
-| 14.1 | On the SEQ page press SEQ (hold) or the SEQ page button again | second set: TARGET, DEPTH, GLIDE, VALUE (the SELECT knob picks the step); the grid shows a bar per step (middle line = 64) |
+| 14.1 | On the SEQ page press SEQ again | second set: TARGET, DEPTH, GLIDE, VALUE (the SELECT knob picks the step); the grid shows a bar per step (middle line = 64) |
 | 14.2 | TARGET = POS, DEPTH 100, turn SELECT (step) and VALUE; SEQ on | the table position moves with each step's value; the edited step has a yellow frame |
 | 14.3 | Value 64 on every step | no change in the sound (neutral) |
 | 14.4 | TARGET = CUTOFF, then BEND, then DRIVE | each step moves that parameter; the knob on its own page is not changed |
@@ -297,7 +297,7 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 
 | # | Do | Expect |
 | --- | --- | --- |
-| 19.1 | Visit EDIT, FX, ENV, LFO, SEL, GLO; hold ARP and SEQ | every page but HOME shows a tab strip under the knobs with the shown tab filled; the status line reads the page and n/N (e.g. `FX 1/5`, `ENV 2/2`, `SEQ 1/2`; SEL `VOICE`, LFO `LFO`, ARP `ARP`) |
+| 19.1 | Visit EDIT, FX, ENV, LFO, SEL, GLO; press ARP and SEQ | every page but HOME shows a tab strip under the knobs with the shown tab filled; the status line reads the page and n/N (e.g. `FX 1/5`, `ENV 2/2`, `SEQ 1/2`; SEL `VOICE`, LFO `LFO`, ARP `ARP`) |
 | 19.2 | Press FX until FX3 (slot 2), go to ENV, press FX | FX opens on FX3 again (the tab is remembered); press FX again: FX4, then FILT 1/2 |
 | 19.3 | EDIT on OSC2, HOME, EDIT | EDIT opens on OSC2; ALGORITHM and SELECT act on osc 2 |
 | 19.4 | Power off and on | every page opens on its first tab again (tab memory is not saved) |
@@ -316,4 +316,7 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 19.17 | ARP: change MODE, OCT, GATE, SWING | the 16-step picture follows (rows = notes over the octaves, bar length = gate, odd steps late with swing); OFF shows `ARP OFF` |
 | 19.19 | SEL: play notes, then turn each knob | MODE panel: POLY shows 12 voice blocks lit by the notes, MONO / LEGATO one voice (LEGATO with a tie); BEND> lights OSC1, OSC2 or both; QUAL HI smooth / ECO a coarse line with points; CURVE LIN straight / EXP curved |
 | 19.20 | FX FILT 1/2: turn CUTOFF from 0 to 100 | a white line with its frequency (20 .. ~19K) moves across the curve; at 70 it reads about 2.5K |
+| 19.21 | Press SEQ, press SEQ again; same with ARP | SEQ: NOTES, then LANE (the sequencer is not switched); ARP: SET 1/2, then SET 2/2 |
+| 19.22 | Hold SEQ half a second; hold ARP half a second | the sequencer / the arp switches on or off at the half second, the page does not change |
+| 19.23 | LFO: turn RATE from 0 to max | the picture goes from 1 cycle to 8 cycles; SHAPE still changes the shape |
 | 19.18 | Turn a knob fast on FX FILT while playing | the picture keeps up (at most ~16 redraws a second); notes do not stutter |
