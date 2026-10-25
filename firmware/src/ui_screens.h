@@ -63,6 +63,7 @@ typedef struct {
     uint8_t lfo_rate;                           /* LFO picture: 0..127, the cycles drawn (1 .. 8, log) */
     uint8_t mod[4];                             /* GLO CONTROL picture: wheel > pos, wheel > vibrato, aftertouch > cutoff, velocity > level, 0..127 */
     uint8_t fxt[4];                             /* FX slot picture: the four slots' effect types (0 off) */
+    uint8_t fx_byp;                             /* FX picture: the chain is bypassed (hold FX) */
     uint8_t vmode, wdest, qual, ecurve;         /* SEL picture: voice mode (0 poly 1 mono 2 legato), BEND on (0 both 1 osc1 2 osc2), quality (0 hi 1 eco), env curve (0 lin 1 exp) */
     uint32_t arp_seed;                          /* ARP picture, RANDOM: the run's seed (the arp's own generator, so the picture is what plays) */
     uint8_t arp_mode, arp_oct, arp_gate, arp_swing;     /* ARP picture: mode (0 off), octaves 1..4, gate 1..127, swing 0..50 */
@@ -668,7 +669,7 @@ static void ui_menv_fn(const ui_view_t *v)      /* ENV MOD>: the MOD envelope (i
 static void ui_fx_fn(const ui_view_t *v)        /* FX slot: the chain of four slots, the one shown filled; where delay and reverb are */
 {
     static const char *const NM[6] = {"-", "CHO", "FLG", "PHA", "DLY", "REV"};
-    int32_t i, cur = (int32_t)v->sub - 2;
+    int32_t i, cur = (int32_t)v->sub;
     for (i = 0; i < 4; i++) {
         int32_t x = 4 + i * 60, t = v->fxt[i] < 6u ? v->fxt[i] : 0;
         char n[2] = {(char)('1' + i), 0};
@@ -679,6 +680,7 @@ static void ui_fx_fn(const ui_view_t *v)        /* FX slot: the chain of four sl
         if (i < 3) { cv_line(x + 53, 47, x + 57, 53, UI_GRAY); cv_line(x + 53, 59, x + 57, 53, UI_GRAY); }
     }
     cv_text(4, 100, &FONT_S, v->info2, UI_GRAY);
+    if (v->fx_byp) { cv_rect(0, 116, 240, 18, RGB(255, 200, 90)); cv_text((240 - text_w(&FONT_S, "BYPASSED  HOLD FX: ON")) / 2, 117, &FONT_S, "BYPASSED  HOLD FX: ON", C_BLACK); }
 }
 
 static void ui_sel_fn(const ui_view_t *v)       /* SEL VOICE: a panel per knob, in knob order (MODE GLIDE top, PB RNG QUAL below) */
@@ -944,7 +946,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             else { f = ui_filter_fn; pk = (uint32_t)v->flt_cut | (uint32_t)v->flt_res << 8 | (uint32_t)v->flt_mode << 16 | (uint32_t)(uint8_t)v->flt_env << 20; }
             break;
         case UI_P_FX:
-            f = ui_fx_fn; pk = 0x50000000u | v->sub | (uint32_t)v->fxt[0] << 4 | (uint32_t)v->fxt[1] << 8 | (uint32_t)v->fxt[2] << 12 | (uint32_t)v->fxt[3] << 16; textch = !ui_eq(s->info2, v->info2);
+            f = ui_fx_fn; pk = 0x50000000u | v->sub | (uint32_t)v->fx_byp << 20 | (uint32_t)v->fxt[0] << 4 | (uint32_t)v->fxt[1] << 8 | (uint32_t)v->fxt[2] << 12 | (uint32_t)v->fxt[3] << 16; textch = !ui_eq(s->info2, v->info2);
             break;
         case UI_P_ENV:
             if (v->sub == 2u) { f = ui_menv_fn; pk = 0x0C000000u ^ (uint32_t)(uint8_t)v->menv[0] ^ (uint32_t)(uint8_t)v->menv[1] << 8 ^ (uint32_t)(uint8_t)v->menv[2] << 16 ^ (uint32_t)v->ecurve << 24 ^ (uint32_t)v->env[1][0] * 7u ^ (uint32_t)v->env[1][1] * 131u ^ (uint32_t)v->env[1][2] * 2053u; break; }

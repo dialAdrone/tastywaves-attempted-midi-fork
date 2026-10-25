@@ -105,6 +105,8 @@ typedef void (*fx_fn)(int32_t *lr, uint32_t n, void *state);
 #define FX_SLOTS 4u
 static struct { fx_fn fn; void *state; volatile uint32_t on; } fx_chain[FX_SLOTS];   /* main writes; v1: empty */
 static int32_t fx_bus[2u * HALF_FRAMES];
+static volatile uint32_t fx_bypass;             /* main writes (hold FX): the chain goes on running (its tails stay live), the output is the dry bus */
+static int32_t fx_byp_g;                        /* ISR: 0 = the chain's output .. 256 = dry, one step a sample (a 5.8 ms crossfade) */
 
 /* ---------------------------------------------------------------- small helpers */
 static int32_t sine(uint32_t ph)                /* a full cycle over 2^32 -> -32767..32767 (refined parabola, ~0.1 %) */
@@ -671,16 +673,18 @@ static void engine_render(int32_t *out, uint32_t n, uint32_t t0)
             out[2u * i + 1u] += y;
         }
     } else {                                    /* stereo bus through the fx hooks, then the clip */
-        for (i = 0; i < n; i++) {
-            int32_t m = mixbus[i];
-            mixbus[i] = 0;
-            fx_bus[2u * i] = fx_bus[2u * i + 1u] = m;
-        }
+        int32_t bt = fx_bypass ? 256 : 0;
+        for (i = 0; i < n; i++) fx_bus[2u * i] = fx_bus[2u * i + 1u] = mixbus[i];     /* (mixbus keeps the dry signal until the end) */
         for (i = 0; i < FX_SLOTS; i++)
             if (fx_chain[i].on && fx_chain[i].fn) fx_chain[i].fn(fx_bus, n, fx_chain[i].state);
         for (i = 0; i < 2u * n; i++) {
             int32_t m = fx_bus[i], y;
             uint32_t ay;
+            if (fx_byp_g != bt || bt) {         /* bypassed, or fading in / out of it */
+                if (!(i & 1u)) fx_byp_g += fx_byp_g < bt ? 1 : fx_byp_g > bt ? -1 : 0;
+                m += (int32_t)(((int64_t)(mixbus[i >> 1] - m) * fx_byp_g) >> 8);
+            }
+            if (i & 1u) mixbus[i >> 1] = 0;
             m = m > (1 << 20) ? (1 << 20) : m < -(1 << 20) ? -(1 << 20) : m;
             y = softclip((m * gd) >> 6);
             ay = (uint32_t)(y < 0 ? -y : y);

@@ -150,6 +150,8 @@ static struct {
     uint32_t t_clr;
     uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: the page, hold: on / off); the mode it switches back to */
     uint32_t t_arp, t_arp_tog;                  /* press time; time of the last switch */
+    uint8_t fx_arm;                             /* FX the same (short: the page, hold: bypass the chain) */
+    uint32_t t_fx, t_fx_tog;
     uint8_t sv, act, act_id, tgt;               /* SAVE gesture (SV_*), the request for pn_save_poll (ACT_*, user id), the chosen target id */
     uint32_t t_browse, t_flash, t_save, t_home, t_sv;
     char fmsg[12];                              /* the confirmation shown while t_flash runs */
@@ -482,7 +484,16 @@ static void pn_page_btn(uint32_t page)
 static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty)
 {
     if (b & 1u << BTN_EDIT) pn_page_btn(UI_P_EDIT);
-    if (b & 1u << BTN_FX) pn_page_btn(UI_P_FX);
+    if (b & 1u << BTN_FX && !pn.fx_arm && (!pn.t_fx_tog || fm1_ms - pn.t_fx_tog >= 200u)) { pn.fx_arm = 1; pn.t_fx = fm1_ms; }   /* FX as ARP: a press opens the page, a hold bypasses the chain */
+    if (pn.fx_arm) {
+        if (!(held >> BTN_FX & 1u)) { pn.fx_arm = 0; pn_page_btn(UI_P_FX); }
+        else if (fm1_ms - pn.t_fx >= 500u) {                        /* held: the chain in / out (a performance switch: not saved, not in the patch) */
+            pn.fx_arm = 0;
+            fx_bypass ^= 1u;
+            pn_msg(fx_bypass ? "FX BYPASS" : "FX ON", 0, 0);
+            pn.t_fx_tog = fm1_ms ? fm1_ms : 1u;
+        }
+    }
     if (b & 1u << BTN_ENV) pn_page_btn(UI_P_ENV);
     if (b & 1u << BTN_LFO) pn_page_btn(UI_P_LFO);
     if (b & 1u << BTN_SEL) pn_page_btn(UI_P_SEL);
@@ -650,11 +661,12 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
 {
     static const char *const PNAME[UI_P_N] = {"HOME", "EDIT: OSC + FILTER", "FX: EFFECTS", "ENV: ENVELOPES", "LFO", "SEL: VOICE, CONTROL", "GLO: SYSTEM", "ARP", "SEQ: SEQUENCER", ""};
     static const char *const BTN[UI_P_N] = {"HOME", "EDIT", "FX", "ENV", "LFO", "SEL", "GLO", "ARP", "SEQ", ""};
-    static const char *const GEN[13] = {
+    static const char *const GEN[14] = {
         "HELP 2/2  BUTTONS",
         "HOME  BACK HOME, HOLD: HELP",
         "PAGE BUTTON  OPEN, AGAIN: TAB",
         "ARP  PAGE, HOLD: ON/OFF",
+        "FX  PAGE, HOLD: BYPASS",
         "SAVE  STORE (HOLD: PICK, DEL)",
         "PLAY  LATCH, STOP; SEQ: START",
         "REC  STEPS (SEQ PAGE ONLY)",
@@ -668,7 +680,7 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
     char txt[40], *d;
     for (i = 0; i < 14u; i++) v->help[i][0] = 0;
     if (sub) {
-        for (i = 0; i < 13u; i++) pn_hl(v->help[i], GEN[i], "");
+        for (i = 0; i < 14u; i++) pn_hl(v->help[i], GEN[i], "");
         return;
     }
     if (pg >= UI_P_HELP) pg = UI_P_HOME;
@@ -933,6 +945,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         if (pn.page == UI_P_FX) {                      /* the chain of slots; where delay and reverb are */
             uint32_t c;
             for (c = 0; c < 4u; c++) v->fxt[c] = (uint8_t)patch_get(P_FX1_TYPE + 4u * c);
+            v->fx_byp = (uint8_t)fx_bypass;
             {   char *e = v->info2;                 /* the once-only effects: where they are, or free */
                 uint32_t t, own;
                 for (t = 4; t < 6u; t++) {

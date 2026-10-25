@@ -172,7 +172,7 @@ section. It ends with updates to `UI-DESIGN.md` and HELP. None of them touches t
   - U4.1: HOME knob banks.
   - U4.2: live position marker on EDIT and HOME. `eng_pos_now()` exists; it was left open in UI-DESIGN.
   - U4.3: edit a recorded note step on the SEQ grid (SELECT cursor, knobs: note, tie, rest).
-  - U4.4: hold FX = bypass the chain.
+  - U4.4: hold FX = bypass the chain. **Done 2026-10-25**: hold 500 ms (as ARP), the chain keeps running, the output crossfades to dry in 5.8 ms; not saved.
 
 Effort guess: U1 small, U2 medium (mostly tables and pictures), U3 small, U4 each small to medium.
 

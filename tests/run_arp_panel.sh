@@ -15,6 +15,7 @@ build/host/vavewave build/host/arp6 tests/scripts/arp6.txt > build/host/arp6.log
 build/host/vavewave build/host/seq tests/scripts/seq.txt > build/host/seq.log
 build/host/vavewave build/host/seq2 tests/scripts/seq2.txt > build/host/seq2.log
 build/host/vavewave build/host/seq3 tests/scripts/seq3.txt > build/host/seq3.log
+build/host/vavewave build/host/fxbyp tests/scripts/fxbyp.txt > build/host/fxbyp.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re
@@ -90,6 +91,11 @@ for t, n in q3:
 check(len(grp) >= 6 and all(sorted(g) in ([53, 57, 60], [60, 64, 67]) for g in grp.values()), 'SEQ, ARP off, CHORD MAJ: block chords a 1/16 (%d)' % len(grp))
 check(w(5000, 5500)[:3] == [46, 50, 53] and set(w(5000, 6490)) <= {46, 50, 53, 57, 60}, 'CHORD HELD (F3 A3 C4): the lowest key transposes (-7), the others give the shape (%s)' % w(5000, 6000))
 check(w(6550, 7000) and set(w(6550, 7000)) <= {53, 60}, 'keys up: HELD with no keys plays the note alone (%s)' % w(6550, 7000))
+import wave, struct, math
+wv = wave.open('build/host/fxbyp.wav'); fr = wv.getframerate(); smp = struct.unpack('<%dh' % (wv.getnframes() * 2), wv.readframes(wv.getnframes()))
+rms = lambda a, b: math.sqrt(sum(x * x for x in smp[a * fr // 500:b * fr // 500]) / max(1, (b - a) * fr // 500))
+e1, e2, e3 = rms(600, 1400), rms(2200, 2900), rms(3700, 4400)
+check(e1 > 30 and e2 < 2 and e3 > 5, 'hold FX bypasses the chain (delay echoes %.0f, bypassed %.0f), hold again: the echoes, still running, return (%.0f)' % (e1, e2, e3))
 print('arp panel: %d failures' % fails)
 raise SystemExit(1 if fails else 0)
 PY

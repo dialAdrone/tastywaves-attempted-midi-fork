@@ -382,3 +382,13 @@ Before: ARP on while SEQ played did nothing (the sequencer bypassed the arp). No
 | 21.11 | SAVE a patch with CHORD set, load another, load it back | CHORD comes back; older patches load with CHORD OFF |
 | 21.12 | ARP alone (SEQ off), with LATCH | as before: CHORD has no effect without the sequencer |
  | 21.13 | SEQ playing: go to any other page (ARP, EDIT, HOME...), press PLAY | the sequencer stops (PLAY LED off); PLAY again there is LATCH (it does not start the sequencer: start it on the SEQ page) |
+
+## 22. Hold FX: bypass the chain (U4.4)
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 22.1 | A patch with delay or reverb; play, then hold FX half a second | the effects go out (dry sound) without a click; FX BYPASS shows; on the FX page an amber BYPASSED bar |
+| 22.2 | Hold FX again | the effects come back; a delay / reverb tail that was still ringing comes back with them (the chain kept running) |
+| 22.3 | Short press FX | opens the FX page / next slot as before (no bypass) |
+| 22.4 | Bypassed: change patch, save, power off and on | the bypass stays across patch changes, is not saved, is off after power-on |
+| 22.5 | FX page: SLOT1..SLOT4 | the slot shown is the one filled in the chain picture (was off by two since U2) |

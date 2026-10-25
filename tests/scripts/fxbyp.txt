@@ -1,0 +1,15 @@
+# Hold FX bypasses the chain (tests/run_arp_panel.sh): a delay with long feedback (patch 57 = FX1 TYPE 4 delay, 59 = FEEDBK, 60 = MIX), one short note
+100 patch 57 4
+100 patch 59 110
+100 patch 60 127
+100 patch 24 0
+200 keys 0x1
+250 keys 0
+# echoes; then FX held: bypassed (dry only: silence); held again: the echoes, still running, come back
+1400 btn 2
+1500 bdown 2
+2050 shot byp
+2100 bup 2
+3000 bdown 2
+3600 bup 2
+4500 end
