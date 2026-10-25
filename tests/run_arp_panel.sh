@@ -80,7 +80,9 @@ check(not any(750 < t < 1000 and k == 'on' for t, k, n in q2), 'REC ends: the pa
 check(any(1000 < t < 1900 and k == 'on' for t, k, n in q2), 'PLAY on the SEQ page starts the sequencer')
 check(not any(2150 < t < 2950 and k == 'on' for t, k, n in q2), 'PLAY on the SEQ page stops it')
 check(any(3000 < t < 3500 and k == 'on' for t, k, n in q2), 'PLAY starts it again')
-check(not any(3700 < t < 4600 and k == 'on' for t, k, n in q2), 'on another page PLAY stops it too; stopped, PLAY there is LATCH and does not start it')
+check(not any(3700 < t < 4100 and k == 'on' for t, k, n in q2), 'on another page PLAY stops it too')
+check(any(4100 < t < 4600 and k == 'on' for t, k, n in q2), 'SEQ still lit: PLAY on another page starts it again')
+check(not any(5200 < t < 6500 and k == 'on' for t, k, n in q2), 'hold SEQ: off and stopped; PLAY is LATCH then and does not start it')
 q3 = [(t, n) for t, k, n in load('build/host/seq3.log') if k == 'on']
 w = lambda a, b: [n for t, n in q3 if a <= t < b]
 check(w(990, 1490) == [53, 57, 60, 53] and w(1490, 1990) == [60, 64, 67, 60], 'SEQ + ARP UP + CHORD MAJ: a step a beat, its triad arpeggiated at 1/16 (%s %s)' % (w(990, 1490), w(1490, 1990)))

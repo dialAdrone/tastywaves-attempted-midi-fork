@@ -27,7 +27,7 @@ static uint32_t fm1_ticks(void) { return now * 544u; }      /* (the arp seeds RA
 static void run(uint32_t blocks) { while (blocks--) { arp_run(256); now += 256; } }
 static void reset(void)
 {
-    memset(&ar, 0, sizeof ar); ar.rnd = 12345u; memset(snd, 0, sizeof snd); memset((void *)&sq, 0, sizeof sq); memset(&qs, 0, sizeof qs); arp_cfg.seq = 0; sq_tap.on = 0;
+    memset(&ar, 0, sizeof ar); ar.rnd = 12345u; memset(snd, 0, sizeof snd); memset((void *)&sq, 0, sizeof sq); memset(&qs, 0, sizeof qs); arp_cfg.seq = 0; sq_tap.on = 0; sq_run = 1;
     arp_cfg.mode = ARP_OFF; arp_cfg.rate = ARP_R16; arp_cfg.oct = 1; arp_cfg.gate = 64; arp_cfg.swing = 0; arp_cfg.bpm = 120;
     arp_ext.ticks = arp_ext.start = 0;
     nev = 0; now = 0;

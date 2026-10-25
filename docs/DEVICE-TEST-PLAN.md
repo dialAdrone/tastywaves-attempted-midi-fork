@@ -381,7 +381,7 @@ Before: ARP on while SEQ played did nothing (the sequencer bypassed the arp). No
 | 21.10 | Change the patch while SEQ + CHORD play | the chord stays (as the arp does) |
 | 21.11 | SAVE a patch with CHORD set, load another, load it back | CHORD comes back; older patches load with CHORD OFF |
 | 21.12 | ARP alone (SEQ off), with LATCH | as before: CHORD has no effect without the sequencer |
- | 21.13 | SEQ playing: go to any other page (ARP, EDIT, HOME...), press PLAY | the sequencer stops (PLAY LED off); PLAY again there is LATCH (it does not start the sequencer: start it on the SEQ page) |
+ | 21.13 | (replaced by section 25: PLAY follows the SEQ switch) | |
 
 ## 22. Hold FX: bypass the chain (U4.4)
 
@@ -426,3 +426,24 @@ Open the web tool (`tools/web_tool.sh`), connect. Use a patch saved on the FM-1 
 | 24.4 | Backup; delete the patch; Restore from the file | the patch comes back with SEQ2 (pattern and settings) |
 | 24.5 | Restore an older backup (made before this build) | restores as before; those patches have no SEQ2 |
 | 24.6 | Delete a patch with SEQ2, then SAVE a new patch in that number on the FM-1 | no stale SEQ2 on the new patch |
+
+## 25. SEQ is a switch like ARP; PLAY follows it
+
+Flash `build/vavewave.fwsc`. SEQ press: on (lit) + its page; hold SEQ: off. SEQ lit: PLAY starts / stops the patterns on any page. SEQ off: PLAY is LATCH. Also: the FX page hint, SAVE during REC, the web tool's patch lists.
+
+| # | Do | Expect |
+|---|----|--------|
+| 25.1 | SEQ off, patterns recorded; press SEQ | SEQ LED on, the SEQ page opens, nothing plays (STOP, `PLAY=START`) |
+| 25.2 | Press PLAY | both patterns start; PLAY LED on |
+| 25.3 | Go to FX (or any page), press PLAY | the patterns stop; SEQ stays lit; PLAY LED off |
+| 25.4 | Press PLAY again there | they start again (not LATCH) |
+| 25.5 | Press SEQ again a few times | only the tabs change; SEQ stays lit, playback goes on |
+| 25.6 | Hold SEQ half a second | SEQ LED off, the patterns stop; the SEQ page reads OFF and `SEQ=ON` |
+| 25.7 | Hold a chord, press PLAY | LATCH (PLAY LED on), the chord keeps sounding; the ARP applies if lit; PLAY again lets go |
+| 25.8 | SEQ off with LATCH on, press SEQ, PLAY | the latched keys transpose the patterns; PLAY stops / starts them |
+| 25.9 | SEQ lit and stopped, play keys | silent: they only set the transposition for the next PLAY |
+| 25.10 | Load a patch saved with SEQ on, or end REC | SEQ lit, nothing plays until PLAY |
+| 25.11 | GLO HELP page 2 and the SEQ page's help | `SEQ  ON + PAGE, HOLD: OFF`; `PLAY  LATCH; SEQ ON: START/STOP`; on SEQ `HOLD SEQ  SEQ OFF (PLAY: LATCH)` |
+| 25.12 | FX page, no bypass | `HOLD FX: BYPASS` dim at the bottom; bypassed: the amber BYPASSED bar |
+| 25.13 | REC on SEQ2, enter steps, SAVE (REC still on), enter more steps | SAVE lights again; REC off, reload: the steps up to the save |
+| 25.14 | Web tool, patch section | "Built in" lists the 8 factory patches (greyed, no buttons); "Your saved patches" below; the text says patches are loaded with PRESETS on the FM-1 |

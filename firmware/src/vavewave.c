@@ -146,9 +146,7 @@ static uint8_t boot_raw[11];
 /* the sequencer stops: SEQ off (keys play plain notes, or the arp), the pattern kept. A performance switch, not a patch edit */
 static void seq_stop(void)
 {
-    sq_run = 0;
-    patch_set(P_SEQ, 0);
-    pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ];
+    sq_run = 0;                                 /* (SEQ stays lit: PLAY starts it again) */
 }
 
 static void app_main(void)
@@ -250,9 +248,9 @@ static void app_main(void)
             sq.cur++;
         }
         if (sq.rec && sq.cur >= SEQ_MAXN) { LP(sq_lane)->len = SEQ_MAXN; sq.rec = 0; seq_stop(); }  /* 32 steps: full */
-        if (!rec_pass && (b & (1u << BTN_PLAY)) && (pn.page == UI_P_SEQ || (patch_get(P_SEQ) && sq_run && (sq.len || sq2.len)))) {  /* PLAY stops the sequencer from any page; on the SEQ page it also starts it (elsewhere, stopped, it is LATCH) */
-            if (patch_get(P_SEQ) && sq_run) seq_stop();
-            else if (sq.len || sq2.len) { patch_set(P_SEQ, 1); pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ]; sq_run = 1; }
+        if (!rec_pass && (b & (1u << BTN_PLAY)) && patch_get(P_SEQ)) {  /* SEQ lit: PLAY starts / stops the patterns, from any page (SEQ off: it is LATCH) */
+            if (sq_run) seq_stop();
+            else if (sq.len || sq2.len) sq_run = 1;
             else pn_msg("NO PATTERN", 0, 0);
         }
         else if (!rec_pass && (b & (1u << BTN_PLAY))) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
@@ -272,7 +270,6 @@ static void app_main(void)
             if (look != set.look || dirty != d0) t_change = fm1_ms;
         }
         {   uint32_t am = sq.rec ? 0u : patch_get(P_SEQ) && (sq.len || sq2.len) ? 2u : patch_get(P_ARP) ? 1u : 0u;
-            if (am == 2u && route_prev != 2u) sq_run = 1;
             if (am && am != route_prev) t_rejoin = fm1_ms + 15u;   /* the arp or the sequencer came on over sounding notes (held keys, latched): after a block or two they become its notes */
             route_prev = am;
             if (t_rejoin && fm1_ms >= t_rejoin) {
@@ -353,7 +350,7 @@ static void app_main(void)
         }
         m = ui_button_leds(&pn_view, fm1_ms >> 8 & 1u);
         if (fm1_ms < pn.t_flash) m |= 1u << BTN_SAVE;
-        if (latch || (patch_get(P_SEQ) && sq_run && (sq.len || sq2.len))) m |= 1u << BTN_PLAY;     /* LATCH on, or the sequencer playing */
+        if (patch_get(P_SEQ) ? sq_run && (sq.len || sq2.len) : latch) m |= 1u << BTN_PLAY;     /* SEQ lit: the patterns playing; else LATCH on */
         if (patch_get(P_ARP)) m |= 1u << BTN_ARP;
         if (patch_get(P_SEQ)) m |= 1u << BTN_SEQ;      /* (lit with no pattern too: nothing plays until REC has entered steps) */
         if (sq.rec) m |= 1u << BTN_REC;

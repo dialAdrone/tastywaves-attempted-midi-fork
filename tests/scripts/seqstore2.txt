@@ -1,5 +1,6 @@
-# run 2 on the log of run 1 (a power cycle): no pattern in RAM and SEQ off; loading U01 brings the pattern and SEQ on
+# run 2 on the log of run 1 (a power cycle): no pattern in RAM and SEQ off; loading U01 brings the pattern and SEQ on (stopped); PLAY starts it
 400 enc 6 3
 1100 enc 6 4
 1800 enc 6 1
+2500 btn 12
 3500 end

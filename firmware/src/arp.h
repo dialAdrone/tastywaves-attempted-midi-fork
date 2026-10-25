@@ -60,7 +60,7 @@ static seq_pat_t sq, sq2;                       /* SEQ1, SEQ2: two patterns on o
 static volatile uint8_t sq_lane;                /* main loop: the pattern step input writes (0 SEQ1, 1 SEQ2) */
 #define LP(L) ((L) ? &sq2 : &sq)
 static volatile int8_t ml[SEQ_MAXN];             /* the modulation lane: a value -64..63 a step (0 = neutral), as long as the pattern */
-static volatile uint8_t sq_run = 1;           /* the sequencer's transport (PLAY while it is on): 0 = stopped, the keys only transpose */
+static volatile uint8_t sq_run = 0;           /* the sequencer's transport (PLAY while it is on): 0 = stopped, the keys only transpose */
 static struct { volatile uint32_t step, on, step2; } sq_tap;    /* the step playing (ISR writes; step2: pattern 2's) and whether the sequencer is running */
 static struct { volatile uint32_t ticks, start; } arp_ext;      /* counters, main increments */
 static struct { volatile uint32_t step, ext, beat_blocks; } arp_tap;   /* steps played so far; 1 = following the MIDI clock; blocks (256 frames) the last 24 clock ticks took (the screen: 10336 / this = BPM) */
