@@ -87,13 +87,16 @@ async function refreshPatches() {
   pdir = await vw.patchDirectory();
   patches = [];
   for (const e of pdir) if (e.present) {
-    try { patches.push({ id: e.id, name: e.name, ...decodeBody(await vw.getPatchBody(e.id)) }); }
-    catch (x) { patches.push({ id: e.id, name: e.name || '(damaged)', params: [], pattern: [], damaged: true }); }
+    try {
+      const { body, seq2 } = await vw.getPatch(e.id);
+      patches.push({ id: e.id, name: e.name, ...decodeBody(body), seq2: seq2 ? decodeBody(seq2) : null });
+    } catch (x) { patches.push({ id: e.id, name: e.name || '(damaged)', params: [], pattern: [], seq2: null, damaged: true }); }
   }
   const rows = patches.map((p, k) => {
     const d = document.createElement('div'); d.className = 'card prow';
-    const tr = tableRefs(p.params), steps = p.pattern.length ? p.pattern[0] : 0;
-    const info = p.damaged ? 'damaged: delete it' : [tr.length ? 'user table slot ' + tr.join(', ') : 'factory tables', steps ? `${steps} step pattern` : ''].filter(Boolean).join(' · ');
+    const tr = tableRefs(p.params), steps = p.pattern.length ? p.pattern[0] : 0, steps2 = p.seq2 && p.seq2.pattern.length ? p.seq2.pattern[0] : 0;
+    const pat = steps && steps2 ? `SEQ1 ${steps} + SEQ2 ${steps2} steps` : steps ? `${steps} step pattern` : steps2 ? `SEQ2 ${steps2} steps` : '';
+    const info = p.damaged ? 'damaged: delete it' : [tr.length ? 'user table slot ' + tr.join(', ') : 'factory tables', pat].filter(Boolean).join(' · ');
     d.innerHTML = '<span class="pid"></span><span class="pname"></span><span class="pinfo mute"></span><span class="row"></span>';
     d.querySelector('.pid').textContent = 'U' + String(p.id + 1).padStart(2, '0');
     d.querySelector('.pname').textContent = p.name;
@@ -141,7 +144,7 @@ async function restorePatches(file) {
     '\nKeep the FM-1 quiet (no keys, no arp or latch) and plugged in while it runs.')) return;
   await guarded('Restore', async () => {
     let k = 0;
-    for (const p of list) { status(`Writing ${p.name}…`); await vw.putPatchBody(p.id, p.body); progress(++k / list.length); }
+    for (const p of list) { status(`Writing ${p.name}…`); await vw.putPatch(p.id, p); progress(++k / list.length); }
     await refreshPatches();
     status(`${list.length} patches restored and read back.`);
   });

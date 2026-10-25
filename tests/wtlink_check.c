@@ -598,8 +598,23 @@ static int check_main(void)
         /* the panel's own view of it */
         { pl_patch_t q; CHECK(pl_get(3, &q) == PL_OK && q.n == 73 && q.pw == 6 && q.v[0] == 1 && q.pv[5] == (int16_t)0x2545); }
         /* refused shapes */
-        out_n = 0; pl_a[0] = 32; request(WT_CMD_PPUT, 25, pl_a, 1 + bl); wt_service();
+        out_n = 0; pl_a[0] = 64; request(WT_CMD_PPUT, 25, pl_a, 1 + bl); wt_service();
         CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
+        /* stage 6: companions (ids 32..63): need their patch, count only while newer than it, PDEL of the patch takes both */
+        out_n = 0; pl_a[0] = 32; request(WT_CMD_PPUT, 25, pl_a, 1 + bl); wt_service();
+        CHECK(reply(&rc, &seq) && rc == PLK_E_NONE);                                                        /* patch 0 does not exist */
+        out_n = 0; pl_a[0] = 35; request(WT_CMD_PPUT, 25, pl_a, 1 + bl); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0 && pl_present() == (1u << 3));
+        out_n = 0; a[0] = 35; request(WT_CMD_PGET, 25, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0 && rep_n > 8u);
+        { pl_patch_t q; pl_get(3, &q); CHECK(pl_put(3, &q) == PL_OK); }                                    /* the patch written again: its companion is older now */
+        out_n = 0; a[0] = 35; request(WT_CMD_PGET, 25, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == PLK_E_NONE);
+        out_n = 0; pl_a[0] = 35; request(WT_CMD_PPUT, 25, pl_a, 1 + bl); wt_service();                     /* the same body again: written (the old one did not count) */
+        CHECK(reply(&rc, &seq) && rc == 0 && pl_seq(35) > pl_seq(3));
+        out_n = 0; a[0] = 35; request(WT_CMD_PDEL, 25, a, 1); wt_service();
+        CHECK(reply(&rc, &seq) && rc == 0 && pl_seq(35) == 0u && (pl_present() >> 3 & 1u));
+        pl_link_dirty = 0;
         out_n = 0; pl_a[0] = 4; request(WT_CMD_PPUT, 26, pl_a, bl); wt_service();                          /* one byte short */
         CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
         pl_a[0] = 4; memcpy(pl_a + 1, body, bl); pl_a[1 + 12] = 81;
@@ -655,7 +670,7 @@ static int check_main(void)
         CHECK(reply(&rc, &seq) && rc == 0 && !(pl_present() >> 3 & 1u));
         out_n = 0; a[0] = 3; request(WT_CMD_PDEL, 37, a, 1); wt_service();
         CHECK(reply(&rc, &seq) && rc == 0);                                                                  /* deleting nothing is fine */
-        out_n = 0; a[0] = 33; request(WT_CMD_PDEL, 38, a, 1); wt_service();
+        out_n = 0; a[0] = 64; request(WT_CMD_PDEL, 38, a, 1); wt_service();
         CHECK(reply(&rc, &seq) && rc == PLK_E_ARGS);
         /* fill the store: STORE FULL is reported, the patches already there stay readable */
         pl_a[0] = 0; memcpy(pl_a + 1, body, bl);

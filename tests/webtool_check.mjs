@@ -76,7 +76,7 @@ writeFileSync(join(tmp, 'b.vwt'), imgB);
 const fl = new FakeLink([`2:${join(tmp, 'b.vwt')}`]);
 const vw = new VwLink(fl, { tries: 4, timeout: 50 });
 const h = await vw.hello();
-check(h.proto === 1 && h.stage === 5 && h.slots === 8 && h.slotSize === 0x9000 && h.id === 'FM-1_950', 'HELLO from the firmware logic');
+check(h.proto === 1 && h.stage === 6 && h.slots === 8 && h.slotSize === 0x9000 && h.id === 'FM-1_950', 'HELLO from the firmware logic');
 let d = await vw.directory();
 check(d.length === 8 && d[2].valid && d[2].name === 'WE-64' && d[2].crc === crcB && !d[0].valid, 'DIR: slot 2 holds WE-64, others empty');
 const g = await vw.get(2);
@@ -141,6 +141,26 @@ check(crc32(new TextEncoder().encode('123456789')) === 0xCBF43926, 'crc32 check 
     check(e instanceof LinkError, `${what} is refused (${e && e.message})`);
   }
   check(JSON.stringify(tableRefs([14, 0, 0, 0, 0, 3])) === '[2]' && tableRefs([]).length === 0, 'tableRefs: user slot of osc 1 only');
+  // stage 6: the second sequencer's companion travels with its patch
+  {
+    const s2 = encodeBody({ name: 'SEQ2', params: [1, 1, 2, 64, 0, 2, 127, 90], pattern: [3, 0x80 + 57, 0x80 + 60, 0x80 + 64] });
+    await vw.putPatch(0, { body: c, seq2: s2 });
+    check(sameAll(await vw.getSeq2Body(0), s2), 'SEQ2: written after its patch and read back');
+    await vw.renamePatch(0, 'TWO SEQS');
+    check(decodeBody(await vw.getPatchBody(0)).name === 'TWO SEQS' && sameAll(await vw.getSeq2Body(0), s2), 'SEQ2: rename keeps it');
+    check(await vw.swapPatches(0, 1) === 'swapped' && sameAll(await vw.getSeq2Body(1), s2) && (await vw.getSeq2Body(0)) === null, 'SEQ2: a swap moves it with its patch');
+    const bk2 = await vw.backup(), e2 = bk2.patches.find((p) => p.id === 1);
+    check(e2 && typeof e2.seq2 === 'string' && sameAll(parseBackup(JSON.parse(JSON.stringify(bk2))).find((p) => p.id === 1).seq2, s2), 'SEQ2: in the backup and parsed back');
+    await vw.putPatchBody(1, c);
+    check((await vw.getSeq2Body(1)) === null, 'SEQ2: the patch written again without it: the old one no longer counts');
+    for (const p of parseBackup(bk2)) await vw.putPatch(p.id, p);
+    check(sameAll(await vw.getSeq2Body(1), s2), 'SEQ2: restore brings it back');
+    await vw.putPatch(1, { body: c, seq2: null });
+    check((await vw.getSeq2Body(1)) === null, 'SEQ2: a put without it deletes it');
+    await vw.putPatch(1, { body: c, seq2: s2 }); await vw.deletePatch(1);
+    check(!(await vw.patchDirectory())[1].present && (await vw.getSeq2Body(1)) === null, 'SEQ2: deleting the patch deletes it');
+    check(parseBackup({ format: 'vavewave-patches', version: 1, patches: [{ id: 2, name: 'X', body: Array.from(a).map((v) => v.toString(16).padStart(2, '0')).join('') }] })[0].seq2 === null, 'a backup without SEQ2 (older tool) still parses');
+  }
   let full = 0;
   for (let i = 0; i < 32; i++) { try { await vw.putPatchBody(i, mk('FILL ' + i, i, 33)); full++; } catch (x) { if (/full/.test(x.message)) break; throw x; } }
   check(full >= 14 && full < 32, `a full store says so after ${full} large patches`);

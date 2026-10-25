@@ -9,7 +9,10 @@
  *   PDIR  start, count (1..16)        -> per id 16 B: id, present, n, pw, name[12]
  *   PGET  id                          -> the body (rc 10: no patch with that id)
  *   PPUT  id, body                    -> writes the patch (a new record; the old one of the id is replaced); rc 11 store full
- *   PDEL  id                          -> deletes it (rc 0 also when there was none)
+ *   PDEL  id                          -> deletes it (rc 0 also when there was none) and its companion
+ * Ids 32..63 (stage 6) are the companions of patches 0..31: the second sequencer's settings and pattern, the same body. PGET of one
+ * answers only when it belongs to its patch (newer than it; else rc 10), PPUT needs the patch (write the patch first: the companion
+ * must be the newer record), PDEL deletes only the companion. PDIR lists the patches only.
  * Return codes: 1 bad arguments, 4 the write failed (flash), 7 busy (a table upload runs), 9 no flash, 10 no such patch, 11 store full, 12 the stored record is damaged.
  * PPUT and PDEL wait for quiet like the table link (7 while keys are down or sound plays); a PPUT of a body the id already holds writes nothing.
  * The app learns which ids changed from pl_link_dirty (bit per id), to refresh the names it shows. */
@@ -45,7 +48,8 @@ static uint32_t pl_link(uint32_t cmd, const uint8_t *a, uint32_t len, uint8_t *o
     }
     if (cmd == PLK_CMD_PGET) {
         int rc;
-        if (len != 1u || a[0] >= PL_IDS) return PLK_E_ARGS;
+        if (len != 1u || a[0] >= PL_SLOTS) return PLK_E_ARGS;
+        if (a[0] >= PL_IDS && pl_seq(a[0]) <= pl_seq(a[0] - PL_IDS)) return PLK_E_NONE;     /* a companion older than its patch is not its */
         rc = pl_get(a[0], &p);
         if (rc) return plk_rc(rc);
         for (i = 0; i < PL_NAME; i++) out[(*n)++] = (uint8_t)p.name[i];
@@ -60,7 +64,8 @@ static uint32_t pl_link(uint32_t cmd, const uint8_t *a, uint32_t len, uint8_t *o
         uint32_t pn, pw, o;
         static pl_patch_t old;
         int rc;
-        if (len < 1u + PL_NAME + 2u || a[0] >= PL_IDS) return PLK_E_ARGS;
+        if (len < 1u + PL_NAME + 2u || a[0] >= PL_SLOTS) return PLK_E_ARGS;
+        if (a[0] >= PL_IDS && !(pl_present() >> (a[0] - PL_IDS) & 1u)) return PLK_E_NONE;       /* a companion needs its patch */
         pn = a[1u + PL_NAME];
         pw = a[2u + PL_NAME];
         if (pn > PL_MAXP || pw > PL_MAXPW || len != 1u + PL_NAME + 2u + 2u * pn + 2u * pw) return PLK_E_ARGS;
@@ -75,17 +80,18 @@ static uint32_t pl_link(uint32_t cmd, const uint8_t *a, uint32_t len, uint8_t *o
         o = 3u + PL_NAME;
         for (k = 0; k < pn; k++, o += 2u) p.v[k] = (int16_t)(a[o] | a[o + 1u] << 8);
         for (k = 0; k < pw; k++, o += 2u) p.pv[k] = (int16_t)(a[o] | a[o + 1u] << 8);
-        if (pl_get(a[0], &old) == PL_OK && old.n == p.n && old.pw == p.pw && !memcmp(old.name, p.name, sizeof p.name) &&
+        if ((a[0] < PL_IDS || pl_seq(a[0]) > pl_seq(a[0] - PL_IDS)) && pl_get(a[0], &old) == PL_OK && old.n == p.n && old.pw == p.pw && !memcmp(old.name, p.name, sizeof p.name) &&
             !memcmp(old.v, p.v, 2u * p.n) && !memcmp(old.pv, p.pv, 2u * p.pw)) return 0;       /* already there: no record (a retry costs nothing) */
         rc = pl_put(a[0], &p);
-        if (rc == PL_OK) pl_link_dirty |= 1u << a[0];
+        if (rc == PL_OK) pl_link_dirty |= 1u << (a[0] % PL_IDS);
         return plk_rc(rc);
     }
     if (cmd == PLK_CMD_PDEL) {
         int rc;
-        if (len != 1u || a[0] >= PL_IDS) return PLK_E_ARGS;
+        if (len != 1u || a[0] >= PL_SLOTS) return PLK_E_ARGS;
         rc = pl_del(a[0]);
-        if (rc == PL_OK) { (void)pl_del(PL_IDS + a[0]); pl_link_dirty |= 1u << a[0]; }   /* its companion too (pattern 2: panel.h); a failure there leaves an older companion, which never counts */
+        if (rc == PL_OK && a[0] < PL_IDS) (void)pl_del(PL_IDS + a[0]);
+        if (rc == PL_OK) pl_link_dirty |= 1u << (a[0] % PL_IDS);   /* its companion too (pattern 2: panel.h); a failure there leaves an older companion, which never counts */
         return plk_rc(rc);
     }
     return PLK_E_ARGS;

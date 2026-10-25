@@ -413,3 +413,16 @@ SEQ presses: SEQ1 set 1 (RATE GATE SWING TEMPO), SEQ1 set 2 (CHORD ARP OCT LEVEL
 | 23.12 | Save a patch with no SEQ2 pattern over one that had it; reload | no SEQ2 pattern (the old one does not come back) |
 | 23.13 | Delete a patch that had SEQ2 (hold SAVE), save a new one in its place | the new one has no stale SEQ2 |
 | 23.14 | 12 voices: both sequencers with chords and arps, OCT 2+, plus held keys; watch CPU MAX and DROPS on GLO INFO | no drops; if voices run out, the oldest notes are stolen (no hang) |
+
+## 24. Web tool: SEQ2 in the patch library (link stage 6)
+
+Open the web tool (`tools/web_tool.sh`), connect. Use a patch saved on the FM-1 with both SEQ1 and SEQ2 patterns.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 24.1 | Patch library list | the patch shows "SEQ1 n + SEQ2 m steps" |
+| 24.2 | Rename it, then load it on the FM-1 and PLAY | new name; both patterns and SEQ2's settings intact |
+| 24.3 | Move it up / down (▲ ▼) | it changes places; loaded on the FM-1, SEQ2 is still there |
+| 24.4 | Backup; delete the patch; Restore from the file | the patch comes back with SEQ2 (pattern and settings) |
+| 24.5 | Restore an older backup (made before this build) | restores as before; those patches have no SEQ2 |
+| 24.6 | Delete a patch with SEQ2, then SAVE a new patch in that number on the FM-1 | no stale SEQ2 on the new patch |

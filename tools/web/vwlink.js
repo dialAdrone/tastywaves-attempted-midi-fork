@@ -87,6 +87,10 @@ export function parseImage(img) {
 
 // ---- patches (VW link stage 5, firmware/src/patchlink.h): a body is name[12] | n | pw | int16 v[n] | int16 pattern[pw], little endian ----
 export const PATCH_IDS = 32, PATCH_NAME = 12, MAX_PARAMS = 80, MAX_PATTERN = 33, P_TABLE1 = 0, P_TABLE2 = 5;
+// stage 6: each patch id k may have a companion at id 32 + k (the second sequencer's settings and pattern, the same body shape).
+// It belongs to the patch only while it is the newer record, so it is always written after the patch, and again after any
+// rewrite of the patch (rename, move, restore).
+export const SEQ2_STAGE = 6;
 export function cleanPatchName(name) { return name.replace(/[^\x20-\x7e]/g, '').slice(0, PATCH_NAME).replace(/\s+$/, '') || 'PATCH'; }
 export function encodeBody({ name, params, pattern = [] }) {
   if (params.length > MAX_PARAMS || pattern.length > MAX_PATTERN) throw new LinkError('patch too large');
@@ -141,6 +145,7 @@ export class VwLink {
   async hello() {
     const d = await this.request(CMD.HELLO);
     if (d.length !== 16) throw new LinkError('unexpected HELLO reply');
+    this.stage = d[1];
     return { proto: d[0], stage: d[1], slots: d[2], hdr: d[3], slotSize: u32(d, 4), id: latin1(d.subarray(8, 16)) };
   }
 
@@ -228,6 +233,25 @@ export class VwLink {
     return out;
   }
   async getPatchBody(id) { return (await this.request(CMD.PGET, Uint8Array.of(id))).slice(); }
+  // the companion of patch id (SEQ2), or null: none, or firmware before stage 6
+  async getSeq2Body(id) {
+    if (!(this.stage >= SEQ2_STAGE)) return null;
+    try { return (await this.request(CMD.PGET, Uint8Array.of(PATCH_IDS + id))).slice(); }
+    catch (e) { if (e instanceof LinkError && /no such patch/i.test(e.message)) return null; throw e; }
+  }
+  // write the companion (after the patch!) and read it back; null deletes it. Nothing on firmware before stage 6.
+  async putSeq2Body(id, body) {
+    if (!(id >= 0 && id < PATCH_IDS)) throw new LinkError('patch id must be 0..' + (PATCH_IDS - 1));
+    if (!(this.stage >= SEQ2_STAGE)) return;
+    if (!body) { await this.request(CMD.PDEL, Uint8Array.of(PATCH_IDS + id), { timeout: 5000 }); return; }
+    decodeBody(body);
+    await this.request(CMD.PPUT, cat(Uint8Array.of(PATCH_IDS + id), body), { timeout: 5000 });
+    const back = await this.getSeq2Body(id);
+    if (!back || !sameBytes(back, body)) throw new LinkError('read-back of the SEQ2 part of patch ' + (id + 1) + ' differs from what was sent');
+  }
+  // a whole patch: the body and its companion (null: none)
+  async getPatch(id) { return { body: await this.getPatchBody(id), seq2: await this.getSeq2Body(id) }; }
+  async putPatch(id, { body, seq2 = null }) { await this.putPatchBody(id, body); await this.putSeq2Body(id, seq2); }
   // write and read back; throws if the log does not hold exactly this body afterwards
   async putPatchBody(id, body) {
     if (!(id >= 0 && id < PATCH_IDS)) throw new LinkError('patch id must be 0..' + (PATCH_IDS - 1));
@@ -241,22 +265,22 @@ export class VwLink {
     if ((await this.patchDirectory())[id].present) throw new LinkError('the patch is still there after delete');
   }
   async renamePatch(id, name) {
-    const p = decodeBody(await this.getPatchBody(id));
-    await this.putPatchBody(id, encodeBody({ ...p, name }));
+    const { body, seq2 } = await this.getPatch(id);
+    await this.putPatch(id, { body: encodeBody({ ...decodeBody(body), name }), seq2 });     // (the companion again: the patch is newer now)
   }
   // exchange two ids (the order of the list on the panel) through a free id as a parking place, so no patch is ever only in the
   // computer's memory. The parked copy is deleted only after both writes were read back.
   async swapPatches(a, b) {
     const d = await this.patchDirectory();                     // always fresh: the panel may have saved a patch since the page looked
     if (!d[a].present) throw new LinkError('patch ' + (a + 1) + ' is gone (Refresh)');
-    const ba = await this.getPatchBody(a), bb = d[b].present ? await this.getPatchBody(b) : null;
-    if (!bb) { await this.putPatchBody(b, ba); await this.deletePatch(a); return 'moved'; }
+    const ba = await this.getPatch(a), bb = d[b].present ? await this.getPatch(b) : null;
+    if (!bb) { await this.putPatch(b, ba); await this.deletePatch(a); return 'moved'; }
     const free = d.findIndex((e, i) => !e.present && i !== a && i !== b);
     if (free < 0) throw new LinkError('all 32 patch numbers are in use: delete one first (a swap needs one free number as a parking place so that no patch can be lost)');
-    await this.putPatchBody(free, ba);                          // on any failure from here the parked copy stays: nothing is lost
+    await this.putPatch(free, ba);                              // on any failure from here the parked copy stays: nothing is lost
     try {
-      await this.putPatchBody(a, bb);
-      await this.putPatchBody(b, ba);
+      await this.putPatch(a, bb);
+      await this.putPatch(b, ba);
     } catch (e) { throw new LinkError(e.message + ` (a copy of patch ${a + 1} is kept as patch ${free + 1}; nothing was lost)`); }
     await this.deletePatch(free);
     return 'swapped';
@@ -264,8 +288,12 @@ export class VwLink {
   // backup of every patch as a JSON-able object; restore of one
   async backup() {
     const d = await this.patchDirectory(), patches = [];
-    for (const e of d) if (e.present) patches.push({ id: e.id, name: e.name, body: Array.from(await this.getPatchBody(e.id)).map((v) => v.toString(16).padStart(2, '0')).join('') });
-    return { format: 'vavewave-patches', version: 1, patches };
+    const hex = (b) => Array.from(b).map((v) => v.toString(16).padStart(2, '0')).join('');
+    for (const e of d) if (e.present) {
+      const { body, seq2 } = await this.getPatch(e.id);
+      patches.push({ id: e.id, name: e.name, body: hex(body), ...(seq2 ? { seq2: hex(seq2) } : {}) });
+    }
+    return { format: 'vavewave-patches', version: 1, patches };       // (seq2: optional, so older tools still read the file)
   }
 }
 export function parseBackup(obj) {
@@ -277,6 +305,12 @@ export function parseBackup(obj) {
     const body = Uint8Array.from(p.body.match(/../g).map((h) => parseInt(h, 16)));
     const d = decodeBody(body);
     for (let i = 0; i < PATCH_NAME; i++) if (body[i] && (body[i] < 32 || body[i] > 126)) throw new LinkError('damaged name in the backup');
-    return { id: p.id, name: d.name, body };
+    let seq2 = null;
+    if (p.seq2 !== undefined) {
+      if (typeof p.seq2 !== 'string' || !/^([0-9a-f]{2})+$/.test(p.seq2)) throw new LinkError('damaged SEQ2 entry in the backup');
+      seq2 = Uint8Array.from(p.seq2.match(/../g).map((h) => parseInt(h, 16)));
+      decodeBody(seq2);
+    }
+    return { id: p.id, name: d.name, body, seq2 };
   });
 }
