@@ -172,3 +172,9 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
   FILT (2 sets) FX1-FX4, LFO and ARP one tab of 2 sets each, with a set tag `1/2` under the tab shown. New pictures: FX
   slot chain, GLO CONTROL routes, ARP pattern, SEL voice blocks, ENV one envelope. Pictures redraw at most every 60 ms
   while changing. Image 556692 B of 581564 (the font costs ~14 KB; ~25 KB headroom left). DEVICE-TEST-PLAN 19.12-19.18.
+
+- **Device results, section 19 (2026-10-24):** 19.1-19.40 pass after the fixes logged in the commits since 67e41b7 (picture-first screens, MASTER
+  knob read outside screen DMA, SEL / filter pictures, ARP / SEQ gestures, REC on the SEQ page only, PLAY starts / stops SEQ there, knob
+  acceleration by rate, help per page, ARP RANDOM seeding and picture, steady SAVE LED). Skipped by choice: 19.28 (GLO BOOT live button
+  readout: a page button there leaves the page; dev-only, not fixed). Open: the retrigger click on fast same-note presses (DROPS stayed 0
+  in 19.24, so not the overload guard; not reproduced on the host). Next per docs/UI-NAV-PLAN.md: U2 (page map), the rest of U3, U4 options.
