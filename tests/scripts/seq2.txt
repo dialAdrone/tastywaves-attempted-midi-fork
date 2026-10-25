@@ -1,5 +1,7 @@
-# Steps entered, REC ends: the pattern waits (nothing plays); PLAY on the SEQ page starts it, PLAY stops it, PLAY starts
+# REC on HOME does nothing; on the SEQ page: steps entered, REC ends: the pattern waits (nothing plays); PLAY on the SEQ page starts it, PLAY stops it, PLAY starts
 # it again; on another page PLAY is LATCH and the pattern goes on. See tests/run_arp_panel.sh.
+50 btn 13
+100 btn 11
 200 btn 13
 300 keys 0x1
 400 keys 0

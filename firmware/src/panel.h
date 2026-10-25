@@ -654,7 +654,7 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
         "ARP  PAGE, HOLD: ON/OFF",
         "SAVE  STORE (HOLD: PICK, DEL)",
         "PLAY  LATCH; SEQ PAGE: START",
-        "REC  STEPS, HOLD: CLEAR",
+        "REC  STEPS (SEQ PAGE ONLY)",
         "OCT- OCT+  OCTAVE DOWN, UP",
         "ALGORITHM  WAVETABLE",
         "SELECT  POSITION IN TABLE",

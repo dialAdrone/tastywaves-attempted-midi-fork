@@ -227,11 +227,11 @@ static void app_main(void)
             sq.len = 0; sq.cur = 0;
             for (k = 0; k < SEQ_MAXN; k++) { sq.note[k] = 0; sq.vel[k] = 0; sq.tie[k] = 0; ml[k] = 0; }
             pn_msg("CLEARED", 0, 0);
-        } else if (b & (1u << BTN_REC)) { rec_arm = 1; t_rec = fm1_ms; }
+        } else if (b & (1u << BTN_REC) && (pn.page == UI_P_SEQ || sq.rec)) { rec_arm = 1; t_rec = fm1_ms; }   /* REC acts on the SEQ page only (elsewhere: nothing) */
         if (rec_arm) {
             if (!(hb >> BTN_REC & 1u)) {        /* a short press: step input on / off (off keeps what was entered as the pattern) */
                 rec_arm = 0;
-                if (!sq.rec) { sq.cur = 0; sq.rec = 1; pn_goto(UI_P_SEQ, 0); }   /* (and its page shows the steps) */
+                if (!sq.rec) { sq.cur = 0; sq.rec = 1; pn_goto(UI_P_SEQ, 0); }   /* (on the NOTES tab: the steps) */
                 else { if (sq.cur) sq.len = sq.cur; sq.rec = 0; seq_stop(); }      /* the pattern waits: PLAY on the SEQ page starts it */
             } else if (fm1_ms - t_rec >= 700u) {    /* held: ask first (REC again clears the pattern) */
                 rec_arm = 0;
@@ -266,6 +266,7 @@ static void app_main(void)
             uint8_t look = set.look;
             uint32_t d0 = dirty;
             pn_buttons(rec_pass ? b & ~(1u << BTN_SEQ) : b, hb, &set, &dirty);
+            if (sq.rec && pn.page != UI_P_SEQ) { if (sq.cur) sq.len = sq.cur; sq.rec = 0; seq_stop(); }   /* another page while recording: the steps so far are the pattern */
             if (look != set.look || dirty != d0) t_change = fm1_ms;
         }
         {   uint32_t am = sq.rec ? 0u : patch_get(P_SEQ) && sq.len ? 2u : patch_get(P_ARP) ? 1u : 0u;

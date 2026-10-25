@@ -178,3 +178,4 @@ Effort guess: U1 small, U2 medium (mostly tables and pictures), U3 small, U4 eac
 
 - **U3 part done early (2026-10-24): D1 (a) in code.** ARP and SEQ: a press opens the page (again: the next tab / set), a hold of 500 ms switches on / off (at the half second, the release does nothing more). Help texts follow.
 - **SEQ changed again (2026-10-24, user decision):** the SEQ button only opens the page (again: NOTES / LANE); PLAY on the SEQ page starts / stops the sequencer (elsewhere PLAY stays LATCH); ending REC no longer starts it. ARP stays: press = page, hold = on / off, PLAY = LATCH.
+- **REC on the SEQ page only (2026-10-24, user decision):** REC does nothing elsewhere; on SEQ a short REC starts / ends step input, a long one asks to clear. While recording SEQ is the tie and PLAY the rest; another page button ends the recording (the steps kept) and opens that page.

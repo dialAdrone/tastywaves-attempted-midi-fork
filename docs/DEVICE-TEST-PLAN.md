@@ -196,7 +196,7 @@ Flash `build/vavewave.fwsc`. One pattern of up to 32 steps lives in RAM (it is l
 
 | # | Do | Expect |
 | --- | --- | --- |
-| 13.1 | Short press REC | REC LED on, the SEQ page opens (step grid, "RECORD STEP 1") |
+| 13.1 | Press SEQ, then REC (short) | REC LED on, the NOTES tab shows the step grid, "RECORD STEP 1" (REC on any other page does nothing) |
 | 13.2 | Play 4 keys | each sounds as a plain note and is a step; the key LEDs show the steps entered, the next one blinks |
 | 13.3 | Press PLAY | a rest step (PLAY's latch does nothing while recording) |
 | 13.4 | Press SEQ | a tie: the note before goes on through this step |
@@ -330,4 +330,7 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 19.32 | On the SEQ page press PLAY, PLAY | starts (SEQ LED on, PLAY), stops (LED off, STOP; the keys play plain notes again) |
 | 19.33 | SEQ playing, go to FX, press PLAY | LATCH switches (PLAY LED); the pattern goes on; back on SEQ, PLAY stops it |
 | 19.34 | ARP RANDOM: hold a chord, release, hold it again (a few times) | the order differs each time |
+| 19.35 | On HOME / FX press REC | nothing happens |
+| 19.36 | On SEQ: REC, enter steps (SEQ = tie, PLAY = rest), REC | recording ends, nothing plays until PLAY; long REC asks CLEAR PATTERN? |
+| 19.37 | Recording, press FX | recording ends with the steps so far, FX opens; PLAY there is LATCH; back on SEQ, PLAY starts the pattern |
 | 19.18 | Turn a knob fast on FX FILT while playing | the picture keeps up (at most ~16 redraws a second); notes do not stutter |

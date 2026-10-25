@@ -1,5 +1,6 @@
 # The note sequencer on the real panel (REC 13, SEQ 11, PLAY 12): see tests/run_arp_panel.sh. Keys: key 0 = 0x1, key 4 = 0x10, key 7 = 0x80.
 # step input: note, note, rest (PLAY), note, tie (SEQ), then REC again ends it: 5 steps
+50 btn 11
 100 btn 13
 200 keys 0x1
 300 keys 0

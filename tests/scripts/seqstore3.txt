@@ -1,4 +1,5 @@
 # run 3 (on the log of run 1): a one-step pattern is playing; loading U01 replaces it by the two steps; a factory patch after it leaves them
+300 btn 11
 400 btn 13
 500 keys 0x80
 600 keys 0

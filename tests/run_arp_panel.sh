@@ -72,6 +72,8 @@ check(not any(t > 4500 and t < 5100 and False for t, k, n in q) and any(4400 < t
 check(any(5900 < t < 6200 and k == 'on' for t, k, n in q), 'REC held alone only asks: the pattern still plays')
 check(not any(t > 6300 and k == 'on' for t, k, n in q), 'REC held, then REC again, clears the pattern: silence')
 q2 = load('build/host/seq2.log')
+r13 = [int(m[1]) for m in (re.match(r'\s*(\d+) ms  LED 13 on', l) for l in open('build/host/seq2.log')) if m]
+check(r13 and r13[0] > 150, 'REC on HOME does nothing; on the SEQ page it records (REC LED at %s ms)' % (r13[:1],))
 check(not any(750 < t < 1000 and k == 'on' for t, k, n in q2), 'REC ends: the pattern waits, nothing plays')
 check(any(1000 < t < 1900 and k == 'on' for t, k, n in q2), 'PLAY on the SEQ page starts the sequencer')
 check(not any(2150 < t < 2950 and k == 'on' for t, k, n in q2), 'PLAY on the SEQ page stops it')
