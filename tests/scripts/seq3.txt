@@ -1,0 +1,28 @@
+# The sequencer with the arp and CHORD (patch 47 = P_ARP, 73 = P_CHORD): see tests/run_arp_panel.sh. Key 0 = F3 (53), key 7 = C4 (60).
+# a pattern of 2 steps: F3, C4
+50 btn 11
+100 btn 13
+200 keys 0x1
+300 keys 0
+400 keys 0x80
+500 keys 0
+600 btn 13
+# ARP UP + CHORD MAJ, PLAY: a step a beat (500 ms), the arp plays its triad at 1/16
+700 patch 47 1
+700 patch 73 2
+1000 btn 12
+# CHORD OFF with the arp: the step's note alone, repeated
+3000 patch 73 0
+# ARP off, CHORD MAJ: block chords, a step a 1/16
+4000 patch 47 0
+4000 patch 73 2
+# SEQ twice: the CHORD tab
+4600 btn 11
+4800 btn 11
+# ARP on, CHORD HELD, three keys held (F3 A3 C4): the lowest transposes (-7), the others give the shape
+5000 patch 47 1
+5000 patch 73 1
+5000 keys 0x91
+5300 shot chord
+6500 keys 0
+7000 end

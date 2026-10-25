@@ -182,3 +182,4 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
 - **U2 page map (2026-10-24, in code, not on the device yet):** EDIT OSC1 / OSC2 (with SEMI) / MIX / FILTER, FX the four slots, ENV AMP / MOD / MOD>,
   SEL VOICE / CONTROL / OUTPUT, GLO SETUP (HOME look, a setting) / INFO (CPU MAX, DROPS, RESET, boot keys). New pictures: MIX, MOD>, SEL VOICE (glide,
   bend range), OUTPUT, SETUP, INFO. HOME on HOME does nothing; EDIT shortcuts removed. No patch format or CC change. DEVICE-TEST-PLAN section 20.
+- 2026-10-25 U2 device check: "excellent, very musical". Bug: ARP did nothing while SEQ played. Done: SEQ + ARP play together (a step a beat, the arp plays each step's chord at RATE, user chose timing A); new P_CHORD on a SEQ CHORD tab (OFF HELD MAJ MIN 7 MAJ7 MIN7 SUS4) with a keyboard picture, so the chord shape is shown rather than hidden (user asked for it explicitly). Host test seq3; DEVICE-TEST-PLAN section 21. Image 563960 B of 581564.

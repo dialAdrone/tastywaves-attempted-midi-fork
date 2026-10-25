@@ -76,6 +76,9 @@ typedef struct {
     uint8_t seq_mod[32];                        /* SEQ picture, MOD set: the lane, 0..127 (64 = neutral) */
     uint8_t seq_set, seq_cur;                   /* SEQ picture: the MOD set is shown; the lane step being edited */
     uint8_t seq_tr;                             /* SEQ picture: a key is held, the notes shown are transposed */
+    uint8_t chord, chord_root, chord_oct;       /* SEQ CHORD picture: CHORD (0 off 1 held 2.. a shape), the root's key on the keyboard (0..11), the keyboard's octave */
+    uint32_t chord_keys;                        /* SEQ CHORD picture: bit k = key k of the two octaves sounds */
+    char chord_name[16];                        /* SEQ CHORD picture: "C MAJ7", "HOLD KEYS", "OFF" */
     char boot[2][32];                           /* GLO INFO (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
     char ver[24];                               /* GLO INFO: "VAVEWAVE " + the firmware version */
     uint8_t volume, fvel, glide, pbr;           /* SEL pictures: volume, velocity > cutoff, glide 0..127, bend range 0..24 */
@@ -757,6 +760,31 @@ static void ui_edit_fn(const ui_view_t *v)      /* EDIT: one cycle of the oscill
     ui_wave_in(112, v->wave ? v->wave : v->frames + (uint32_t)v->frame * v->stride, UI_ACC, 1);
 }
 
+static void ui_chord_fn(const ui_view_t *v)     /* SEQ CHORD: the name, two octaves of keys with the chord lit (the root amber), what the arp does with it */
+{
+    static const uint8_t WK[7] = {0, 2, 4, 5, 7, 9, 11}, BK[5] = {1, 3, 6, 8, 10}, BW[5] = {1, 2, 4, 5, 6};    /* white keys; black keys and the white key they sit left of */
+    uint32_t o, j;
+    char t[4];
+    cv_text((240 - text_w(&FONT_L, v->chord_name)) / 2, 0, &FONT_L, v->chord_name, v->chord ? UI_ACC : UI_DIM);
+    for (o = 0; o < 2u; o++) {
+        for (j = 0; j < 7u; j++) {
+            uint32_t k = o * 12u + WK[j];
+            uint16_t c = v->chord_keys >> k & 1u ? (k == v->chord_root ? RGB(255, 200, 90) : UI_ACC) : UI_GRAY;
+            cv_rect(8 + (int32_t)(o * 7u + j) * 16, 38, 15, 56, c);
+        }
+        for (j = 0; j < 5u; j++) {
+            uint32_t k = o * 12u + BK[j];
+            int32_t x = 8 + (int32_t)(o * 7u + BW[j]) * 16 - 6;
+            cv_rect(x - 1, 38, 13, 35, C_BLACK);
+            cv_rect(x, 38, 11, 34, v->chord_keys >> k & 1u ? (k == v->chord_root ? RGB(255, 200, 90) : UI_ACC) : UI_DIM);
+        }
+    }
+    t[0] = 'C'; t[1] = (char)('0' + (v->chord_oct > 9u ? 0u : v->chord_oct)); t[2] = 0;
+    cv_text(10, 76, &FONT_S, t, C_BLACK);
+    cv_text(4, 100, &FONT_S, v->info, UI_TXT);
+    cv_text(4, 116, &FONT_S, v->info2, UI_GRAY);
+}
+
 static uint32_t ui_seq_h(const ui_view_t *v)               /* a hash of the notes shown, for the redraw check */
 {
     uint32_t i, h = 2166136261u;
@@ -929,6 +957,13 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             break;
         case UI_P_ARP: f = ui_arp_fn; pk = (0x20000000u | v->arp_mode | (uint32_t)v->arp_oct << 4 | (uint32_t)v->arp_gate << 8 | (uint32_t)v->arp_swing << 16) ^ (v->arp_mode == 5u ? v->arp_seed * 2654435761u : 0u); textch = !ui_eq(s->info, v->info); break;
         case UI_P_SEQ:
+            if (v->sub == 2u) {
+                uint32_t c;
+                f = ui_chord_fn; pk = 0x44000000u ^ v->chord_keys ^ (uint32_t)v->chord << 24 ^ (uint32_t)v->chord_root << 27 ^ (uint32_t)v->chord_oct << 20;
+                for (c = 0; c < 16u && v->chord_name[c]; c++) pk = (pk ^ (uint8_t)v->chord_name[c]) * 16777619u;
+                textch = !ui_eq(s->info, v->info) || !ui_eq(s->info2, v->info2);
+                break;
+            }
             pk = v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ v->seq_tie * 2654435761u ^ (uint32_t)v->seq_tr << 8 ^ ui_seq_h(v) ^ 0x40000000u;
             textch = !ui_eq(s->ptxt, v->ptxt) || !ui_eq(s->info, v->info);
             break;

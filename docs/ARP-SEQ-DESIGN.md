@@ -87,6 +87,22 @@ Gate length is a fraction of the step (10..100 %). Notes are always released by 
 ## 12. Built so far (S2: note sequencer), where it differs from the plan
 
 - Pattern is global RAM, 32 steps, one note per step (no per-step velocity input yet: 100), saved with the patch only in S4. Not yet the transposition root C3: held key minus C4 (60), so C4 plays it as recorded; no key held plays it as recorded.
-- Step input: REC short press starts/stops (stop sets the length to the steps entered), PLAY enters a rest, SEQ a tie, hold REC clears. SEQ short press switches the sequencer, hold opens the SEQ page. The sequencer shares RATE / GATE / SWING / TEMPO with the arp and bypasses it while on.
+- Step input: REC short press starts/stops (stop sets the length to the steps entered), PLAY enters a rest, SEQ a tie, hold REC clears. SEQ short press switches the sequencer, hold opens the SEQ page. The sequencer shares RATE / GATE / SWING / TEMPO with the arp and bypasses it while on. (Superseded 2026-10-25: with the arp on, the arp plays the sequencer, see "SEQ + ARP, CHORD" below.)
 - The first quick pass had a diagnostic readout on the ARP page; removed after device confirmation.
+
+## SEQ + ARP, CHORD (2026-10-25)
+
+User request: ARP on while SEQ plays did nothing (the sequencer bypassed the arp). Now:
+
+- P_CHORD (appended after the FX parameters; older records load it as 0 = OFF), on a third SEQ tab CHORD with ARP (mode) and OCT.
+  Values: OFF (the step's note alone, as before), HELD (the keys held or latched give the shape; the lowest key transposes, so
+  C4 plays as recorded), MAJ MIN 7 MAJ7 MIN7 SUS4 (fixed shapes on the step's note; the newest held key transposes, as before).
+- ARP off: a step plays its chord as a block, a step a RATE (CHORD OFF = the old sequencer exactly).
+- ARP on (timing option A, user choice): a step lasts one beat (96 sub-ticks); the step's chord becomes the arp's notes and the
+  arp plays them at RATE with its MODE, OCT, GATE and SWING, from the start of the pattern each step (a tied step goes on with the
+  chord before, a rest is silent). 1/16 gives 4 arp notes a step; a 4-step pattern is one bar. The mod lane follows the beat.
+- ARP alone, SEQ alone with CHORD OFF and LATCH are unchanged. Changing the patch while SEQ plays keeps CHORD (as the arp).
+- The CHORD picture shows the chord the step playing sounds (step 1 when stopped, C4 with no pattern): its name, two octaves
+  of keys with the chord lit (root amber), and what the arp does. HELD names what the keys hold (MAJ MIN 7 MAJ7 MIN7 SUS4 SUS2
+  DIM AUG 5, else CHORD), so the shape picked out on the small keys is visible.
 

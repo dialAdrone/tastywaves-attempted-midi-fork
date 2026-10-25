@@ -62,14 +62,14 @@ static void preset_apply(uint32_t i)
  * EDIT the sound source (oscillators, mix, filter), FX the effect slots, ENV the two envelopes and the MOD envelope's
  * amounts, LFO, SEL voice and performance control, GLO the device itself (not saved in a patch), ARP, SEQ. */
 enum { F_NONE, F_PCT, F_TIME, F_BIP, F_CENTS, F_FRAMES, F_RATE, F_POS, F_TXT, F_INT, F_LOOK, F_RESET };
-enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_MOD, TX_ONOFF, TX_FXT, TX_LOOK, TX_N };
+enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_MOD, TX_ONOFF, TX_FXT, TX_LOOK, TX_CHORD, TX_N };
 typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
 #define PN_ID_LOOK 0xF0u                        /* not patch parameters: the HOME look (settings), the CPU max / drops reset */
 #define PN_ID_RESET 0xF1u
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 4, 3, 2, 3, 2, 2, 2, 2};   /* HOME EDIT FX ENV LFO SEL GLO ARP SEQ HELP (HELP: two text pages) */
+static const uint8_t NSUB[UI_P_N] = {1, 4, 4, 3, 2, 3, 2, 2, 3, 2};   /* HOME EDIT FX ENV LFO SEL GLO ARP SEQ HELP (HELP: two text pages) */
 static const kdef_t PG[UI_P_N][6][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
@@ -107,18 +107,19 @@ static const kdef_t PG[UI_P_N][6][4] = {
                   {K("SWING", P_ARP_SWING, F_INT, 1, 0), K("TEMPO", P_TEMPO, F_INT, 1, 0), KN, KN}},
     [UI_P_SEQ] = {{K("RATE", P_ARP_RATE, F_TXT, 1, TX_ARATE), K("GATE", P_ARP_GATE, F_PCT, 1, 0), K("SWING", P_ARP_SWING, F_INT, 1, 0),
                    K("TEMPO", P_TEMPO, F_INT, 1, 0)},
-                  {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), K("GLIDE", P_MOD_GLIDE, F_TXT, 1, TX_ONOFF), KN}},       /* set 2: the modulation lane (SELECT picks the step, VALUE is drawn and edited by hand: pn_encoders) */
+                  {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), K("GLIDE", P_MOD_GLIDE, F_TXT, 1, TX_ONOFF), KN},       /* set 2: the modulation lane (SELECT picks the step, VALUE is drawn and edited by hand: pn_encoders) */
+                  {K("CHORD", P_CHORD, F_TXT, 1, TX_CHORD), K("ARP", P_ARP, F_TXT, 1, TX_ARP), K("OCT", P_ARP_OCT, F_INT, 1, 0), KN}},     /* set 3: the chord a step plays, and the arp that plays it */
 };
 
 /* the tabs the strip shows (and HELP lists): a tab is one picture; it holds one or two knob sets (the page button steps
  * through the sets in order, the set tag under the tab says which). TABG: the tab of each set; TABN: the tab names */
 static const uint8_t TABG[UI_P_N][6] = {
     [UI_P_EDIT] = {0, 1, 2, 3}, [UI_P_FX] = {0, 1, 2, 3}, [UI_P_ENV] = {0, 1, 2}, [UI_P_LFO] = {0, 0},
-    [UI_P_SEL] = {0, 1, 2}, [UI_P_GLO] = {0, 1}, [UI_P_ARP] = {0, 0}, [UI_P_SEQ] = {0, 1}, [UI_P_HELP] = {0, 1}};
+    [UI_P_SEL] = {0, 1, 2}, [UI_P_GLO] = {0, 1}, [UI_P_ARP] = {0, 0}, [UI_P_SEQ] = {0, 1, 2}, [UI_P_HELP] = {0, 1}};
 static const char *const TABN[UI_P_N][6] = {
     [UI_P_HOME] = {"HOME"}, [UI_P_EDIT] = {"OSC1", "OSC2", "MIX", "FILTER"}, [UI_P_FX] = {"SLOT1", "SLOT2", "SLOT3", "SLOT4"},
     [UI_P_ENV] = {"AMP", "MOD", "MOD>"}, [UI_P_LFO] = {"LFO"}, [UI_P_SEL] = {"VOICE", "CONTROL", "OUTPUT"}, [UI_P_GLO] = {"SETUP", "INFO"},
-    [UI_P_ARP] = {"ARP"}, [UI_P_SEQ] = {"NOTES", "LANE"}, [UI_P_HELP] = {"HELP", "HELP"}};
+    [UI_P_ARP] = {"ARP"}, [UI_P_SEQ] = {"NOTES", "LANE", "CHORD"}, [UI_P_HELP] = {"HELP", "HELP"}};
 static void pn_tabpos(uint32_t pg, uint32_t sub, uint8_t *tab, uint8_t *ntabs, uint8_t *tset, uint8_t *tsets)   /* where set `sub` sits in the strip */
 {
     uint32_t i, t = TABG[pg][sub], f = sub, n = 0;
@@ -132,7 +133,8 @@ static const char *const TXT[TX_N][8] = {
     {"SINE", "TRI", "SAW", "SQUARE", "S&H"},
     {"OFF", "UP", "DOWN", "UP-DN", "UP-DN2", "RANDOM", "PLAYED", "CHORD"}, {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"},
     {"OFF", "POS", "CUTOFF", "BEND", "DRIVE"}, {"OFF", "ON"}, {"OFF", "CHORUS", "FLANGER", "PHASER", "DELAY", "REVERB"},
-    {"WFALL", "SPECT", "MINI"}};       /* TX_LOOK: UI_H_WATERFALL, UI_H_SPECTRUM, UI_H_MINIMAL */
+    {"WFALL", "SPECT", "MINI"},        /* TX_LOOK: UI_H_WATERFALL, UI_H_SPECTRUM, UI_H_MINIMAL */
+    {"OFF", "HELD", "MAJ", "MIN", "7", "MAJ7", "MIN7", "SUS4"}};      /* TX_CHORD: CH_OFF, CH_HELD, SEQ_CHORD (arp.h) */
 
 /* ---- panel state (main loop only) */
 static struct {
@@ -144,6 +146,7 @@ static struct {
     uint8_t help_from;                          /* the page HELP explains (the one HOME was pressed on) */
     uint8_t clr;                                /* REC held: "CLEAR PATTERN?" asked, REC again clears */
     uint32_t drops_base;                        /* GLO INFO: DROPS counts from here (RESET) */
+    uint8_t held[16];                           /* notes the keys hold or LATCH keeps, 1 bit a note (the main loop sets it each pass): SEQ CHORD shows them */
     uint32_t t_clr;
     uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: the page, hold: on / off); the mode it switches back to */
     uint32_t t_arp, t_arp_tog;                  /* press time; time of the last switch */
@@ -262,8 +265,9 @@ static void pn_load_raw(uint32_t i, const app_set_t *st)
  * while an arp plays does not stop it. A patch saved with an arp mode brings its own. */
 static void pn_load(uint32_t i, const app_set_t *st)
 {
-    int32_t arp = patch_get(P_ARP), seq = patch_get(P_SEQ);
+    int32_t arp = patch_get(P_ARP), seq = patch_get(P_SEQ), chord = patch_get(P_CHORD);
     pn_load_raw(i, st);
+    if (seq) { patch_set(P_CHORD, chord); pn.base[P_CHORD] = (int16_t)chord; }      /* (the chord of the tune playing stays, as the arp) */
     if (seq && patch_get(P_ARP) != arp) { patch_set(P_ARP, arp); pn.base[P_ARP] = (int16_t)arp; }       /* the sequencer plays: the arp stays as it was (a patch's own arp does not come on under it) */
     else if (arp && !patch_get(P_ARP)) { patch_set(P_ARP, arp); pn.base[P_ARP] = (int16_t)arp; }
     if (seq && !patch_get(P_SEQ)) { patch_set(P_SEQ, seq); pn.base[P_SEQ] = (int16_t)seq; }
@@ -724,6 +728,7 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
         pn_hl(v->help[l++], "REC", "STEP INPUT ON / OFF");
         pn_hl(v->help[l++], "HOLD REC", "CLEAR (REC AGAIN)");
         pn_hl(v->help[l++], "LANE", "SELECT PICKS THE STEP");
+        pn_hl(v->help[l++], "ARP ON", "ARPEGGIATES EACH STEP");
         break;
     default: break;
     }
@@ -731,6 +736,57 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
         pn_hl(v->help[l++], "ALGORITHM", "CHANGES WAVETABLE");
         pn_hl(v->help[l++], "SELECT", "MOVES IN WAVETABLE");
     }
+}
+
+/* ---- SEQ CHORD: the chord the step playing sounds (or step 1's when stopped; C4 with no pattern), on two octaves of keys from
+ * the C under its root, named; HELD names what the keys hold (lowest = root) */
+static void pn_chord_view(ui_view_t *v)
+{
+    static const char NN[12][3] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
+    static const uint16_t CM[10] = {0x091, 0x089, 0x491, 0x891, 0x489, 0x0A1, 0x085, 0x049, 0x111, 0x081};      /* the intervals as bits, within an octave */
+    static const char *const CNM[10] = {"MAJ", "MIN", "7", "MAJ7", "MIN7", "SUS4", "SUS2", "DIM", "AUG", "5"};
+    uint32_t ch = (uint32_t)patch_get(P_CHORD), k, iv = 1u, nh = 0, m12 = 0, len = sq.rec ? 0u : sq.len, i;
+    int32_t lo = -1, r = 60, base;
+    char *d = v->chord_name;
+    for (k = 0; k < 128u; k++)
+        if (pn.held[k >> 3] >> (k & 7u) & 1u) {
+            if (lo < 0) lo = (int32_t)k;
+            if (k - (uint32_t)lo < 32u) iv |= 1u << (k - (uint32_t)lo);
+            m12 |= 1u << ((k - (uint32_t)lo) % 12u);
+            nh++;
+        }
+    if (ch == CH_HELD && lo >= 0) r = lo;
+    if (len) {                                  /* the step playing, or the next one that sounds */
+        i = sq_tap.on && sq_tap.step < len ? sq_tap.step : 0u;
+        for (k = 0; k < len && !sq.vel[(i + k) % len]; k++) {}
+        if (k < len) {
+            i = (i + k) % len;
+            r = (int32_t)sq.note[i] + (ch == CH_HELD && lo >= 0 ? lo - 60 : qs.trans);
+        }
+    }
+    if (ch != CH_HELD) iv = 1u;
+    if (ch >= CH_FIX && ch < CH_FIX + 6u) for (k = 0; k < 3u; k++) if (SEQ_CHORD[ch - CH_FIX][k]) iv |= 1u << SEQ_CHORD[ch - CH_FIX][k];
+    r = r < 0 ? 0 : r > 127 ? 127 : r;
+    base = r - r % 12;
+    v->chord = (uint8_t)ch;
+    v->chord_root = (uint8_t)(r - base);
+    v->chord_keys = (iv << (r - base)) & 0xFFFFFFu;
+    v->chord_oct = (uint8_t)(base / 12 - 1);
+    if (ch == CH_OFF) ui_copy(d, "OFF", 16);
+    else if (ch == CH_HELD && !nh) ui_copy(d, "HOLD KEYS", 16);
+    else {
+        d = ui_cat(d, NN[r % 12]);
+        if (ch == CH_HELD) {
+            for (k = 0; k < 10u && CM[k] != m12; k++) {}
+            if (nh > 1u) { d = ui_cat(d, " "); ui_cat(d, k < 10u ? CNM[k] : "CHORD"); }
+        } else { d = ui_cat(d, " "); ui_cat(d, TXT[TX_CHORD][ch]); }
+    }
+    d = v->info;                                /* what the arp does with it */
+    if (patch_get(P_ARP)) { d = ui_cat(d, "ARP "); d = ui_cat(d, TXT[TX_ARP][patch_get(P_ARP)]); d = ui_cat(d, "  OCT "); ui_num(d, patch_get(P_ARP_OCT)); }
+    else ui_cat(d, ch ? "ARP OFF: PLAYED AS A CHORD" : "ARP OFF: THE NOTE ALONE");
+    d = v->info2;
+    if (patch_get(P_ARP)) { d = ui_cat(d, "A STEP A BEAT, ARP AT "); ui_cat(d, TXT[TX_ARATE][patch_get(P_ARP_RATE)]); }
+    else ui_cat(d, ch == CH_HELD ? "LOWEST KEY TRANSPOSES" : ch ? "HELD KEY TRANSPOSES" : "TURN CHORD FOR A CHORD");
 }
 
 /* ---- the view (ui_screens.h reads it): everything the screen shows, from the patch and the page */
@@ -892,7 +948,8 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             ui_copy(v->ptxt, sq.rec ? "RECORD" : !sq.len ? "EMPTY" : patch_get(P_SEQ) && sq_run ? "PLAY" : "STOP", 8);
             if (pn.sub == 1u) ui_copy(v->ptxt, TXT[TX_MOD][patch_get(P_MOD)], 8);           /* the lane: its target, big */
 
-            if (pn.sub == 1u) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)(pn.mstep < 32u ? pn.mstep : 31u) + 1); d = ui_cat(d, "  SELECT KNOB MOVES"); }
+            if (pn.sub == 2u) pn_chord_view(v);
+            else if (pn.sub == 1u) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)(pn.mstep < 32u ? pn.mstep : 31u) + 1); d = ui_cat(d, "  SELECT KNOB MOVES"); }
             else if (sq.rec) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, "/32  PLAY=REST SEQ=TIE"); }
             else if (!sq.len) ui_cat(d, "NO PATTERN: PRESS REC");
             else { d = ui_cat(d, "LEN "); d = ui_num(d, sq.len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }

@@ -14,6 +14,7 @@ build/host/vavewave build/host/arp5 tests/scripts/arp5.txt > build/host/arp5.log
 build/host/vavewave build/host/arp6 tests/scripts/arp6.txt > build/host/arp6.log
 build/host/vavewave build/host/seq tests/scripts/seq.txt > build/host/seq.log
 build/host/vavewave build/host/seq2 tests/scripts/seq2.txt > build/host/seq2.log
+build/host/vavewave build/host/seq3 tests/scripts/seq3.txt > build/host/seq3.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re
@@ -79,6 +80,16 @@ check(any(1000 < t < 1900 and k == 'on' for t, k, n in q2), 'PLAY on the SEQ pag
 check(not any(2150 < t < 2950 and k == 'on' for t, k, n in q2), 'PLAY on the SEQ page stops it')
 check(any(3000 < t < 3500 and k == 'on' for t, k, n in q2), 'PLAY starts it again')
 check(any(3700 < t < 4600 and k == 'on' for t, k, n in q2), 'on another page PLAY is LATCH: the pattern goes on')
+q3 = [(t, n) for t, k, n in load('build/host/seq3.log') if k == 'on']
+w = lambda a, b: [n for t, n in q3 if a <= t < b]
+check(w(990, 1490) == [53, 57, 60, 53] and w(1490, 1990) == [60, 64, 67, 60], 'SEQ + ARP UP + CHORD MAJ: a step a beat, its triad arpeggiated at 1/16 (%s %s)' % (w(990, 1490), w(1490, 1990)))
+check(w(2995, 3990) and set(w(2995, 3990)) <= {53, 60} and len(w(2995, 3490)) == 4, 'SEQ + ARP, CHORD OFF: the step note alone, repeated (%s)' % w(2995, 3990))
+grp = {}
+for t, n in q3:
+    if 4000 <= t < 4990: grp.setdefault(t, []).append(n)
+check(len(grp) >= 6 and all(sorted(g) in ([53, 57, 60], [60, 64, 67]) for g in grp.values()), 'SEQ, ARP off, CHORD MAJ: block chords a 1/16 (%d)' % len(grp))
+check(w(5000, 5500)[:3] == [46, 50, 53] and set(w(5000, 6490)) <= {46, 50, 53, 57, 60}, 'CHORD HELD (F3 A3 C4): the lowest key transposes (-7), the others give the shape (%s)' % w(5000, 6000))
+check(w(6550, 7000) and set(w(6550, 7000)) <= {53, 60}, 'keys up: HELD with no keys plays the note alone (%s)' % w(6550, 7000))
 print('arp panel: %d failures' % fails)
 raise SystemExit(1 if fails else 0)
 PY

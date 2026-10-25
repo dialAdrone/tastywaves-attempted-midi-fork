@@ -331,6 +331,8 @@ static void app_main(void)
             cpu = (eng_cpu_permille() + 5u) / 10u;
             cpu_mx = (t * 1000u / AUDIO_BUDGET_TICKS + 5u) / 10u;
         }
+        for (k = 0; k < 16u; k++) pn.held[k] = lat[k];                  /* what the keys hold and LATCH keeps (SEQ CHORD shows it) */
+        for (k = 0; k < 27u; k++) if (started >> k & 1u) pn.held[held[k] >> 3] |= (uint8_t)(1u << (held[k] & 7u));
         pn_view_fill(cpu, cpu_mx, eng_voices_busy(), fm1_ms < pn.t_flash);
         pn_view.latch = latch;
         ui_draw(&pn_view, &pn_shadow);          /* redraws only what changed */

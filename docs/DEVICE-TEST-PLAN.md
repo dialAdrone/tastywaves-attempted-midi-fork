@@ -362,3 +362,22 @@ Supersedes the page and tab names in sections 12-19 where they differ (FX FILT i
 | 20.16 | Hold HOME on each page | the help lists the new tabs and knobs; nothing runs off the screen |
 | 20.17 | Load a few factory and user patches, compare by ear with before | they sound the same (only the panel moved, not the patch) |
 
+
+## 21. SEQ + ARP together, CHORD (SEQ page, CHORD tab)
+
+Before: ARP on while SEQ played did nothing (the sequencer bypassed the arp). Now the arp plays each step. ARP alone, SEQ alone and LATCH are unchanged while CHORD is OFF.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 21.1 | Record a pattern of a few notes; press SEQ until CHORD (third tab) | knobs CHORD ARP OCT; the picture shows the chord name, two octaves of keys, what the arp does |
+| 21.2 | CHORD OFF, ARP OFF; PLAY | the pattern plays exactly as before |
+| 21.3 | Turn CHORD to MAJ, MIN, 7, MAJ7, MIN7, SUS4 while it plays | each step plays that chord on its note (block chord, a step a RATE); the name and the lit keys follow the step playing (root amber) |
+| 21.4 | Turn ARP to UP (or press-hold the ARP button) | each step now lasts one beat and its chord is arpeggiated at RATE (1/16: 4 notes a step); a 4-step pattern is one bar |
+| 21.5 | Try ARP DOWN, RANDOM, CHORD and OCT 2-3 | the arp's mode and octaves apply inside each step |
+| 21.6 | CHORD OFF with ARP on | each step's note alone, repeated at RATE (with OCT 2+: up the octaves) |
+| 21.7 | CHORD HELD; latch or hold three keys (e.g. C E G) | the name shows the shape (C MAJ); each step plays that shape on its note; the lowest key transposes (C4 = as recorded) |
+| 21.8 | CHORD HELD, no keys | the picture says HOLD KEYS; the steps play their note alone |
+| 21.9 | A held key with CHORD MAJ (not HELD) | the newest key transposes as before; the chord stays MAJ |
+| 21.10 | Change the patch while SEQ + CHORD play | the chord stays (as the arp does) |
+| 21.11 | SAVE a patch with CHORD set, load another, load it back | CHORD comes back; older patches load with CHORD OFF |
+| 21.12 | ARP alone (SEQ off), with LATCH | as before: CHORD has no effect without the sequencer |

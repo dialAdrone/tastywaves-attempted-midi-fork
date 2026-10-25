@@ -68,13 +68,14 @@ enum {
     P_ARP_GATE,     /* note length 1..127 of 128 of a step */
     P_ARP_SWING,    /* 0..50 % of a step: the odd steps are late */
     P_TEMPO,        /* BPM 40..240 (the arp and the sequencers; follows MIDI clock when there is one) */
-    P_SEQ,          /* 0 off, 1 the note sequencer plays (the arp is bypassed) */
+    P_SEQ,          /* 0 off, 1 the note sequencer plays (with the arp on: the arp plays each step's chord, a step a beat) */
     P_MOD,          /* modulation lane target: 0 off, 1 table position, 2 cutoff, 3 BEND, 4 drive */
     P_MOD_DEPTH,    /* -100..100 % of the target's range for a lane value at its extreme */
     P_MOD_GLIDE,    /* 1: the value slides to the next step's over the step (else it jumps; the smoother rounds the edge) */
     /* effects chain (fx.h): 4 slots in series, each TYPE (0 off, 1 chorus, 2 flanger, 3 phaser, 4 delay, 5 reverb), A, B (meaning by type), MIX */
     P_FX1_TYPE, P_FX1_A, P_FX1_B, P_FX1_MIX, P_FX2_TYPE, P_FX2_A, P_FX2_B, P_FX2_MIX,
     P_FX3_TYPE, P_FX3_A, P_FX3_B, P_FX3_MIX, P_FX4_TYPE, P_FX4_A, P_FX4_B, P_FX4_MIX,
+    P_CHORD,        /* the sequencer's chord on each step: 0 off (the note alone), 1 the held keys' shape, 2 maj 3 min 4 7 5 maj7 6 min7 7 sus4 (arp.h) */
     P_COUNT
 };
 
@@ -101,6 +102,7 @@ static const pdesc_t PDESC[P_COUNT] = {
     {"FXT", 0, 5, 0},      {"FXA", 0, 127, 64},   {"FXB", 0, 127, 64},   {"FXMIX", 0, 127, 64},
     {"FXT", 0, 5, 0},      {"FXA", 0, 127, 64},   {"FXB", 0, 127, 64},   {"FXMIX", 0, 127, 64},
     {"FXT", 0, 5, 0},      {"FXA", 0, 127, 64},   {"FXB", 0, 127, 64},   {"FXMIX", 0, 127, 64},
+    {"CHORD", 0, 7, 0},
 };
 
 static struct { volatile int32_t p[P_COUNT]; } patch;                       /* main writes */
