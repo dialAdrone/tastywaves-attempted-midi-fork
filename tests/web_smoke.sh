@@ -8,7 +8,7 @@ CHROME="${CHROME:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}"
 [ -x "$CHROME" ] || { echo "skip: no Chrome"; exit 0; }
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo "$PWD/.venv/bin/python" || echo python3 )}"
 D=$(mktemp -d); trap 'kill $SRV 2>/dev/null; rm -rf "$D"' EXIT
-for f in app.js convert.js vwlink.js; do ln -s "$PWD/tools/web/$f" "$D/$f"; done
+for f in app.js convert.js vwlink.js logo.svg; do ln -s "$PWD/tools/web/$f" "$D/$f"; done
 "$PY" tests/make_web_inputs.py "$D"
 cp tests/web_smoke_shim.js "$D/shim.js"
 sed 's|<script type="module" src="app.js"></script>|<script type="module" src="shim.js"></script><script type="module" src="app.js"></script><script type="module" src="auto.js"></script>|' tools/web/index.html > "$D/index.html"
