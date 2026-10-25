@@ -337,3 +337,28 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 19.39 | ARP RANDOM: hold a chord, release, hold again | the ARP picture changes with each new chord, matching the new order |
 | 19.40 | Turn any knob on a loaded patch | SAVE lights steadily (no blinking); SAVE: off again |
 | 19.18 | Turn a knob fast on FX FILT while playing | the picture keeps up (at most ~16 redraws a second); notes do not stutter |
+
+## 20. Navigation U2: the page map (docs/UI-NAV-PLAN.md section 3)
+
+Supersedes the page and tab names in sections 12-19 where they differ (FX FILT is now EDIT FILTER, the GLO tabs moved to SEL).
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 20.1 | Press EDIT four times | OSC1, OSC2, MIX, FILTER, then OSC1; knobs: POS SEMI FINE LEVEL (OSC1/2), SUB NOISE BEND BEND> (MIX), CUTOFF RESO MODE KEYTRK (FILTER) |
+| 20.2 | OSC1: turn SEMI; OSC2: turn SEMI | the pitch moves in semitones (-24..+24) for that oscillator only |
+| 20.3 | MIX: turn SUB, NOISE, BEND, BEND> | the level bars follow; BEND bends the sine on the right; BEND> lights OSC1 / OSC2 / both |
+| 20.4 | FILTER: turn CUTOFF, RESO, MODE | the curve and the frequency label follow (as 19.14, 19.20) |
+| 20.5 | Press FX four times | SLOT1..SLOT4, the chain shows the slot filled; no filter tab on FX |
+| 20.6 | Press ENV three times | AMP, MOD (the 2nd envelope), MOD> (>CUT >POS >BEND CURVE); MOD> shows the routes: thicker = more, amber = negative |
+| 20.7 | MOD>: turn >CUT up, play | the filter opens with the MOD envelope (it was FENV on FX) |
+| 20.8 | Press SEL three times | VOICE (MODE GLIDE PB RNG QUAL), CONTROL (the wheel / aftertouch / velocity routes), OUTPUT (VOLUME DRIVE VEL>CUT) |
+| 20.9 | VOICE: turn GLIDE, PB RNG | the glide slope gets longer; the bend range bar grows |
+| 20.10 | OUTPUT: turn VOLUME, DRIVE, VEL>CUT | the drive curve gets taller with volume, rounder with drive; the velocity line gets steeper |
+| 20.11 | Press GLO: SETUP; turn LOOK | WATERFALL / SPECTRUM / MINIMAL lit in turn; go HOME: that look is shown |
+| 20.12 | Power off and on | the look chosen on SETUP is kept |
+| 20.13 | On HOME press HOME | nothing changes (the look stays) |
+| 20.14 | GLO INFO: read it; turn RESET | firmware version, CPU MAX, DROPS, boot keys; RESET starts CPU MAX and DROPS over |
+| 20.15 | Hold EDIT, press a black key | it plays the note (the old OSC shortcut is gone) |
+| 20.16 | Hold HOME on each page | the help lists the new tabs and knobs; nothing runs off the screen |
+| 20.17 | Load a few factory and user patches, compare by ear with before | they sound the same (only the panel moved, not the patch) |
+

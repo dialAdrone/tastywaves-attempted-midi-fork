@@ -172,7 +172,7 @@ static void app_main(void)
     if (set.slot != pn.slot) { set.slot = pn.slot; dirty = 1; t_change = fm1_ms; }   /* a user patch that is gone: patch 1 */
 
     for (;;) {
-        uint32_t keys, down, up, rel, b, hb, lit, base, edit_held, m, save_shown, rec_pass;
+        uint32_t keys, down, up, rel, b, hb, lit, base, m, save_shown, rec_pass;
         uint8_t st, d1, d2;
         platform_poll();
         if (pl_link_dirty) {                    /* the computer wrote or deleted patches (patchlink.h): the names the panel shows */
@@ -202,7 +202,6 @@ static void app_main(void)
         }
 
         hb = fm1_in.buttons;                    /* held now */
-        edit_held = hb >> BTN_EDIT & 1u;
         b = fm1_input_edges(&rel);              /* pressed since the last pass */
         {   int shift = 0;
             if (b & (1u << BTN_OCT_DOWN) && set.oct > -2) { set.oct--; shift -= 12; dirty = 1; t_change = fm1_ms; }
@@ -291,9 +290,7 @@ static void app_main(void)
         base = (uint32_t)(KEY0 + 12 * set.oct);
         for (k = 0; k < 27u; k++) {             /* (a key stops the note it started: the octave may change meanwhile) */
             if (down >> k & 1u) {
-                int chip = k == 1u ? 0 : k == 3u ? 1 : k == 5u ? 2 : k == 8u ? 3 : -1;   /* the OP1..OP4 black keys */
-                if (edit_held && chip >= 0) pn_goto(UI_P_EDIT, (uint32_t)chip);
-                else if (latch && !rec_pass) {    /* latched: the same note again lets it go; the key's release does nothing */
+                if (latch && !rec_pass) {    /* latched: the same note again lets it go; the key's release does nothing */
                     uint32_t n = base + k;
                     if (lat[n >> 3] >> (n & 7u) & 1u) { lat[n >> 3] &= (uint8_t)~(1u << (n & 7u)); stop((uint8_t)n); midi_send(0x80, n, 0); }
                     else { lat[n >> 3] |= (uint8_t)(1u << (n & 7u)); play((uint8_t)n, 100); midi_send(0x90, n, 100); }
@@ -308,6 +305,7 @@ static void app_main(void)
         }
 
         pn_encoders();
+        if (pn.look != set.look) { set.look = pn.look; dirty = 1; t_change = fm1_ms; }     /* GLO SETUP turned the HOME look: saved with the settings */
         fx_sync();
         if (pn.browse_pend && fm1_ms - pn.t_browse >= 400u) {   /* the patch name turned, then 400 ms of quiet */
             pn_load(pn.browse, &set);
@@ -343,10 +341,7 @@ static void app_main(void)
             if (sq.cur < 27u && fm1_ms >> 8 & 1u) lit |= 1u << sq.cur;
         } else if (pn.page == UI_P_SEQ && sq_tap.on && sq.len && sq_tap.step < 27u) lit = 1u << sq_tap.step;      /* the SEQ page: the step playing */
         for (k = 0; k < 27u; k++) {
-            uint32_t on = lit >> k & 1u;
-            if (edit_held && (k == 1u || k == 3u || k == 5u || k == 8u))     /* the oscillator chips */
-                on = pn.sub == (k == 1u ? 0u : k == 3u ? 1u : k == 5u ? 2u : 3u);
-            fm1_led_key(KEY_LED(k), (int)on);
+            fm1_led_key(KEY_LED(k), (int)(lit >> k & 1u));
         }
         m = ui_button_leds(&pn_view, fm1_ms >> 8 & 1u);
         if (fm1_ms < pn.t_flash) m |= 1u << BTN_SAVE;

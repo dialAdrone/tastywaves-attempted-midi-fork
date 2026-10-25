@@ -31,13 +31,20 @@ Tests: `tests/run_panel.sh` (the real app, `tests/scripts/panel_ui.txt` -> `buil
 | y 202 | status line (14 rows): left = what this is (table + frame, or page + tab n/N), right = `V 5/12 CPU 29%` (voices sounding / 12; CPU red above 80 %) |
 | y 218 | patch name, FONT_M, centred (`001 BRIGHT PAD`); a lilac tick at the left edge while the patch differs from what was loaded / saved; `SAVED` for 0.9 s after SAVE. The minimal HOME look keeps it big (FONT_L) |
 
-Pictures: EDIT the oscillator's wave (2 px line) and the position bar; FX FILT the filter response with the cutoff as a white
-line and its frequency (`2.5K`), the envelope's reach as an arrow; FX1-FX4 the chain of four slots (the one shown filled) and where delay and reverb
-are; ENV the envelope of the tab shown; LFO two cycles of the shape; SEL a panel per knob (MODE: the 12 voices lit
-while they sound, or one MONO / LEGATO voice; BEND>: OSC1 / OSC2 lit; QUAL: a smooth or coarse cycle; CURVE: a
-straight or exponential decay); GLO OUTPUT the drive curve
-and CPU MAX, CONTROL the wheel / aftertouch / velocity routes (thicker = more), BOOT the boot key scan; ARP 16 steps of
-the pattern a three-note chord plays (octaves, gate, swing); SEQ the state, the steps and the 4 x 8 grid. A picture
+Pages and pictures (U2 page map, docs/UI-NAV-PLAN.md section 3):
+
+| Page | Tabs (knobs) | Picture |
+| --- | --- | --- |
+| EDIT | OSC1 / OSC2 (POS SEMI FINE LEVEL), MIX (SUB NOISE BEND BEND>), FILTER (CUTOFF RESO MODE KEYTRK) | the oscillator's wave as read and the position bar; the four levels, BEND on a sine, the oscillators it bends; the filter response, the cutoff as a white line with its frequency, the MOD envelope's reach as an arrow |
+| FX | SLOT1-4 (TYPE A B MIX) | the chain of four slots (the one shown filled), where delay and reverb are |
+| ENV | AMP, MOD (ATK DEC SUS REL), MOD> (>CUT >POS >BEND CURVE) | the envelope of the tab; the MOD envelope (with its curve) and its routes, thicker = more, amber = negative |
+| LFO | LFO, 2 sets (SHAPE RATE >POS >PITCH / >CUT >AMP) | the shape, 1 to 8 cycles with RATE |
+| SEL | VOICE (MODE GLIDE PB RNG QUAL), CONTROL (MW>POS MW>VIB AT>CUT VEL>AMP), OUTPUT (VOLUME DRIVE VEL>CUT) | a panel per knob (voices lit while they sound, a glide, the bend range, a smooth / coarse cycle); the wheel / aftertouch / velocity routes; the drive curve at the volume and velocity > cutoff |
+| GLO | SETUP (LOOK: the HOME look, a setting), INFO (RESET) | the three looks, the chosen one filled; firmware, CPU MAX and DROPS since RESET, the boot key scan |
+| ARP | ARP, 2 sets (MODE RATE OCT GATE / SWING TEMPO) | 16 steps of the pattern a three-note chord plays (RANDOM from the run's seed) |
+| SEQ | NOTES (RATE GATE SWING TEMPO), LANE (TARGET DEPTH GLIDE VALUE) | the state, the steps and the 4 x 8 grid |
+
+HOME on HOME does nothing (the look is GLO SETUP). The EDIT + black key and EDIT + HOME shortcuts are gone. A picture
 that keeps changing (a knob turning) is redrawn at most every 60 ms.
 
 FONT_S is 8 px/char, FONT_M 12, FONT_L 16: a column holds 7 / 4 / 3 characters, the patch line 15 (FONT_M) — 20 fit, names are 15. Lower case is folded to

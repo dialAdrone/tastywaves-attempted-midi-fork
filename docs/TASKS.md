@@ -178,3 +178,7 @@ small enough for one agent in one pass. Newest decisions go in the Log at the bo
   acceleration by rate, help per page, ARP RANDOM seeding and picture, steady SAVE LED). Skipped by choice: 19.28 (GLO BOOT live button
   readout: a page button there leaves the page; dev-only, not fixed). Open: the retrigger click on fast same-note presses (DROPS stayed 0
   in 19.24, so not the overload guard; not reproduced on the host). Next per docs/UI-NAV-PLAN.md: U2 (page map), the rest of U3, U4 options.
+
+- **U2 page map (2026-10-24, in code, not on the device yet):** EDIT OSC1 / OSC2 (with SEMI) / MIX / FILTER, FX the four slots, ENV AMP / MOD / MOD>,
+  SEL VOICE / CONTROL / OUTPUT, GLO SETUP (HOME look, a setting) / INFO (CPU MAX, DROPS, RESET, boot keys). New pictures: MIX, MOD>, SEL VOICE (glide,
+  bend range), OUTPUT, SETUP, INFO. HOME on HOME does nothing; EDIT shortcuts removed. No patch format or CC change. DEVICE-TEST-PLAN section 20.

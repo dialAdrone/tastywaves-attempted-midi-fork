@@ -58,46 +58,50 @@ static void preset_apply(uint32_t i)
     patch_set(P_LFO_PITCH, p->lpit); patch_set(P_LFO_POS, p->lpos);
 }
 
-/* ---- pages: four fixed knobs per page and set. NSUB[page] sets (EDIT: the four oscillators). */
-enum { F_NONE, F_PCT, F_TIME, F_BIP, F_CENTS, F_FRAMES, F_RATE, F_POS, F_TXT, F_INT };
-enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_MOD, TX_ONOFF, TX_FXT, TX_N };
+/* ---- pages: four fixed knobs per page and set. NSUB[page] sets. The page map (docs/UI-NAV-PLAN.md section 3, U2):
+ * EDIT the sound source (oscillators, mix, filter), FX the effect slots, ENV the two envelopes and the MOD envelope's
+ * amounts, LFO, SEL voice and performance control, GLO the device itself (not saved in a patch), ARP, SEQ. */
+enum { F_NONE, F_PCT, F_TIME, F_BIP, F_CENTS, F_FRAMES, F_RATE, F_POS, F_TXT, F_INT, F_LOOK, F_RESET };
+enum { TX_FMODE, TX_VMODE, TX_BDEST, TX_QUAL, TX_CURVE, TX_LSHAPE, TX_ARP, TX_ARATE, TX_MOD, TX_ONOFF, TX_FXT, TX_LOOK, TX_N };
 typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define K(l, id, f, st, tx) {l, id, f, st, tx}
 #define KN {"-", 0, F_NONE, 0, 0}
+#define PN_ID_LOOK 0xF0u                        /* not patch parameters: the HOME look (settings), the CPU max / drops reset */
+#define PN_ID_RESET 0xF1u
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 6, 2, 2, 1, 3, 2, 2, 2};   /* ... GLO, ARP, SEQ, HELP */   /* HELP: two text pages (PG[HELP] stays empty) */
+static const uint8_t NSUB[UI_P_N] = {1, 4, 4, 3, 2, 3, 2, 2, 2, 2};   /* HOME EDIT FX ENV LFO SEL GLO ARP SEQ HELP (HELP: two text pages) */
 static const kdef_t PG[UI_P_N][6][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
-    [UI_P_EDIT] = {{K("POS", P_POS1, F_POS, 8, 0), K("DETUNE", P_FINE1, F_CENTS, 1, 0), K("LEVEL", P_LEVEL1, F_PCT, 1, 0),
-                    K("BEND", P_WARP, F_BIP, 1, 0)},
-                   {K("POS", P_POS2, F_POS, 8, 0), K("DETUNE", P_FINE2, F_CENTS, 1, 0), K("LEVEL", P_LEVEL2, F_PCT, 1, 0),
-                    K("BEND", P_WARP, F_BIP, 1, 0)},
-                   {KN, KN, K("LEVEL", P_SUB, F_PCT, 1, 0), K("BEND", P_WARP, F_BIP, 1, 0)},
-                   {KN, KN, K("LEVEL", P_NOISE, F_PCT, 1, 0), K("BEND", P_WARP, F_BIP, 1, 0)}},
-    [UI_P_FX] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("FENV", P_FENV, F_BIP, 1, 0),
-                  K("KEYTRK", P_KEYTRK, F_PCT, 1, 0)},
-                 {K("MODE", P_FMODE, F_TXT, 1, TX_FMODE), K("FVEL", P_FVEL, F_PCT, 1, 0), K("E>POS", P_MENV_POS, F_FRAMES, 1, 0),
-                  K("E>BEND", P_MENV_WARP, F_BIP, 1, 0)},
-                 {K("TYPE", P_FX1_TYPE, F_TXT, 1, TX_FXT), K("A", P_FX1_A, F_INT, 1, 0), K("B", P_FX1_B, F_INT, 1, 0), K("MIX", P_FX1_MIX, F_PCT, 1, 0)},
+    [UI_P_EDIT] = {{K("POS", P_POS1, F_POS, 8, 0), K("SEMI", P_SEMI1, F_BIP, 1, 0), K("FINE", P_FINE1, F_CENTS, 1, 0),
+                    K("LEVEL", P_LEVEL1, F_PCT, 1, 0)},
+                   {K("POS", P_POS2, F_POS, 8, 0), K("SEMI", P_SEMI2, F_BIP, 1, 0), K("FINE", P_FINE2, F_CENTS, 1, 0),
+                    K("LEVEL", P_LEVEL2, F_PCT, 1, 0)},
+                   {K("SUB", P_SUB, F_PCT, 1, 0), K("NOISE", P_NOISE, F_PCT, 1, 0), K("BEND", P_WARP, F_BIP, 1, 0),
+                    K("BEND>", P_WARP_DEST, F_TXT, 1, TX_BDEST)},
+                   {K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("MODE", P_FMODE, F_TXT, 1, TX_FMODE),
+                    K("KEYTRK", P_KEYTRK, F_PCT, 1, 0)}},
+    [UI_P_FX] = {{K("TYPE", P_FX1_TYPE, F_TXT, 1, TX_FXT), K("A", P_FX1_A, F_INT, 1, 0), K("B", P_FX1_B, F_INT, 1, 0), K("MIX", P_FX1_MIX, F_PCT, 1, 0)},
                  {K("TYPE", P_FX2_TYPE, F_TXT, 1, TX_FXT), K("A", P_FX2_A, F_INT, 1, 0), K("B", P_FX2_B, F_INT, 1, 0), K("MIX", P_FX2_MIX, F_PCT, 1, 0)},
                  {K("TYPE", P_FX3_TYPE, F_TXT, 1, TX_FXT), K("A", P_FX3_A, F_INT, 1, 0), K("B", P_FX3_B, F_INT, 1, 0), K("MIX", P_FX3_MIX, F_PCT, 1, 0)},
-                 {K("TYPE", P_FX4_TYPE, F_TXT, 1, TX_FXT), K("A", P_FX4_A, F_INT, 1, 0), K("B", P_FX4_B, F_INT, 1, 0), K("MIX", P_FX4_MIX, F_PCT, 1, 0)}},   /* sets 3..6: the effect slots (labels follow the type: pn_view_fill) */
+                 {K("TYPE", P_FX4_TYPE, F_TXT, 1, TX_FXT), K("A", P_FX4_A, F_INT, 1, 0), K("B", P_FX4_B, F_INT, 1, 0), K("MIX", P_FX4_MIX, F_PCT, 1, 0)}},   /* the effect slots (labels follow the type: pn_view_fill) */
     [UI_P_ENV] = {{K("ATK", P_A1, F_TIME, 1, 0), K("DEC", P_D1, F_TIME, 1, 0), K("SUS", P_S1, F_PCT, 1, 0),
                    K("REL", P_R1, F_TIME, 1, 0)},
                   {K("ATK", P_A2, F_TIME, 1, 0), K("DEC", P_D2, F_TIME, 1, 0), K("SUS", P_S2, F_PCT, 1, 0),
-                   K("REL", P_R2, F_TIME, 1, 0)}},
+                   K("REL", P_R2, F_TIME, 1, 0)},
+                  {K(">CUT", P_FENV, F_BIP, 1, 0), K(">POS", P_MENV_POS, F_FRAMES, 1, 0), K(">BEND", P_MENV_WARP, F_BIP, 1, 0),
+                   K("CURVE", P_ECURVE, F_TXT, 1, TX_CURVE)}},          /* set 3: what the MOD envelope moves (CURVE: both envelopes' decay / release) */
     [UI_P_LFO] = {{K("SHAPE", P_LFO_SHAPE, F_TXT, 1, TX_LSHAPE), K("RATE", P_LFO_RATE, F_RATE, 1, 0),
                    K(">POS", P_LFO_POS, F_PCT, 1, 0), K(">PITCH", P_LFO_PITCH, F_PCT, 1, 0)},
                   {K("SHAPE", P_LFO_SHAPE, F_TXT, 1, TX_LSHAPE), K("RATE", P_LFO_RATE, F_RATE, 1, 0),
                    K(">CUT", P_LFO_CUT, F_PCT, 1, 0), K(">AMP", P_LFO_AMP, F_PCT, 1, 0)}},
-    [UI_P_SEL] = {{K("MODE", P_VMODE, F_TXT, 1, TX_VMODE), K("BEND>", P_WARP_DEST, F_TXT, 1, TX_BDEST),
-                   K("QUAL", P_QUALITY, F_TXT, 1, TX_QUAL), K("CURVE", P_ECURVE, F_TXT, 1, TX_CURVE)}},
-    [UI_P_GLO] = {{K("VOLUME", P_VOLUME, F_PCT, 1, 0), K("DRIVE", P_DRIVE, F_PCT, 1, 0), K("GLIDE", P_GLIDE, F_PCT, 1, 0),
-                   K("PB RNG", P_BEND_RANGE, F_INT, 1, 0)},
+    [UI_P_SEL] = {{K("MODE", P_VMODE, F_TXT, 1, TX_VMODE), K("GLIDE", P_GLIDE, F_PCT, 1, 0), K("PB RNG", P_BEND_RANGE, F_INT, 1, 0),
+                   K("QUAL", P_QUALITY, F_TXT, 1, TX_QUAL)},
                   {K("MW>POS", P_MW_POS, F_PCT, 1, 0), K("MW>VIB", P_MW_VIB, F_PCT, 1, 0), K("AT>CUT", P_AT_CUT, F_PCT, 1, 0),
                    K("VEL>AMP", P_VEL_AMP, F_PCT, 1, 0)},
-                  {KN, KN, KN, KN}},            /* set 3: BOOT KEYS (no knobs; ui_boot_pic) */
+                  {K("VOLUME", P_VOLUME, F_PCT, 1, 0), K("DRIVE", P_DRIVE, F_PCT, 1, 0), K("VEL>CUT", P_FVEL, F_PCT, 1, 0), KN}},
+    [UI_P_GLO] = {{K("LOOK", PN_ID_LOOK, F_LOOK, 1, TX_LOOK), KN, KN, KN},
+                  {K("RESET", PN_ID_RESET, F_RESET, 1, 0), KN, KN, KN}},   /* INFO: turning RESET starts CPU MAX and DROPS over */
     [UI_P_ARP] = {{K("MODE", P_ARP, F_TXT, 1, TX_ARP), K("RATE", P_ARP_RATE, F_TXT, 1, TX_ARATE), K("OCT", P_ARP_OCT, F_INT, 1, 0),
                    K("GATE", P_ARP_GATE, F_PCT, 1, 0)},
                   {K("SWING", P_ARP_SWING, F_INT, 1, 0), K("TEMPO", P_TEMPO, F_INT, 1, 0), KN, KN}},
@@ -109,11 +113,11 @@ static const kdef_t PG[UI_P_N][6][4] = {
 /* the tabs the strip shows (and HELP lists): a tab is one picture; it holds one or two knob sets (the page button steps
  * through the sets in order, the set tag under the tab says which). TABG: the tab of each set; TABN: the tab names */
 static const uint8_t TABG[UI_P_N][6] = {
-    [UI_P_EDIT] = {0, 1, 2, 3}, [UI_P_FX] = {0, 0, 1, 2, 3, 4}, [UI_P_ENV] = {0, 1}, [UI_P_LFO] = {0, 0},
-    [UI_P_GLO] = {0, 1, 2}, [UI_P_ARP] = {0, 0}, [UI_P_SEQ] = {0, 1}, [UI_P_HELP] = {0, 1}};
+    [UI_P_EDIT] = {0, 1, 2, 3}, [UI_P_FX] = {0, 1, 2, 3}, [UI_P_ENV] = {0, 1, 2}, [UI_P_LFO] = {0, 0},
+    [UI_P_SEL] = {0, 1, 2}, [UI_P_GLO] = {0, 1}, [UI_P_ARP] = {0, 0}, [UI_P_SEQ] = {0, 1}, [UI_P_HELP] = {0, 1}};
 static const char *const TABN[UI_P_N][6] = {
-    [UI_P_HOME] = {"HOME"}, [UI_P_EDIT] = {"OSC1", "OSC2", "SUB", "NOISE"}, [UI_P_FX] = {"FILT", "FX1", "FX2", "FX3", "FX4"},
-    [UI_P_ENV] = {"AMP", "FILTER"}, [UI_P_LFO] = {"LFO"}, [UI_P_SEL] = {"VOICE"}, [UI_P_GLO] = {"OUTPUT", "CONTROL", "BOOT"},
+    [UI_P_HOME] = {"HOME"}, [UI_P_EDIT] = {"OSC1", "OSC2", "MIX", "FILTER"}, [UI_P_FX] = {"SLOT1", "SLOT2", "SLOT3", "SLOT4"},
+    [UI_P_ENV] = {"AMP", "MOD", "MOD>"}, [UI_P_LFO] = {"LFO"}, [UI_P_SEL] = {"VOICE", "CONTROL", "OUTPUT"}, [UI_P_GLO] = {"SETUP", "INFO"},
     [UI_P_ARP] = {"ARP"}, [UI_P_SEQ] = {"NOTES", "LANE"}, [UI_P_HELP] = {"HELP", "HELP"}};
 static void pn_tabpos(uint32_t pg, uint32_t sub, uint8_t *tab, uint8_t *ntabs, uint8_t *tset, uint8_t *tsets)   /* where set `sub` sits in the strip */
 {
@@ -127,7 +131,8 @@ static const char *const TXT[TX_N][8] = {
     {"LP", "BP", "HP"}, {"POLY", "MONO", "LEGATO"}, {"BOTH", "OSC1", "OSC2"}, {"HI", "ECO"}, {"LIN", "EXP"},
     {"SINE", "TRI", "SAW", "SQUARE", "S&H"},
     {"OFF", "UP", "DOWN", "UP-DN", "UP-DN2", "RANDOM", "PLAYED", "CHORD"}, {"1/4", "1/8", "1/8T", "1/16", "1/16T", "1/32"},
-    {"OFF", "POS", "CUTOFF", "BEND", "DRIVE"}, {"OFF", "ON"}, {"OFF", "CHORUS", "FLANGER", "PHASER", "DELAY", "REVERB"}};
+    {"OFF", "POS", "CUTOFF", "BEND", "DRIVE"}, {"OFF", "ON"}, {"OFF", "CHORUS", "FLANGER", "PHASER", "DELAY", "REVERB"},
+    {"WFALL", "SPECT", "MINI"}};       /* TX_LOOK: UI_H_WATERFALL, UI_H_SPECTRUM, UI_H_MINIMAL */
 
 /* ---- panel state (main loop only) */
 static struct {
@@ -138,6 +143,7 @@ static struct {
     uint8_t tab[UI_P_N];                        /* the tab each page shows when it opens again (this session only, not saved) */
     uint8_t help_from;                          /* the page HELP explains (the one HOME was pressed on) */
     uint8_t clr;                                /* REC held: "CLEAR PATTERN?" asked, REC again clears */
+    uint32_t drops_base;                        /* GLO INFO: DROPS counts from here (RESET) */
     uint32_t t_clr;
     uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: the page, hold: on / off); the mode it switches back to */
     uint32_t t_arp, t_arp_tog;                  /* press time; time of the last switch */
@@ -153,8 +159,6 @@ static struct {
 static ui_view_t pn_view;
 static ui_shadow_t pn_shadow;
 
-/* the look order HOME cycles: spectrum (2) -> waterfall (1) -> minimal (3) -> spectrum */
-static const uint8_t LOOK_NEXT[UI_H_N] = {UI_H_MINIMAL, UI_H_WATERFALL, UI_H_SPECTRUM};
 
 /* The note pattern and the mod lane go into a patch record as pattern words (patchlog.h): word 0 the length (1..32), then a word per
  * step: note (bits 0-6), sounds (7; clear = rest), tied (8), lane value + 64 (9-15). Only a patch saved with the sequencer on and a
@@ -347,19 +351,18 @@ static void pn_fmt(char *d, const kdef_t *k, int32_t v)
 static uint32_t pn_edit_wave(uint32_t sub)
 {
     uint32_t i, key;
-    if (sub >= 2u) {
-        static uint32_t seed = 12345u;
-        key = 0x80000000u | sub;
-        if (key == pn.wave_key) return key;
+    if (sub >= 2u) {                            /* MIX: a sine through the BEND map (what BEND does to a cycle); FILTER: nothing */
+        int32_t warp = patch_get(P_WARP);
+        key = 0x80000000u | sub | (uint32_t)(warp & 127) << 8;
+        if (key == pn.wave_key || sub != 2u) return key;
         for (i = 0; i < 256u; i++) {
-            if (sub == 2u) {
-                int32_t a = UI_SIN64[i >> 2], b = UI_SIN64[((i >> 2) + 1u) & 63u];
-                int32_t s = (a + ((b - a) * (int32_t)(i & 3u) >> 2)) * 2;
-                pn.wave[i] = (int16_t)(s > 32767 ? 32767 : s < -32767 ? -32767 : s);
-            } else {
-                seed = seed * 1664525u + 1013904223u;
-                pn.wave[i] = (int16_t)(((int32_t)(seed >> 16) - 32768) >> 1);
-            }
+            uint32_t ph = i << 24, q, f;
+            int32_t a, b, s;
+            if (warp) ph = eng_warp_preview(ph, warp);
+            q = ph >> 26; f = ph >> 18 & 255u;          /* 64 entries, 8-bit fraction */
+            a = UI_SIN64[q]; b = UI_SIN64[(q + 1u) & 63u];
+            s = (a + ((b - a) * (int32_t)f >> 8)) * 2;
+            pn.wave[i] = (int16_t)(s > 32767 ? 32767 : s < -32767 ? -32767 : s);
         }
         return key;
     } else {
@@ -495,8 +498,7 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
     }
     if (b & 1u << BTN_SEQ) pn_page_btn(UI_P_SEQ);               /* SEQ only opens its page (again: NOTES / LANE); PLAY on that page starts / stops it */
     if (b & 1u << BTN_HOME) {
-        if (held >> BTN_EDIT & 1u) cpu_reset_req++;                 /* the max starts over */
-        else if (pn.page == UI_P_HELP) {                            /* next help page, then out */
+        if (pn.page == UI_P_HELP) {                            /* next help page, then out */
             if (pn.sub + 1u < NSUB[UI_P_HELP]) pn.sub++;
             else { pn.page = UI_P_HOME; pn.sub = 0; pn.touched = 4; }
         } else if (pn.page == UI_P_HOME) {                          /* decided on release: a hold is HELP */
@@ -511,12 +513,7 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
         }
     }
     if (pn.home_arm) {
-        if (!(held >> BTN_HOME & 1u)) {                             /* released: a short press */
-            if (pn.home_arm == 1u) {
-                pn.look = LOOK_NEXT[pn.look % UI_H_N];
-                st->look = pn.look;
-                *dirty = 1;
-            }
+        if (!(held >> BTN_HOME & 1u)) {                             /* released: a short press (on HOME it does nothing: the look is set on GLO SETUP) */
             pn.home_arm = 0;
         } else if (fm1_ms - pn.t_home >= 700u) {                    /* held: the help screens */
             pn.home_arm = 0;
@@ -591,7 +588,9 @@ static void pn_encoders(void)
         const kdef_t *k = &PG[pn.page][pn.sub][i];
         d = fm1_enc_take(ENC_KNOB1 + i);
         if (!d || k->fmt == F_NONE) continue;
-        if (pn.page == UI_P_FX && pn.sub >= 2u && i == 0u) pn_fx_type(k->id, d);    /* an effect slot's TYPE: delay and reverb are used once, the taken one is skipped */
+        if (k->fmt == F_LOOK) { pn.look = (uint8_t)((pn.look + (d > 0 ? 1u : UI_H_N - 1u)) % UI_H_N); }   /* (the main loop saves it in the settings) */
+        else if (k->fmt == F_RESET) { cpu_reset_req++; pn.drops_base = eng_tap.shed_blocks; }
+        else if (pn.page == UI_P_FX && i == 0u) pn_fx_type(k->id, d);    /* an effect slot's TYPE: delay and reverb are used once, the taken one is skipped */
         else patch_add(k->id, (k->fmt == F_TXT ? d : pn_accel_i(ENC_KNOB1 + i, d)) * k->step);
         pn.touched = (uint8_t)i;
     }
@@ -645,7 +644,7 @@ static void pn_hl(char *d, const char *lab, const char *txt)       /* "LABEL  TE
 }
 static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
 {
-    static const char *const PNAME[UI_P_N] = {"HOME", "EDIT: OSCILLATORS", "FX: FILTER, EFFECTS", "ENV: ENVELOPES", "LFO", "SEL: VOICE", "GLO: GLOBAL", "ARP", "SEQ: SEQUENCER", ""};
+    static const char *const PNAME[UI_P_N] = {"HOME", "EDIT: OSC + FILTER", "FX: EFFECTS", "ENV: ENVELOPES", "LFO", "SEL: VOICE, CONTROL", "GLO: SYSTEM", "ARP", "SEQ: SEQUENCER", ""};
     static const char *const BTN[UI_P_N] = {"HOME", "EDIT", "FX", "ENV", "LFO", "SEL", "GLO", "ARP", "SEQ", ""};
     static const char *const GEN[13] = {
         "HELP 2/2  BUTTONS",
@@ -681,7 +680,7 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
         pn_hl(v->help[l++], "ALGORITHM", "CHANGES WAVETABLE");
         pn_hl(v->help[l++], "SELECT", "MOVES IN WAVETABLE");
         pn_hl(v->help[l++], "PRESETS", "CHANGES PATCH");
-        pn_hl(v->help[l++], "HOME AGAIN", "NEXT WAVE VIEW");
+        pn_hl(v->help[l++], "WAVE VIEW", "GLO SETUP: LOOK");
         pn_hl(v->help[l++], "HOLD HOME", "THIS HELP");
         pn_hl(v->help[l++], "PAGE BUTTONS", "EDIT FX ENV LFO");
         pn_hl(v->help[l++], " SEL GLO ARP SEQ", "");
@@ -691,14 +690,15 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
         d = txt;
         for (i = 0; i < 4u; i++) {
             const char *lab = PG[pg][t][i].fmt == F_NONE ? 0 : PG[pg][t][i].lab;
-            if (pg == UI_P_FX && t >= 2u) lab = i ? (i == 3u ? "MIX" : i == 1u ? "A" : "B") : "TYPE";
+            if (pg == UI_P_FX) lab = i ? (i == 3u ? "MIX" : i == 1u ? "A" : "B") : "TYPE";
             if (pg == UI_P_SEQ && t == 1u && i == 3u) lab = "VALUE";
             if (!lab) continue;
             if (d != txt) *d++ = ' ';
             d = ui_cat(d, lab);
         }
-        if (pg == UI_P_GLO && t == 2u) ui_cat(txt, "KEY SCAN AT POWER-ON");
-        if (pg == UI_P_FX && t >= 3u) { if (t == 3u) { pn_hl(v->help[l++], "FX2-FX4", "THE SAME"); } continue; }
+        if (pg == UI_P_GLO && t == 0u) ui_cat(txt, "HOME LOOK");
+        if (pg == UI_P_GLO && t == 1u) ui_cat(txt, "RESET CPU MAX, DROPS");
+        if (pg == UI_P_FX && t >= 1u) { if (t == 1u) { pn_hl(v->help[l++], "SLOT2-4", "THE SAME"); } continue; }
         {   char lab[16];
             uint32_t ll = 0, tl = 0;
             uint8_t tb, nt, ts, nts;
@@ -713,10 +713,11 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
     }
     if (pg != UI_P_HOME && NSUB[pg] > 1u) { d = ui_cat(txt, BTN[pg]); ui_cat(d, " AGAIN"); pn_hl(v->help[l++], txt, "NEXT TAB"); }
     switch (pg) {
-    case UI_P_EDIT: pn_hl(v->help[l++], "ALGORITHM", "TABLE OF THIS OSC"); pn_hl(v->help[l++], "SELECT", "POSITION OF THIS OSC"); pn_hl(v->help[l++], "EDIT+F# G# A# C#", "PICK OSC"); break;
+    case UI_P_EDIT: pn_hl(v->help[l++], "ALGORITHM", "TABLE OF THIS OSC"); pn_hl(v->help[l++], "SELECT", "POSITION OF THIS OSC"); break;
     case UI_P_FX: pn_hl(v->help[l++], "DELAY REVERB", "ONE SLOT EACH"); pn_hl(v->help[l++], "CHAIN", "SLOT 1 > 2 > 3 > 4"); break;
-    case UI_P_ENV: pn_hl(v->help[l++], "FILTER ENV", "ALSO E>POS E>BEND (FX)"); break;
-    case UI_P_GLO: pn_hl(v->help[l++], "EDIT+HOME", "RESET CPU MAX"); break;
+    case UI_P_ENV: pn_hl(v->help[l++], "MOD", "THE 2ND ENVELOPE"); pn_hl(v->help[l++], "MOD>", "WHAT IT MOVES"); break;
+    case UI_P_SEL: pn_hl(v->help[l++], "CONTROL", "WHEEL, AFTERT, VELO"); break;
+    case UI_P_GLO: pn_hl(v->help[l++], "SYSTEM", "NOT SAVED IN A PATCH"); break;
     case UI_P_ARP: pn_hl(v->help[l++], "HOLD ARP", "ARP ON / OFF"); break;
     case UI_P_SEQ:
         pn_hl(v->help[l++], "PLAY", "START / STOP");
@@ -751,7 +752,9 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
     v->cpu_max = (uint8_t)(cpu_max > 255u ? 255u : cpu_max);
     v->modified = (uint8_t)(!pn.browse_pend && pn_modified());
     v->flash = (uint8_t)flash;
-    v->drops = (uint16_t)(eng_tap.shed_blocks > 9999u ? 9999u : eng_tap.shed_blocks);
+    {   uint32_t dr = eng_tap.shed_blocks - pn.drops_base;
+        v->drops = (uint16_t)(dr > 9999u ? 9999u : dr);
+    }
     v->ms = fm1_ms;
     v->nframes = 32;
     v->stride = (uint16_t)WTG_FRAME_LEN;
@@ -777,6 +780,13 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         int32_t val;
         v->klabel[i] = k->lab;
         if (k->fmt == F_NONE) { v->kval[i][0] = 0; v->kfrac[i] = 0; continue; }
+        if (k->fmt == F_LOOK) {                 /* GLO SETUP: the HOME look (a setting, not the patch) */
+            ui_copy(v->kval[i], TXT[TX_LOOK][pn.look % UI_H_N], 8);
+            v->kfrac[i] = (uint8_t)(pn.look % UI_H_N * 127u);
+            ksmall |= 1u << i;
+            continue;
+        }
+        if (k->fmt == F_RESET) { ui_copy(v->kval[i], "TURN", 8); v->kfrac[i] = 0; ksmall |= 1u << i; continue; }
         val = patch_get(k->id);
         pn_fmt(v->kval[i], k, val);
         v->kfrac[i] = (uint8_t)(((val - PDESC[k->id].min) * 255) / (PDESC[k->id].max - PDESC[k->id].min));
@@ -796,9 +806,9 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             v->seq_tie = tm; v->seq_tr = 0;
         }
     }
-    if (pn.page == UI_P_FX && pn.sub >= 2u) {           /* an effect slot: the labels follow its type, an empty slot shows nothing */
+    if (pn.page == UI_P_FX) {                           /* an effect slot: the labels follow its type, an empty slot shows nothing */
         static const char *const CN[6][3] = {{"-", "-", "-"}, {"RATE", "DEPTH", "MIX"}, {"RATE", "FEEDBK", "MIX"}, {"RATE", "FEEDBK", "MIX"}, {"TIME", "FEEDBK", "MIX"}, {"SIZE", "DAMP", "MIX"}};
-        uint32_t ty = (uint32_t)patch_get(P_FX1_TYPE + 4u * (pn.sub - 2u)), c;
+        uint32_t ty = (uint32_t)patch_get(P_FX1_TYPE + 4u * pn.sub), c;
         if (ty > 5u) ty = 0;
         for (c = 0; c < 3u; c++) {
             v->klabel[1u + c] = CN[ty][c];
@@ -828,12 +838,12 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         v->wave = pn.wave;
         v->wave_key = pn.wave_key;
     }
-    {   /* GLO set 3: BOOT KEYS, the scan app_main copied at start */
+    {   /* GLO INFO: BOOT KEYS, the scan app_main copied at start */
         static const char HX[] = "0123456789ABCDEF";
         char *d = v->boot[0];
         uint32_t n;
-        v->btn_now = (uint16_t)fm1_in.buttons;
-        if (pn.page == UI_P_GLO && pn.sub == 2u) {
+        ui_cat(ui_cat(v->ver, "VAVEWAVE "), APP_VER);
+        if (pn.page == UI_P_GLO && pn.sub == 1u) {
             d = ui_cat(d, "BTN 0x");
             for (n = 0; n < 4u; n++) *d++ = HX[boot_btn >> (12u - 4u * n) & 15u];
             d = ui_cat(d, " FR ");
@@ -843,7 +853,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             *d = 0;
         }
     }
-    if (pn.page == UI_P_FX || pn.page == UI_P_LFO || pn.page == UI_P_SEL || pn.page == UI_P_GLO || pn.page == UI_P_ARP || pn.page == UI_P_SEQ) {
+    if (pn.page != UI_P_HOME && pn.page != UI_P_HELP) {
         v->flt_cut = (uint8_t)patch_get(P_CUTOFF);
         v->flt_res = (uint8_t)patch_get(P_RESO);
         v->flt_mode = (uint8_t)patch_get(P_FMODE);
@@ -855,10 +865,16 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         v->mod[2] = (uint8_t)patch_get(P_AT_CUT); v->mod[3] = (uint8_t)patch_get(P_VEL_AMP);
         v->vmode = (uint8_t)patch_get(P_VMODE); v->wdest = (uint8_t)patch_get(P_WARP_DEST);
         v->qual = (uint8_t)patch_get(P_QUALITY); v->ecurve = (uint8_t)patch_get(P_ECURVE);
+        v->volume = (uint8_t)patch_get(P_VOLUME); v->fvel = (uint8_t)patch_get(P_FVEL);
+        v->glide = (uint8_t)patch_get(P_GLIDE); v->pbr = (uint8_t)patch_get(P_BEND_RANGE);
+        v->menv[0] = (int8_t)patch_get(P_FENV); v->menv[1] = (int8_t)patch_get(P_MENV_POS); v->menv[2] = (int8_t)patch_get(P_MENV_WARP);
+        v->lvl[0] = (uint8_t)patch_get(P_LEVEL1); v->lvl[1] = (uint8_t)patch_get(P_LEVEL2);
+        v->lvl[2] = (uint8_t)patch_get(P_SUB); v->lvl[3] = (uint8_t)patch_get(P_NOISE);
+        v->warp = (int8_t)patch_get(P_WARP);
         v->arp_mode = (uint8_t)patch_get(P_ARP);
         v->arp_seed = ar.seed; v->arp_oct = (uint8_t)patch_get(P_ARP_OCT);
         v->arp_gate = (uint8_t)patch_get(P_ARP_GATE); v->arp_swing = (uint8_t)patch_get(P_ARP_SWING);
-        if (pn.page == UI_P_FX && pn.sub >= 2u) {      /* the chain of slots; where delay and reverb are */
+        if (pn.page == UI_P_FX) {                      /* the chain of slots; where delay and reverb are */
             uint32_t c;
             for (c = 0; c < 4u; c++) v->fxt[c] = (uint8_t)patch_get(P_FX1_TYPE + 4u * c);
             {   char *e = v->info2;                 /* the once-only effects: where they are, or free */
