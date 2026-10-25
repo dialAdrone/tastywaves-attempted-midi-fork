@@ -5,7 +5,9 @@
 TastyWaves turns the FM-1 into a 12-voice wavetable synth with two oscillators per voice, a resonant filter, two
 envelopes, an LFO, a four-slot effects chain, an arpeggiator and two step sequencers that can play chords and
 counterpoint on one clock. Patches are saved on the device, and a browser tool manages them and loads your own
-wavetables.
+wavetables in four common wavetable formats. The philosophy of TastyWaves is to do one thing well and in depth,
+focusing on intuitive performance and usability, and to provide a rich nuanced sound engine equally useful for
+creating pattern-based music and evolving soundscapes. We aim to be the definitive wavetable synth on the FM-1.
 
 <p align="center">
   <img src="docs/images/splash.gif" width="240" alt="The power-on animation: waves crash and TastyWaves rises out of the splash">
