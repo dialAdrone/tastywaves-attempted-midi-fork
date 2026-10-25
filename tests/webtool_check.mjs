@@ -176,6 +176,11 @@ const dead = new VwLink({ send: async () => true, recv: async () => null, drain(
   const page = JSON.parse(readFileSync('tools/web/app.js', 'utf8').match(/const FACTORY = (\[[^\]]*\])/)[1].replace(/'/g, '"'));
   check(fw.length === 8 && fw.join() === page.join(), 'factory patch names match firmware PRESET[]');
 }
+{
+  const fw = JSON.parse(readFileSync('firmware/gen/wt_bench.h', 'utf8').match(/WTG_NAME\[12\]\[6\] = \{([^}]*)\}/)[1].replace(/^/, '[').replace(/$/, ']'));
+  const page = JSON.parse(readFileSync('tools/web/app.js', 'utf8').match(/const FACTORY_TABLES = (\[[^\]]*\])/)[1].replace(/'/g, '"'));
+  check(fw.length === 12 && fw.join() === page.join(), 'factory table names match firmware WTG_NAME[]');
+}
 fl.close();
 console.log(fails ? `${fails} FAILED` : 'all web tool checks passed');
 process.exit(fails ? 1 : 0);

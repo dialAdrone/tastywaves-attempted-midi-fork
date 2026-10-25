@@ -58,10 +58,18 @@ async function connectFm1() {
   setBusy(false);
 }
 
+// the factory wavetables of the ALGORITHM list, in order (firmware/gen/wt_bench.h WTG_NAME[]): built in, not on the link
+const FACTORY_TABLES = ['SAWSQ', 'PWM', 'HARM', 'VOWEL', 'FMIDX', 'FOLD', 'ORGAN', 'BELL', 'NOISE', 'SHAPE', 'REED', 'STAIR'];
 async function refresh() {
   dir = await vw.directory(0, fw.slots);
   const box = $('slots'), tgt = $('target'), keep = tgt.value;
-  box.replaceChildren(...dir.map((e) => {
+  const fixed = FACTORY_TABLES.map((n) => {
+    const d = document.createElement('div'); d.className = 'card slot fixed';
+    d.innerHTML = '<h3>BUILT IN</h3><div class="name"></div><div class="crc">factory table</div>';
+    d.querySelector('.name').textContent = n;
+    return d;
+  });
+  box.replaceChildren(...fixed, ...dir.map((e) => {
     const d = document.createElement('div'); d.className = 'card slot'; d.id = 'slot' + e.slot;
     d.innerHTML = `<h3>SLOT ${e.slot}</h3><div class="name${e.valid ? '' : ' empty'}"></div><div class="crc"></div><div class="row"></div>`;
     d.querySelector('.name').textContent = e.valid ? e.name : 'empty';

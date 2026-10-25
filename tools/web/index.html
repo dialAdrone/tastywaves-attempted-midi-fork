@@ -28,6 +28,7 @@
   .slot .name { font-size:18px; font-weight:700; letter-spacing:.04em; font-family: ui-monospace, Menlo, monospace; } .slot .name.empty { color:var(--mute); font-weight:400; }
   .slot .crc { font-size:12px; color:var(--mute); font-family: ui-monospace, Menlo, monospace; }
   .slot .row { gap:6px; } .slot button { padding:4px 9px; font-size:13px; }
+  .slot.fixed .name { color:var(--mute); }
   .slot.pick { outline:2px solid var(--accent); }
   #drop { border:2px dashed var(--line); border-radius:10px; padding:22px; text-align:center; color:var(--mute); }
   #drop.over { border-color:var(--accent); color:var(--fg); }
@@ -59,8 +60,8 @@
   </div>
 
   <div id="main" class="hide">
-    <h2>User wavetable slots</h2>
-    <p class="mute">Tables you send go here. An empty slot is normal: the 12 factory tables are built into the firmware and are not listed.</p>
+    <h2>Wavetables on the FM-1</h2>
+    <p class="mute">The ALGORITHM list of the FM-1, in order: the 12 built-in tables, then the 8 slots for tables you send (an empty slot is skipped on the FM-1).</p>
     <div id="slots"></div>
     <div class="row" style="margin-top:10px"><button id="btnRefresh">Refresh</button><span id="fw" class="mute"></span></div>
 
