@@ -84,7 +84,10 @@ static void arp_in_on(uint32_t note, uint32_t vel)
     for (i = 0; i < ar.n; i++)
         if (ar.note[i] == note) { ar.vel[i] = (uint8_t)vel; return; }
     if (ar.n >= ARP_MAXN) return;
-    if (!ar.n) { ar.step_left = 0; ar.pos = 0; ar.step_idx = 0; }       /* the first key: start now, from the bottom */
+    if (!ar.n) {                                /* the first key: start now, from the bottom; RANDOM: a new sequence (the clock's ticks into the seed) */
+        ar.step_left = 0; ar.pos = 0; ar.step_idx = 0;
+        ar.rnd ^= fm1_ticks() * 2654435761u;
+    }
     ar.note[ar.n] = (uint8_t)note;
     ar.vel[ar.n] = (uint8_t)vel;
     ar.n++;

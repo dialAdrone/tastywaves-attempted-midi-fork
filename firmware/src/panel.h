@@ -139,8 +139,6 @@ static struct {
     uint8_t help_from;                          /* the page HELP explains (the one HOME was pressed on) */
     uint8_t clr;                                /* REC held: "CLEAR PATTERN?" asked, REC again clears */
     uint32_t t_clr;
-    uint8_t seq_arm;                            /* SEQ pressed and not yet decided (short: the page, hold: on / off) */
-    uint32_t t_seq, t_seq_tog;
     uint8_t arp_arm, arp_last;                  /* ARP pressed and not yet decided (short: the page, hold: on / off); the mode it switches back to */
     uint32_t t_arp, t_arp_tog;                  /* press time; time of the last switch */
     uint8_t sv, act, act_id, tgt;               /* SAVE gesture (SV_*), the request for pn_save_poll (ACT_*, user id), the chosen target id */
@@ -495,16 +493,7 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
             pn.base[P_ARP] = (int16_t)patch.p[P_ARP];               /* the button is a performance switch, not a patch edit: SAVE does not blink for it */
         }
     }
-    if (b & 1u << BTN_SEQ && !pn.seq_arm && (!pn.t_seq_tog || fm1_ms - pn.t_seq_tog >= 200u)) { pn.seq_arm = 1; pn.t_seq = fm1_ms; }
-    if (pn.seq_arm) {
-        if (!(held >> BTN_SEQ & 1u)) { pn.seq_arm = 0; pn_page_btn(UI_P_SEQ); }     /* released: a short press opens its page (again: NOTES / LANE) */
-        else if (fm1_ms - pn.t_seq >= 500u) {                       /* held: switches the sequencer on / off */
-            pn.seq_arm = 0;
-            patch_set(P_SEQ, patch_get(P_SEQ) ? 0 : 1);
-            pn.t_seq_tog = fm1_ms ? fm1_ms : 1u;
-            pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ];
-        }
-    }
+    if (b & 1u << BTN_SEQ) pn_page_btn(UI_P_SEQ);               /* SEQ only opens its page (again: NOTES / LANE); PLAY on that page starts / stops it */
     if (b & 1u << BTN_HOME) {
         if (held >> BTN_EDIT & 1u) cpu_reset_req++;                 /* the max starts over */
         else if (pn.page == UI_P_HELP) {                            /* next help page, then out */
@@ -662,9 +651,9 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
         "HELP 2/2  BUTTONS",
         "HOME  BACK HOME, HOLD: HELP",
         "PAGE BUTTON  OPEN, AGAIN: TAB",
-        "ARP SEQ  PAGE, HOLD: ON/OFF",
+        "ARP  PAGE, HOLD: ON/OFF",
         "SAVE  STORE (HOLD: PICK, DEL)",
-        "PLAY  LATCH, SEQ: START/STOP",
+        "PLAY  LATCH; SEQ PAGE: START",
         "REC  STEPS, HOLD: CLEAR",
         "OCT- OCT+  OCTAVE DOWN, UP",
         "ALGORITHM  WAVETABLE",
@@ -730,7 +719,7 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
     case UI_P_GLO: pn_hl(v->help[l++], "EDIT+HOME", "RESET CPU MAX"); break;
     case UI_P_ARP: pn_hl(v->help[l++], "HOLD ARP", "ARP ON / OFF"); break;
     case UI_P_SEQ:
-        pn_hl(v->help[l++], "HOLD SEQ", "SEQ ON / OFF");
+        pn_hl(v->help[l++], "PLAY", "START / STOP");
         pn_hl(v->help[l++], "REC", "STEP INPUT ON / OFF");
         pn_hl(v->help[l++], "HOLD REC", "CLEAR (REC AGAIN)");
         pn_hl(v->help[l++], "LANE", "SELECT PICKS THE STEP");
@@ -883,13 +872,14 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         }
         if (pn.page == UI_P_SEQ) {
             char *d = v->info;
-            ui_copy(v->ptxt, sq.rec ? "RECORD" : !patch_get(P_SEQ) ? "OFF" : !sq.len ? "EMPTY" : sq_run ? "PLAY" : "STOP", 8);
+            ui_copy(v->ptxt, sq.rec ? "RECORD" : !sq.len ? "EMPTY" : patch_get(P_SEQ) && sq_run ? "PLAY" : "STOP", 8);
             if (pn.sub == 1u) ui_copy(v->ptxt, TXT[TX_MOD][patch_get(P_MOD)], 8);           /* the lane: its target, big */
 
             if (pn.sub == 1u) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)(pn.mstep < 32u ? pn.mstep : 31u) + 1); d = ui_cat(d, "  SELECT KNOB MOVES"); }
             else if (sq.rec) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, "/32  PLAY=REST SEQ=TIE"); }
             else if (!sq.len) ui_cat(d, "NO PATTERN: PRESS REC");
-            else { d = ui_cat(d, "LEN "); d = ui_num(d, sq.len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); } }
+            else { d = ui_cat(d, "LEN "); d = ui_num(d, sq.len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }
+                   if (!(patch_get(P_SEQ) && sq_run)) ui_cat(d, "  PLAY=START"); }
         }
         if (pn.page == UI_P_ARP) {
             char *d = v->info;

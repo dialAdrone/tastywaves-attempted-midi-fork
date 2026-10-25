@@ -143,6 +143,14 @@ static uint8_t boot_raw[11];
 
 #include "panel.h"
 
+/* the sequencer stops: SEQ off (keys play plain notes, or the arp), the pattern kept. A performance switch, not a patch edit */
+static void seq_stop(void)
+{
+    sq_run = 0;
+    patch_set(P_SEQ, 0);
+    pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ];
+}
+
 static void app_main(void)
 {
     app_set_t set;
@@ -224,7 +232,7 @@ static void app_main(void)
             if (!(hb >> BTN_REC & 1u)) {        /* a short press: step input on / off (off keeps what was entered as the pattern) */
                 rec_arm = 0;
                 if (!sq.rec) { sq.cur = 0; sq.rec = 1; pn_goto(UI_P_SEQ, 0); }   /* (and its page shows the steps) */
-                else { if (sq.cur) sq.len = sq.cur; sq.rec = 0; sq_run = 1; }
+                else { if (sq.cur) sq.len = sq.cur; sq.rec = 0; seq_stop(); }      /* the pattern waits: PLAY on the SEQ page starts it */
             } else if (fm1_ms - t_rec >= 700u) {    /* held: ask first (REC again clears the pattern) */
                 rec_arm = 0;
                 if (sq.len || sq.rec) { pn.clr = 1; pn.t_clr = fm1_ms; }
@@ -239,8 +247,12 @@ static void app_main(void)
             sq.note[sq.cur] = sq.note[sq.cur - 1u]; sq.vel[sq.cur] = sq.vel[sq.cur - 1u]; sq.tie[sq.cur] = 1;
             sq.cur++;
         }
-        if (sq.rec && sq.cur >= SEQ_MAXN) { sq.len = SEQ_MAXN; sq.rec = 0; }  /* 32 steps: full */
-        if (!rec_pass && (b & (1u << BTN_PLAY)) && patch_get(P_SEQ) && sq.len && !latch) sq_run ^= 1u;      /* the sequencer is on: PLAY starts / stops it (with latch on, PLAY turns the latch off first) */
+        if (sq.rec && sq.cur >= SEQ_MAXN) { sq.len = SEQ_MAXN; sq.rec = 0; seq_stop(); }  /* 32 steps: full */
+        if (!rec_pass && (b & (1u << BTN_PLAY)) && pn.page == UI_P_SEQ) {  /* on the SEQ page PLAY starts / stops the sequencer (elsewhere it is LATCH) */
+            if (patch_get(P_SEQ) && sq_run) seq_stop();
+            else if (sq.len) { patch_set(P_SEQ, 1); pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ]; sq_run = 1; }
+            else pn_msg("NO PATTERN", 0, 0);
+        }
         else if (!rec_pass && (b & (1u << BTN_PLAY))) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
             latch ^= 1u;
             for (k = 0; k < 27u; k++)
@@ -253,7 +265,6 @@ static void app_main(void)
         {
             uint8_t look = set.look;
             uint32_t d0 = dirty;
-            if (rec_pass) pn.seq_arm = 0;
             pn_buttons(rec_pass ? b & ~(1u << BTN_SEQ) : b, hb, &set, &dirty);
             if (look != set.look || dirty != d0) t_change = fm1_ms;
         }

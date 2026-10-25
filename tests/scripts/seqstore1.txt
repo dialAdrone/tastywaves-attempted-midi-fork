@@ -1,11 +1,11 @@
 # the note pattern is saved with the patch: SEQ on, two steps entered (keys 0 and 4), REC ends, SAVE -> U01.
 # Then a different one-step pattern is recorded and the first patch is not touched.
-300 patch 53 1
 400 btn 13
 500 keys 0x1
 600 keys 0
 700 keys 0x10
 800 keys 0
 900 btn 13
+1000 btn 12
 1200 btn 9
 3000 end

@@ -201,10 +201,10 @@ Flash `build/vavewave.fwsc`. One pattern of up to 32 steps lives in RAM (it is l
 | 13.3 | Press PLAY | a rest step (PLAY's latch does nothing while recording) |
 | 13.4 | Press SEQ | a tie: the note before goes on through this step |
 | 13.5 | Short press REC again | recording ends; the pattern length is the steps entered (grid shows it) |
-| 13.6 | Hold SEQ (half a second) | SEQ LED on; the pattern plays at the tempo, rests are silent, a tied note runs on |
+| 13.6 | On the SEQ page press PLAY | SEQ LED on; the pattern plays at the tempo, rests are silent, a tied note runs on |
 | 13.7 | RATE, GATE, SWING, TEMPO knobs on the SEQ page | speed, note length and shuffle change live |
 | 13.8 | Hold a key while it plays | the pattern is transposed by (that key minus C4); let go: back as recorded. The tiles keep showing the recorded notes (no change, no gold). A latched key (PLAY) keeps it transposed |
-| 13.9 | Hold SEQ again | stops; keys sound as plain notes again |
+| 13.9 | On the SEQ page press PLAY again | stops; keys sound as plain notes again |
 | 13.10 | Hold REC (0.7 s) | pattern cleared (LEN 0, NO PATTERN) |
 | 13.11 | Record 32 steps | recording ends by itself at 32 |
 | 13.12 | SEQ on, ARP on | the sequencer plays (the arp waits); SEQ off: the arp comes back |
@@ -316,8 +316,8 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 19.17 | ARP: change MODE, OCT, GATE, SWING | the 16-step picture follows (rows = notes over the octaves, bar length = gate, odd steps late with swing); OFF shows `ARP OFF` |
 | 19.19 | SEL: play notes, then turn each knob | MODE panel: POLY shows 12 voice blocks lit by the notes, MONO / LEGATO one voice (LEGATO with a tie); BEND> lights OSC1, OSC2 or both; QUAL HI smooth / ECO a coarse line with points; CURVE LIN straight / EXP curved |
 | 19.20 | FX FILT 1/2: turn CUTOFF from 0 to 100 | a white line with its frequency (20 .. ~19K) moves across the curve; at 70 it reads about 2.5K |
-| 19.21 | Press SEQ, press SEQ again; same with ARP | SEQ: NOTES, then LANE (the sequencer is not switched); ARP: SET 1/2, then SET 2/2 |
-| 19.22 | Hold SEQ half a second; hold ARP half a second | the sequencer / the arp switches on or off at the half second, the page does not change |
+| 19.21 | Press SEQ, again, again; ARP likewise | SEQ: NOTES, LANE, NOTES (the sequencer is never switched by SEQ); ARP: SET 1/2, SET 2/2 |
+| 19.22 | Hold SEQ; hold ARP half a second | SEQ: nothing more than a press; ARP switches on / off at the half second |
 | 19.23 | LFO: turn RATE from 0 to max | the picture goes from 1 cycle to 8 cycles; SHAPE still changes the shape |
 | 19.24 | GLO OUTPUT: note DROPS, play the fast same-note repeats that click | DROPS stays 0 (if it counts up with the clicks, the audio is overloaded: report CPU MAX and the page you were on) |
 | 19.25 | Hold HOME on HOME | HELP 1/2 HOME: knobs 1-4 named as HOME's own (each page has its own), ALGORITHM / SELECT / PRESETS, HOME AGAIN, HOLD HOME, the page buttons; no "ALG SEL" line |
@@ -326,4 +326,8 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 19.28 | GLO BOOT: press and hold each button, watch HELD NOW | each button lights only while held; if REC stays lit after letting go, the REC switch sticks (hardware) |
 | 19.29 | ARP GATE (and any knob): turn slowly, then fast | slow = 1 a detent, fast = up to 4 a detent; no jump to 0 |
 | 19.30 | FX FILT: CUTOFF 0 and 100 | the label reads 20 and 18K |
+| 19.31 | Record a pattern, end REC | nothing plays; the SEQ page reads STOP and `PLAY=START` |
+| 19.32 | On the SEQ page press PLAY, PLAY | starts (SEQ LED on, PLAY), stops (LED off, STOP; the keys play plain notes again) |
+| 19.33 | SEQ playing, go to FX, press PLAY | LATCH switches (PLAY LED); the pattern goes on; back on SEQ, PLAY stops it |
+| 19.34 | ARP RANDOM: hold a chord, release, hold it again (a few times) | the order differs each time |
 | 19.18 | Turn a knob fast on FX FILT while playing | the picture keeps up (at most ~16 redraws a second); notes do not stutter |

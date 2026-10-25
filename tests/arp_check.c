@@ -21,6 +21,7 @@ static void sink(int on, uint32_t n)
     if (nev < MAXEV) { ev[nev].t = now; ev[nev].on = on; ev[nev].note = (int)n; nev++; }
     snd[n] = (uint8_t)on;
 }
+static uint32_t fm1_ticks(void) { return now * 544u; }      /* (the arp seeds RANDOM from it) 24 MHz / 44.1 kHz */
 #include "../firmware/src/arp.h"
 
 static void run(uint32_t blocks) { while (blocks--) { arp_run(256); now += 256; } }
