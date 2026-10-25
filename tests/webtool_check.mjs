@@ -170,6 +170,12 @@ function sameAll(x, y) { return x.length === y.length && x.every((v, i) => v ===
 // no answer at all
 const dead = new VwLink({ send: async () => true, recv: async () => null, drain() {} }, { tries: 2, timeout: 5 });
 { let e = null; try { await dead.hello(); } catch (x) { e = x; } check(e instanceof LinkError && /no answer/.test(e.message), 'no reply -> clear message'); }
+// the factory patch names the page lists match the firmware's PRESET[]
+{
+  const fw = [...readFileSync('firmware/src/panel.h', 'utf8').split('static const preset_t PRESET[')[1].split('};')[0].matchAll(/^\s*\{"([^"]+)"/gm)].map((m) => m[1]);
+  const page = JSON.parse(readFileSync('tools/web/app.js', 'utf8').match(/const FACTORY = (\[[^\]]*\])/)[1].replace(/'/g, '"'));
+  check(fw.length === 8 && fw.join() === page.join(), 'factory patch names match firmware PRESET[]');
+}
 fl.close();
 console.log(fails ? `${fails} FAILED` : 'all web tool checks passed');
 process.exit(fails ? 1 : 0);

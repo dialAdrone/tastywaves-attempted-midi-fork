@@ -80,10 +80,13 @@ async function refresh() {
 
 // ---- the patch library (VW link stage 5): list, rename, reorder, delete, backup, restore ----
 let patches = [], pdir = [];
+// the factory patches of the PRESETS list, in order (firmware/src/panel.h PRESET[]): built in, not on the link
+const FACTORY = ['BRIGHT PAD', 'GLASS BELL', 'WARM VOWEL', 'FOLD LEAD', 'SUB BASS', 'ORGAN KEYS', 'FM PLUCK', 'REED SOLO'];
 async function refreshPatches() {
   const box = $('patches');
   $('patchSec').classList.toggle('hide', fw.stage < 5);
   if (fw.stage < 5) return;
+  $('factory').textContent = FACTORY.join(' · ');
   pdir = await vw.patchDirectory();
   patches = [];
   for (const e of pdir) if (e.present) {

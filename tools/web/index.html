@@ -58,12 +58,14 @@
   </div>
 
   <div id="main" class="hide">
-    <h2>Slots on the FM-1</h2>
+    <h2>User wavetable slots</h2>
+    <p class="mute">Tables you send go here. An empty slot is normal: the 12 factory tables are built into the firmware and are not listed.</p>
     <div id="slots"></div>
     <div class="row" style="margin-top:10px"><button id="btnRefresh">Refresh</button><span id="fw" class="mute"></span></div>
 
     <div id="patchSec" class="hide">
       <h2>Patches on the FM-1</h2>
+      <p class="mute">Factory patches (built in, read only): <span id="factory"></span></p>
       <div id="patches"></div>
       <div class="row" style="margin-top:10px">
         <button id="btnBackup">Backup all…</button>
