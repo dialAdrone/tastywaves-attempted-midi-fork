@@ -1,100 +1,240 @@
-<p align="center"><img src="assets/logo.svg" width="96" alt="Dinghy"></p>
+# TastyWaves
 
-# Dinghy
+**A wavetable synthesizer firmware for the M-VAVE FM-1.**
 
-**The smallest firmware for the M-VAVE FM-1 to build your own on.**
+TastyWaves turns the FM-1 into a 12-voice wavetable synth with two oscillators per voice, a resonant filter, two
+envelopes, an LFO, a four-slot effects chain, an arpeggiator and two step sequencers that can play chords and
+counterpoint on one clock. Patches are saved on the device, and a browser tool manages them and loads your own
+wavetables.
 
-Dinghy plays a sine wave on the keys, and that is all it does. Under it is everything an FM-1 firmware needs
-before it can be any fun: the update path, the USB rescue, USB-MIDI, USB audio, the keys, knobs and LEDs, the
-screen and a place to keep settings. It all works, so you start with the part you actually want to write.
+<p align="center">
+  <img src="docs/images/home.png" width="240" alt="HOME: the oscillator's wave and its harmonics">
+  <img src="docs/images/seq.png" width="240" alt="SEQ: a pattern playing, with the status row">
+  <img src="docs/images/chord.png" width="240" alt="SEQ chord tab: A major on a two-octave keyboard">
+</p>
 
-```
-firmware/src/tastywaves.c     <- your firmware: ~200 lines, a 4-voice sine. Start here.
-firmware/src/platform.c   <- the plumbing (boot, USB, updates, audio ISR, settings). Done; read it, don't fight it.
-firmware/src/*.c, hal/    <- Felucca's platform, as SLOOP carries it, unchanged
-```
+> **Version 1.0.0.** Tested on the FM-1 against [docs/DEVICE-TEST-PLAN.md](docs/DEVICE-TEST-PLAN.md).
+> It is free software (GPL-3.0), built on [Dinghy](https://github.com/zvenson/dinghy), which is built on
+> [Felucca](https://github.com/hugelton/Felucca) and [SLOOP](https://github.com/isod89/sloop-fm1). See [Credits](#credits-and-licence).
 
-Dinghy is based on [Felucca](https://github.com/hugelton/Felucca) by Leo Kuroshita (Hügelton Instruments), with its
-platform as [SLOOP](https://github.com/isod89/sloop-fm1) (isod89) carries it: it keeps that platform and throws away the
-rest. The smallest boat of the family, after the felucca and the sloop.
+## Contents
 
-<p align="center"><img src="docs/screen.png" width="240" alt="Dinghy's screen: the name, the note played, a keyboard with the keys that sound"></p>
+- [Features](#features)
+- [Install](#install)
+- [Playing it](#playing-it)
+- [The pages](#the-pages)
+- [Arpeggiator and sequencers](#arpeggiator-and-sequencers)
+- [Patches](#patches)
+- [The web tool: your own wavetables, patch library](#the-web-tool-your-own-wavetables-patch-library)
+- [MIDI and USB audio](#midi-and-usb-audio)
+- [Build from source](#build-from-source)
+- [Credits and licence](#credits-and-licence)
 
-> **Status: 0.1, runs on the FM-1.** Tested on the device: the install, MIDI in (pitch exact, 4 voices), USB audio
-> at 44.1 / 48 kHz, the keys, the screen, the octave kept in flash, and back to another firmware through the hub.
-
-## What you get
+## Features
 
 | | |
 | --- | --- |
-| **Updates that always work** | `tools/fm1_install.py`, the web installers and the [FM-1 Firmware Hub](https://fm1.designburgapps.com) reach your firmware over USB, so you (and your users) can always install the next build, or go back to the official firmware. |
-| **USB rescue** | Hold **OCT-** while switching on: no sound, only the updater. If your firmware crashes twice at boot, the FM-1 goes there by itself. |
-| **USB-MIDI** | In and out, class compliant: `midi_get()`, `midi_send()`. |
-| **USB audio** | The FM-1 shows up as a 16-bit stereo audio input (44.1 or 48 kHz): record it into any DAW or phone. Nothing to do. |
-| **Panel** | 27 keys, 14 buttons, 7 encoders, the MASTER knob, the LEDs, by name (`BTN_PLAY`, `ENC_KNOB1`, ...). |
-| **Screen** | 240 x 240, text in two sizes, rectangles, lines, pixels. |
-| **Settings** | `settings_load()` / `settings_save()`: up to 256 bytes with a CRC in their own flash sector. |
-| **A crash screen** | A fault shows where it happened (the PC), then the FM-1 restarts. |
-| **Host mode** | The same `tastywaves.c` on your computer: the screen as an image, the sound as a WAV. No FM-1 needed to try an idea. |
-| **Checks** | The build fails on what bricks or breaks an FM-1 firmware: a 64-bit division, a call into the chip ROM, too much RAM, a register touched outside `hal/`. |
+| **Voices** | 12 voices, POLY, MONO or LEGATO, with glide; HI or ECO quality |
+| **Oscillators** | 2 wavetable oscillators per voice, each with its own table, position, semitone, fine tune and level; a sub oscillator and noise; BEND, a wave warp on either or both oscillators |
+| **Wavetables** | 12 built-in tables of 32 frames (SAWSQ, PWM, HARM, VOWEL, FMIDX, FOLD, ORGAN, BELL, NOISE, SHAPE, REED, STAIR), band-limited, plus 8 slots for your own tables (Serum, WaveEdit, Ableton or Surge exports) |
+| **Filter** | Resonant state-variable filter: low-pass, band-pass, high-pass, with key tracking |
+| **Envelopes** | AMP and MOD ADSR envelopes; MOD moves the cutoff, the table position and BEND; linear or exponential curves |
+| **LFO** | Sine, triangle, saw, square, sample and hold; to position, pitch, cutoff and amplitude |
+| **Control** | Mod wheel to position and vibrato, aftertouch to cutoff, velocity to amplitude and cutoff, pitch bend range, volume, drive |
+| **Effects** | A chain of 4 slots: chorus, flanger, phaser, delay, reverb. Hold FX to bypass the chain (a click-free crossfade; delay and reverb tails keep ringing underneath) |
+| **Arpeggiator** | UP, DOWN, UP-DN, UP-DN2, RANDOM, PLAYED, CHORD; 1/4 to 1/32 with triplets; 1 to 4 octaves; gate, swing, tempo 40 to 240 BPM; LATCH |
+| **Two sequencers** | SEQ1 and SEQ2, 32 steps each, with rests and ties, on one clock. Each has its own rate, gate, swing, chord, arpeggiator, octaves and level; both are mixed through a soft clip. Held keys transpose both |
+| **Chords** | Every step can play a chord: MAJ, MIN, 7, MAJ7, MIN7, SUS4, or HELD (the shape of the keys you hold). Shown on a keyboard |
+| **Modulation lane** | A value per step of SEQ1 that moves position, cutoff, BEND or drive, with depth and glide |
+| **Patches** | 8 factory patches and 32 of your own, saved on the FM-1 with both sequences |
+| **Sync** | Follows MIDI clock (Start restarts the patterns on the beat) |
+| **USB** | Class-compliant USB-MIDI in and out; the FM-1 is also a 16-bit stereo USB audio input at 44.1 or 48 kHz |
+| **Screen** | A picture for every page: the wave, the filter response, the envelopes, the LFO, the effects chain, the arpeggio, the pattern; three HOME looks; built-in help |
+| **Safe** | The FM-1's update path and USB rescue stay intact: you can always install another firmware |
 
-## Quick start
+## Install
 
-You need Linux on x86-64 (or macOS / Windows with Docker or WSL), Python 3 with Pillow, the JieLi toolchain
-and three files of the JieLi AC79 SDK. Once:
+You need an M-VAVE FM-1, a USB cable and a computer with Python 3.
+
+1. Download `tastywaves-1.0.0.fwsc` from the [Releases](https://github.com/marksweiss/tastywaves/releases) page.
+2. Get the installer (this repository) and its two Python packages:
+
+   ```sh
+   git clone https://github.com/marksweiss/tastywaves.git
+   cd tastywaves
+   python3 -m venv .venv && .venv/bin/pip install mido python-rtmidi
+   ```
+
+3. Plug in the FM-1, switch it on, and install:
+
+   ```sh
+   tools/install_fw.sh ~/Downloads/tastywaves-1.0.0.fwsc
+   ```
+
+   It shows what runs on the FM-1, asks before it writes, and checks the result after the FM-1 restarts.
+   `tools/install_fw.sh --info` shows what is installed.
+
+**If something goes wrong:** hold **OCT-** while switching the FM-1 on. It starts in the USB rescue (no sound,
+only the updater), and the install works from there. A firmware that crashes twice at boot lands there by itself.
+
+**Going back:** the [FM-1 Firmware Hub](https://fm1.designburgapps.com) installs the official firmware, or any
+other, over the same USB update path. Back up your patches with the [web tool](#the-web-tool-your-own-wavetables-patch-library) first.
+
+## Playing it
+
+The four knobs under the screen always set the four values shown at the top of the page you're on. A page
+button opens its page; pressing it again steps through the page's tabs.
+
+| Control | What it does |
+| --- | --- |
+| **Keys** | Play (velocity sensitive); the notes also go out over USB-MIDI |
+| **OCT- / OCT+** | Octave down / up (remembered) |
+| **KNOB 1-4** | The four values at the top of the screen |
+| **ALGORITHM** | The wavetable (factory, then your own) |
+| **SELECT** | The position in the table (on the LANE tab: the step) |
+| **PRESETS** | The patch: factory 1-8, then your U01-U32 (loads after a short pause) |
+| **HOME** | Back to HOME (four knobs: cutoff, resonance, attack, release); hold it for HELP |
+| **EDIT FX ENV LFO SEL GLO** | Open that page; again: its next tab |
+| **ARP / SEQ** | Press: open its page. Hold half a second: switch it on or off (the button lights when on) |
+| **FX** | Press: the FX page. Hold: bypass the effects chain (`HOLD FX: BYPASS`) |
+| **PLAY** | With SEQ lit: start / stop both sequences, from any page. Otherwise: LATCH (held notes keep sounding) |
+| **REC** | On the SEQ page: step input for the sequence shown. Hold, then REC again: clear it |
+| **SAVE** | Save the patch (see [Patches](#patches)) |
+| **MASTER** | Volume |
+
+The line above the patch name shows the page and tab, the voices in use (`V 3/12`, an `L` when LATCH is on) and the
+CPU load.
+
+## The pages
+
+| | |
+| --- | --- |
+| <img src="docs/images/edit.png" width="240" alt="EDIT OSC1"> | **EDIT**: OSC1 and OSC2 (position, semitone, fine, level; the wave drawn as it plays, BEND included), MIX (sub, noise, BEND and where it goes, the levels), FILTER (cutoff, resonance, mode, key tracking, with the response curve) |
+| <img src="docs/images/mix.png" width="240" alt="EDIT MIX"> | **MIX**: the four levels and BEND on a sine, with the oscillators it acts on |
+| <img src="docs/images/env.png" width="240" alt="ENV"> | **ENV**: AMP and MOD envelopes, drawn; MOD> sets what the MOD envelope moves (cutoff, position, BEND) and the curve |
+| <img src="docs/images/lfo.png" width="240" alt="LFO"> | **LFO**: shape and rate, to position and pitch (set 1) or cutoff and amplitude (set 2) |
+| <img src="docs/images/fx.png" width="240" alt="FX"> | **FX**: four slots in series, each a TYPE with two values and a MIX. Delay and reverb take one slot each |
+| <img src="docs/images/sel.png" width="240" alt="SEL"> | **SEL**: VOICE (mode, glide, bend range, quality), CONTROL (mod wheel, aftertouch, velocity routes), OUTPUT (volume, drive, velocity to cutoff) |
+| <img src="docs/images/info.png" width="240" alt="GLO INFO"> | **GLO**: SETUP picks the HOME look (waterfall, spectrum, minimal); INFO shows the version, the highest CPU load and any audio drops |
+
+## Arpeggiator and sequencers
+
+<p>
+  <img src="docs/images/arp.png" width="240" alt="ARP page">
+  <img src="docs/images/seq.png" width="240" alt="SEQ1 playing">
+  <img src="docs/images/lane.png" width="240" alt="The modulation lane">
+</p>
+
+**The arpeggiator.** Hold **ARP** to switch it on (`HOLD ARP: ON`), then hold notes. Press **PLAY** for LATCH and
+let go: the arpeggio keeps playing while you turn knobs. Press ARP to set MODE, RATE, OCT, GATE (set 1) and
+SWING, TEMPO (set 2).
+
+**Recording a sequence.**
+
+1. Press **SEQ** to open its page (SEQ1, SEQ2 and LANE tabs; press SEQ again to step through them).
+2. On the SEQ1 or SEQ2 tab, press **REC**. Each key you play is a step; **PLAY** enters a rest, **SEQ** ties the
+   step before. Press **REC** again to finish (or stop at 32 steps).
+3. Hold **SEQ** to switch the sequencer on, then press **PLAY**. The status row on every SEQ tab shows
+   `HOLD SEQ: ON / OFF` and `PLAY: PLAYING / STOPPED`.
+4. Hold a key to transpose: the pattern moves by that key minus C4. LATCH a key to keep it transposed.
+
+**Two sequences.** SEQ1 and SEQ2 share the tempo and PLAY, and start together. Each has its own RATE, GATE and SWING
+(set 1) and CHORD, ARP, OCT and LEVEL (set 2), so SEQ2 can run at 1/8 against SEQ1's 1/16, or arpeggiate chords
+under a plain melody. LEVEL balances them; the mix is soft-clipped, so thick textures stay clean.
+
+**Chords.** CHORD makes every step play a chord on its note: a fixed shape (MAJ, MIN, 7, MAJ7, MIN7, SUS4) or HELD,
+the shape of the keys you hold (the lowest one is the root). The chord tab draws it on a keyboard, the root in
+amber. With the pattern's ARP on, each step lasts a beat and the arpeggiator plays its chord at RATE.
+
+**The modulation lane.** The LANE tab holds one value per step of SEQ1. TARGET picks what it moves (position,
+cutoff, BEND, drive), DEPTH how far, GLIDE whether it slides between steps. SELECT picks the step and the fourth knob
+sets its value.
+
+With external MIDI clock the arpeggiator and both sequences follow it; MIDI Start restarts them on the beat.
+
+## Patches
+
+**Loading.** Turn **PRESETS**: the 8 factory patches come first, then your saved ones (U01 to U32).
+
+**Saving.** The SAVE button lights when the sound differs from the patch it came from.
+
+- Press **SAVE**: a user patch is saved over itself; a factory patch goes to the first free number.
+- Hold **SAVE** and turn **PRESETS** to pick another number (a number in use asks first: press SAVE again).
+- Hold **SAVE** for 2 seconds on a user patch to delete it (press SAVE again to confirm).
+
+A patch holds every sound setting, the arpeggiator settings, both sequences with their settings, and the
+modulation lane. ARP, SEQ and the bypass are performance switches: changing patches doesn't stop a running
+sequence. The patch store holds about 32 patches without sequences and fewer with long ones; SAVE says
+`STORE FULL` when it is.
+
+## The web tool: your own wavetables, patch library
+
+<p align="center"><img src="docs/images/web-tool.png" width="450" alt="The web tool, here with a simulated FM-1"></p>
+
+A page in your browser that talks to the FM-1 over USB-MIDI. It runs locally; nothing is uploaded anywhere.
 
 ```sh
-pip3 install Pillow
-tools/get_toolchain.sh                      # JieLi's clang for the chip, to ~/.jieli/toolchain
-git clone --depth 1 --branch AC79NN_SDK_V1.2.1_2023-12-13 \
-    https://gitee.com/Jieli-Tech/fw-AC79_AIoT_SDK.git ~/fw-AC79_AIoT_SDK
+tools/web_tool.sh                    # in this repository: opens http://localhost:8000 in your browser
 ```
 
-Then:
+Use Chrome or Edge (Safari has no Web MIDI), press **Connect to MIDI** and allow SysEx.
+
+- **Wavetables:** drop a wavetable WAV (Serum, WaveEdit, Ableton) or a Surge `.wt` file, check the preview and send
+  it to one of the 8 user slots. ALGORITHM lists it after the factory tables. Save a slot to a `.vwt` file to keep it.
+- **Patches:** one list in PRESETS order. Rename, reorder, delete, and back up all your patches to a JSON file (both
+  sequences included); restore puts them back.
+
+[tools/web/README.md](tools/web/README.md) has the details, and `tools/fm1_wavetable.py` does the same conversion on
+the command line.
+
+## MIDI and USB audio
+
+- **In:** notes with velocity, pitch bend, channel aftertouch, mod wheel (CC 1), MIDI clock and Start, and a CC
+  map for most sound parameters ([firmware/src/patch.h](firmware/src/patch.h), `patch_cc`). All Notes Off and All
+  Sound Off release everything, latched notes included.
+- **Out:** the notes you play on the keys.
+- **USB audio:** the FM-1 appears as a stereo audio input; record it in any DAW without a cable.
+
+## Build from source
+
+You need Linux on x86-64, or macOS or Windows with Docker (the build runs the chip's toolchain in a `linux/amd64`
+container by itself), plus Python 3 and [uv](https://docs.astral.sh/uv/).
 
 ```sh
-./build.sh                                  # -> build/tastywaves.fwsc
-tests/run_host.sh                           # -> build/host/tastywaves.wav and screen PNGs, no FM-1 needed
+tools/install.sh        # once: a venv, JieLi's toolchain, three files of the JieLi AC79 SDK; then a build and a host test
+./build.sh              # -> build/tastywaves.fwsc
+./build.sh --release 1.0.0    # -> build/tastywaves-1.0.0.fwsc
+tools/install_fw.sh     # install build/tastywaves.fwsc on the connected FM-1
 ```
 
-On macOS the build runs the toolchain in a `linux/amd64` Docker container by itself (have Docker running).
-`JIELI_TOOLCHAIN` and `AC79_SDK` point elsewhere if your copies live somewhere else.
+The build refuses what would break the FM-1: a 64-bit division, a call into the chip ROM, too much RAM, a hardware
+register touched outside `firmware/hal/`.
 
-**Install** your build over USB from the command line (once: `pip3 install mido python-rtmidi`):
+**Host mode** runs the same firmware on your computer, with no FM-1: a script presses keys and turns knobs; out come
+the sound as a WAV and the screen as images. Every screenshot here was made that way.
 
 ```sh
-python3 tools/fm1_install.py build/tastywaves.fwsc   # asks before it writes; restarts the FM-1 into Dinghy
-python3 tools/fm1_install.py --info              # what runs on the connected FM-1
+tests/run_host.sh       # -> build/host/tastywaves.wav and screen PNGs
+tests/run_panel.sh      # the panel; tests/run_*.sh are the test suites
 ```
 
-Back to another firmware, or to the official one, with the [FM-1 Firmware Hub](https://fm1.designburgapps.com)
-in Chrome or Edge: Dinghy answers the hub's updater like every firmware there. Installing firmware is at your own
-risk.
+Where to read next: [docs/CODEMAP.md](docs/CODEMAP.md) (the code), [docs/RULES.md](docs/RULES.md) (the chip's rules:
+integers only, the audio interrupt's budget), [docs/API.md](docs/API.md) (the platform), and the design notes:
+[WAVETABLE_DESIGN](docs/WAVETABLE_DESIGN.md), [SYNTH-DESIGN](docs/SYNTH-DESIGN.md), [ARP-SEQ-DESIGN](docs/ARP-SEQ-DESIGN.md),
+[EFFECTS-DESIGN](docs/EFFECTS-DESIGN.md), [PATCH-STORAGE-DESIGN](docs/PATCH-STORAGE-DESIGN.md), [UI-DESIGN](docs/UI-DESIGN.md),
+[UPLOAD-DESIGN](docs/UPLOAD-DESIGN.md).
 
-## Your first change
+## Credits and licence
 
-Open [firmware/src/tastywaves.c](firmware/src/tastywaves.c). The sound is `app_audio()`: it gets an empty buffer of
-stereo frames and adds to it. Make the sine a square:
+TastyWaves is by Mark Weiss ([@marksweiss](https://github.com/marksweiss)), written with Claude (Anthropic). It
+stands on:
 
-```c
-s = ((int32_t)ph < 0 ? 8000 : -8000) * amp >> 15;     /* instead of s = (sine(ph) * amp) >> 15; */
-```
+- **[Dinghy](https://github.com/zvenson/dinghy)** by zvenson: the smallest FM-1 firmware to build on, with host mode
+  and the build checks. TastyWaves started as a copy of it.
+- **[Felucca](https://github.com/hugelton/Felucca)** by Leo Kuroshita (Hügelton Instruments): the platform, the
+  update loader, USB, the installer.
+- **[SLOOP](https://github.com/isod89/sloop-fm1)** by isod89: Felucca's platform as Dinghy carries it.
+- The **Spleen** fonts by Frederic Cambus (BSD 2-Clause).
 
-`tests/run_host.sh` and listen to `build/host/tastywaves.wav`. Then `./build.sh` and install. That is the whole loop.
-
-## Where to go next
-
-- **[docs/API.md](docs/API.md)**: everything `platform.c` gives you, with the panel's ids, the screen calls, the
-  audio contract, MIDI, settings, the flash map, timing.
-- **[docs/MAKE-IT-YOURS.md](docs/MAKE-IT-YOURS.md)**: turn Dinghy into your firmware: the name, the package
-  identity, releases, getting into the FM-1 Firmware Hub.
-- **[docs/RULES.md](docs/RULES.md)**: the chip's rules (no FPU, no libgcc, the audio ISR's budget) and what the build
-  checks for you. Read it before your first crash, not after.
-
-## License
-
-GPL-3.0-only, as Felucca and SLOOP: you may change and share it, and whoever gets your firmware gets its source.
-Details, credits and third-party parts in [LICENSING.md](LICENSING.md).
-
-The platform is Copyright (C) 2026 Leo Kuroshita (@kurogedelic), Hügelton Instruments, with SLOOP's changes (isod89).
-Dinghy (the app, the host mode, the docs) by zvenson.
+GPL-3.0-only: see [LICENSE](LICENSE), and [LICENSING.md](LICENSING.md) for who made which part. "M-VAVE" and "FM-1"
+belong to their owners; TastyWaves is not made or endorsed by them.

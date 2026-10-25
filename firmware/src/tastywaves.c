@@ -10,7 +10,8 @@
  *   GLO x3     third set: BOOT KEYS, the key scan at power-on (docs/UI-DESIGN.md)
  *   HOME EDIT FX ENV LFO SEL GLO   the page; the same button again: next set / HOME look (2 -> 1 -> 3, kept in flash)
  *   KNOB1-4    the page's four values; ALGORITHM = table; SELECT = position; PRESETS = patch (loads after 400 ms)
- *   SAVE       the patch into the settings sector (a stub for T17: one user patch overlay; see panel.h)
+ *   SAVE       the patch into the patch log (32 user patches, patchlog.h; the gestures: panel.h)
+ *   ARP SEQ    press: the page; hold: on / off. PLAY: SEQ lit, start / stop the patterns; else LATCH. REC: step input
  *   EDIT+HOME  restart the ISR cost maximum (GLO page shows it; the status line shows the live CPU %)
  *   MASTER     the volume (platform.c)
  *   USB-MIDI   notes (velocity), CCs (patch.h patch_cc), pitch bend, aftertouch
