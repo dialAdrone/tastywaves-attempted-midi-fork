@@ -9,4 +9,4 @@ PY=.venv/bin/python
 URL="http://localhost:$PORT"
 echo "VAVEWave web tool at $URL (Chrome or Edge; press Connect to MIDI and allow SysEx)"
 ( sleep 1; open "$URL" 2>/dev/null || xdg-open "$URL" 2>/dev/null || true ) &
-exec "$PY" -m http.server "$PORT" --bind 127.0.0.1 --directory tools/web
+exec "$PY" -I tools/web_serve.py "$PORT"     # (caching off: a reload always gets the current scripts)
