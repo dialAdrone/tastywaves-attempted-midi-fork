@@ -189,3 +189,11 @@ name, put); **reorder** (the list order is the id order: swap two ids; through a
 format, version, per patch id, name and body in hex); **restore** (each patch back under its own id, confirm first, patches not in
 the file stay, every write read back). Tests: `tests/wtlink_check.c` (the commands on the real log), `tests/webtool_check.mjs`
 (the library against the firmware logic), `tests/web_smoke.sh` (the page).
+
+## Companion records (2026-10-25)
+
+Record ids 32..63 (PL_SLOTS 64; PL_IDS 32 is what pl_present lists) are the companions of patches 0..31: the second sequencer's
+settings (P_MAIN .. P_COUNT - 1) and pattern, same record format. A companion counts only when its sequence is higher than its
+patch's (pl_seq); compaction copies ids in order, so a patch is always copied before its companion and the order survives. The
+patch record itself is unchanged, so every record stays within 256 B and the scan window. The patchlink commands still address
+ids 0..31; PDEL deletes the companion as well.

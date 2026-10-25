@@ -392,3 +392,24 @@ Before: ARP on while SEQ played did nothing (the sequencer bypassed the arp). No
 | 22.3 | Short press FX | opens the FX page / next slot as before (no bypass) |
 | 22.4 | Bypassed: change patch, save, power off and on | the bypass stays across patch changes, is not saved, is off after power-on |
 | 22.5 | FX page: SLOT1..SLOT4 | the slot shown is the one filled in the chain picture (was off by two since U2) |
+
+## 23. Two sequencers (SEQ page: SEQ1, SEQ2, LANE)
+
+SEQ presses: SEQ1 set 1 (RATE GATE SWING TEMPO), SEQ1 set 2 (CHORD ARP OCT LEVEL), SEQ2 set 1, SEQ2 set 2, LANE. Both share TEMPO, PLAY and the held-key transposition; the mod lane follows SEQ1.
+
+| # | Do | Expect |
+| --- | --- | --- |
+| 23.1 | Press SEQ five times | SEQ1 1/2, SEQ1 2/2, SEQ2 1/2, SEQ2 2/2, LANE; each SEQ tab shows its own grid / chord |
+| 23.2 | On SEQ1, REC a pattern; on SEQ2, REC a different one | each grid shows its own steps; REC on SEQ2 does not touch SEQ1 |
+| 23.3 | PLAY on the SEQ page | both start together from step 1; PLAY LED lit; PLAY on any page stops both |
+| 23.4 | SEQ2 RATE 1/8, SEQ1 1/16 (or 1/8T against 1/16) | counterpoint: SEQ2 at its own rate, locked to the same tempo |
+| 23.5 | SEQ2 set 2: ARP UP, CHORD MAJ, SEQ1 plain | SEQ2 arpeggiates its chords a beat a step; SEQ1 plays its notes unchanged |
+| 23.6 | Turn each LEVEL down and up | that sequence gets quieter / silent at 0; the other stays; loud textures stay clean (soft clip, no crackle) |
+| 23.7 | Hold or latch a key | both patterns transpose together |
+| 23.8 | Hold REC on SEQ2, REC again | only SEQ2's pattern clears (on SEQ1 / LANE: SEQ1's) |
+| 23.9 | Only SEQ2 has a pattern | PLAY plays it alone |
+| 23.10 | SAVE, power off and on, load the patch, PLAY | both patterns, SEQ2's RATE GATE SWING ARP OCT CHORD and both LEVELs come back |
+| 23.11 | Load an older user patch (saved before this build) | loads as before; SEQ2 empty with its defaults |
+| 23.12 | Save a patch with no SEQ2 pattern over one that had it; reload | no SEQ2 pattern (the old one does not come back) |
+| 23.13 | Delete a patch that had SEQ2 (hold SAVE), save a new one in its place | the new one has no stale SEQ2 |
+| 23.14 | 12 voices: both sequencers with chords and arps, OCT 2+, plus held keys; watch CPU MAX and DROPS on GLO INFO | no drops; if voices run out, the oldest notes are stolen (no hang) |

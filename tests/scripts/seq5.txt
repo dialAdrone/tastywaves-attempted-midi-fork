@@ -1,0 +1,7 @@
+# run 2 of seq4 on its log (a power cycle): load U01; both patterns and SEQ2's settings come back; PLAY on the SEQ page plays both
+400 enc 6 3
+1100 enc 6 4
+1800 enc 6 1
+2500 btn 11
+2600 btn 12
+4600 end

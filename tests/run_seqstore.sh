@@ -10,6 +10,10 @@ cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src
 F=build/host/seqstore.bin
 rm -f $F
 for n in 1 2 3; do DINGHY_PATCHES=$F build/host/vavewave build/host/ss$n tests/scripts/seqstore$n.txt > build/host/ss$n.log; done
+G=build/host/seq45.bin
+rm -f $G
+DINGHY_PATCHES=$G build/host/vavewave build/host/s4 tests/scripts/seq4.txt > build/host/s4.log
+DINGHY_PATCHES=$G build/host/vavewave build/host/s5 tests/scripts/seq5.txt > build/host/s5.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re
@@ -33,6 +37,14 @@ late = [n for t, n in c if t > 3600]
 check(before and all(n == 60 for n in before), 'run 3: the one-step pattern plays first')
 check(len(after) >= 4 and set(after) == {53, 57}, 'loading the patch replaces the pattern')
 check(len(late) >= 4 and set(late) == {53, 57}, 'a factory patch afterwards leaves the pattern alone')
+e = ons('build/host/s4.log')
+w = lambda a, b, ev=e: [n for t, n in ev if a <= t < b]
+one, two = [n for n in w(1690, 3690) if n in (53, 60)], [n for n in w(1690, 3690) if n in (57, 65)]
+check(set(w(1690, 3690)) == {53, 60, 57, 65} and 14 <= len(one) <= 17 and 7 <= len(two) <= 9, 'two sequencers: SEQ1 at 1/16 (%d notes), SEQ2 at 1/8 (%d) in 2 s' % (len(one), len(two)))
+check(w(3750, 4690) and set(w(3750, 4690)) <= {53, 60}, 'SEQ2 LEVEL 0: only SEQ1 sounds')
+check({61, 69} <= set(w(4750, 6690)) and {53, 60} <= set(w(4750, 6690)), 'SEQ2 with its own arp UP + CHORD MAJ (A3: 57 61, F4: 65 69), SEQ1 plain under it')
+f = ons('build/host/s5.log')
+check({53, 60, 57, 61, 65, 69} <= set(n for t, n in f if t > 2550), 'after a power cycle, loading U01 brings both patterns and SEQ2\'s rate, arp and chord back')
 print('seqstore: %d failures' % fails)
 raise SystemExit(1 if fails else 0)
 PY

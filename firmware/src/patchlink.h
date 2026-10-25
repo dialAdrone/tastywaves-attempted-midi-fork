@@ -85,7 +85,7 @@ static uint32_t pl_link(uint32_t cmd, const uint8_t *a, uint32_t len, uint8_t *o
         int rc;
         if (len != 1u || a[0] >= PL_IDS) return PLK_E_ARGS;
         rc = pl_del(a[0]);
-        if (rc == PL_OK) pl_link_dirty |= 1u << a[0];
+        if (rc == PL_OK) { (void)pl_del(PL_IDS + a[0]); pl_link_dirty |= 1u << a[0]; }   /* its companion too (pattern 2: panel.h); a failure there leaves an older companion, which never counts */
         return plk_rc(rc);
     }
     return PLK_E_ARGS;

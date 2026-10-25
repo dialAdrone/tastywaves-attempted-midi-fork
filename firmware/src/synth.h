@@ -458,7 +458,7 @@ static void events_drain(void)
         uint32_t e = ev_ring[t % EV_N], ty = e >> 16, note = (e >> 8) & 127u, vel = e & 127u;
         if (ty == EV_ON && vel) {               /* step input: plain notes; else the sequencer (its transposition keys), the arp, or plain */
             if (sq.rec) note_on(note, vel);
-            else if (arp_cfg.seq && sq.len) seq_in_on(note);
+            else if (arp_cfg.seq && (sq.len || sq2.len)) seq_in_on(note);
             else if (arp_on()) arp_in_on(note, vel);
             else note_on(note, vel);
         }
@@ -482,7 +482,9 @@ static void block_control(void)
     for (i = 0; i < P_COUNT; i++) p[i] = pclamp(i, patch.p[i]);
     arp_cfg.mode = p[P_ARP]; arp_cfg.rate = p[P_ARP_RATE]; arp_cfg.oct = p[P_ARP_OCT];
     arp_cfg.gate = p[P_ARP_GATE]; arp_cfg.swing = p[P_ARP_SWING]; arp_cfg.bpm = p[P_TEMPO]; arp_cfg.seq = p[P_SEQ]; arp_cfg.mglide = p[P_MOD_GLIDE];
-    arp_cfg.chord = p[P_CHORD];
+    arp_cfg.chord = p[P_CHORD]; arp_cfg.lvl1 = p[P_SEQ_LVL1]; arp_cfg.lvl2 = p[P_SEQ_LVL2];
+    arp_cfg2.mode = p[P_ARP2]; arp_cfg2.rate = p[P_ARP2_RATE]; arp_cfg2.oct = p[P_ARP2_OCT];
+    arp_cfg2.gate = p[P_ARP2_GATE]; arp_cfg2.swing = p[P_ARP2_SWING]; arp_cfg2.chord = p[P_CHORD2];
     if (p[P_MOD]) {                             /* the modulation lane moves its target (the patch itself is not touched; the smoother below rounds the edges) */
         int32_t a = (seq_mod_q8() * p[P_MOD_DEPTH]) / 256;       /* lane value x depth: +-6400 at the extremes */
         switch (p[P_MOD]) {

@@ -1,0 +1,28 @@
+# Two sequencers (tests/run_seqstore.sh): SEQ1 = F3 C4 at 1/16, SEQ2 = A3 F4 at 1/8 (patch 75 = P_ARP2_RATE); both play on PLAY;
+# SEQ2's LEVEL 0 (81 = P_SEQ_LVL2) silences it; SEQ2 with its own arp UP (74) and chord MAJ (79) under a plain SEQ1; stop, SAVE -> U01.
+100 btn 11
+200 btn 13
+300 keys 0x1
+400 keys 0
+500 keys 0x80
+600 keys 0
+700 btn 13
+800 btn 11
+900 btn 11
+1000 btn 13
+1100 keys 0x10
+1200 keys 0
+1300 keys 0x1000
+1400 keys 0
+1500 btn 13
+1600 patch 75 1
+1700 btn 12
+3700 patch 81 0
+4700 patch 81 127
+4700 patch 74 1
+4700 patch 79 2
+5300 btn 11
+5400 shot seq2
+6700 btn 12
+6800 btn 9
+8000 end

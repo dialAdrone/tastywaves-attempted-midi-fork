@@ -76,6 +76,10 @@ enum {
     P_FX1_TYPE, P_FX1_A, P_FX1_B, P_FX1_MIX, P_FX2_TYPE, P_FX2_A, P_FX2_B, P_FX2_MIX,
     P_FX3_TYPE, P_FX3_A, P_FX3_B, P_FX3_MIX, P_FX4_TYPE, P_FX4_A, P_FX4_B, P_FX4_MIX,
     P_CHORD,        /* the sequencer's chord on each step: 0 off (the note alone), 1 the held keys' shape, 2 maj 3 min 4 7 5 maj7 6 min7 7 sus4 (arp.h) */
+    /* the second pattern (SEQ2): its own arp, rate, gate, swing, chord; both patterns' levels. Saved in the patch's companion record (panel.h), not the patch record */
+    P_ARP2, P_ARP2_RATE, P_ARP2_OCT, P_ARP2_GATE, P_ARP2_SWING, P_CHORD2,
+    P_SEQ_LVL1,     /* pattern 1's level, 0..127 = its velocities x 0..1 */
+    P_SEQ_LVL2,     /* pattern 2's level */
     P_COUNT
 };
 
@@ -103,7 +107,10 @@ static const pdesc_t PDESC[P_COUNT] = {
     {"FXT", 0, 5, 0},      {"FXA", 0, 127, 64},   {"FXB", 0, 127, 64},   {"FXMIX", 0, 127, 64},
     {"FXT", 0, 5, 0},      {"FXA", 0, 127, 64},   {"FXB", 0, 127, 64},   {"FXMIX", 0, 127, 64},
     {"CHORD", 0, 7, 0},
+    {"ARP2", 0, 7, 0},    {"RATE2", 0, 5, 3},    {"OCT2", 1, 4, 1},     {"GATE2", 1, 127, 64}, {"SWING2", 0, 50, 0},
+    {"CHORD2", 0, 7, 0},  {"LVL1", 0, 127, 127}, {"LVL2", 0, 127, 127},
 };
+#define P_MAIN P_ARP2                           /* the parameters in the patch record; P_MAIN .. P_COUNT - 1 go in its companion with pattern 2 */
 
 static struct { volatile int32_t p[P_COUNT]; } patch;                       /* main writes */
 static struct { volatile int32_t bend, mod, at; } eng_ctl;                  /* main writes: -8192..8191, 0..127, 0..127 */

@@ -106,3 +106,19 @@ User request: ARP on while SEQ plays did nothing (the sequencer bypassed the arp
   of keys with the chord lit (root amber), and what the arp does. HELD names what the keys hold (MAJ MIN 7 MAJ7 MIN7 SUS4 SUS2
   DIM AUG 5, else CHORD), so the shape picked out on the small keys is visible.
 
+## Two sequencers (2026-10-25)
+
+User request: a second sequencer for thicker textures and counterpoint. User decisions: the same patch sound for both; both patterns
+saved with the patch; held keys transpose both; PLAY starts both together (and stops both from any page).
+
+- arp.h has two lanes (ar / ar2, qs / qs2, sq / sq2): one clock and TEMPO, one transport (sq_run), one set of held keys (qs.h, the
+  transposition and CHORD HELD for both). Each lane has its own pattern, RATE, GATE, SWING, arp MODE, OCT, CHORD and LEVEL
+  (SEQ1: P_ARP_RATE.. P_CHORD as before, P_SEQ_LVL1; SEQ2: P_ARP2 .. P_CHORD2, P_SEQ_LVL2). The plain arp (no sequencer) is lane 0.
+- LEVEL scales the steps' velocities (127 = as recorded, so SEQ1 sounds exactly as before). Both lanes share the 12 voices and
+  the output soft clip, so a dense mix saturates softly instead of clipping. A lane does not stop a note the other one sounds.
+- The mod lane follows SEQ1's steps. Step input (REC) writes the pattern of the tab shown (sq_lane); LANE records SEQ1.
+- Storage: the patch record is unchanged (params 0..P_MAIN-1 and SEQ1's pattern). SEQ2's settings and pattern go in a companion
+  record, id 32 + the patch's id, written right after the patch. It counts only when newer than its patch (pl_seq), so a patch
+  replaced or deleted from the web tool can never pick up a stale SEQ2; saving without SEQ2 data deletes the companion, deleting
+  a patch deletes both. Older firmware ignores ids 32..63 (it loses only SEQ2 on a downgrade). The web tool's patch library does
+  not carry the companion yet (a backup made there loses SEQ2).

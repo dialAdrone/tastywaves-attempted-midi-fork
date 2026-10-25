@@ -221,35 +221,38 @@ static void app_main(void)
             }
         }
         if (pn.clr && (b & ~(1u << BTN_REC) || fm1_ms - pn.t_clr > 5000u)) pn.clr = 0;    /* "CLEAR PATTERN?": any other button or 5 s cancels */
-        if (b & (1u << BTN_REC) && pn.clr) {    /* REC again: clear the pattern */
+        if (b & (1u << BTN_REC) && pn.clr) {    /* REC again: clear the pattern shown (SEQ1 with its lane, or SEQ2) */
+            seq_pat_t *P = LP(pn_seq_lane());
             pn.clr = 0;
-            sq.len = 0; sq.cur = 0;
-            for (k = 0; k < SEQ_MAXN; k++) { sq.note[k] = 0; sq.vel[k] = 0; sq.tie[k] = 0; ml[k] = 0; }
+            P->len = 0; sq.cur = 0;
+            for (k = 0; k < SEQ_MAXN; k++) { P->note[k] = 0; P->vel[k] = 0; P->tie[k] = 0; if (P == &sq) ml[k] = 0; }
             pn_msg("CLEARED", 0, 0);
         } else if (b & (1u << BTN_REC) && (pn.page == UI_P_SEQ || sq.rec)) { rec_arm = 1; t_rec = fm1_ms; }   /* REC acts on the SEQ page only (elsewhere: nothing) */
         if (rec_arm) {
             if (!(hb >> BTN_REC & 1u)) {        /* a short press: step input on / off (off keeps what was entered as the pattern) */
                 rec_arm = 0;
-                if (!sq.rec) { sq.cur = 0; sq.rec = 1; pn_goto(UI_P_SEQ, 0); }   /* (on the NOTES tab: the steps) */
-                else { if (sq.cur) sq.len = sq.cur; sq.rec = 0; seq_stop(); }      /* the pattern waits: PLAY on the SEQ page starts it */
+                if (!sq.rec) { sq_lane = (uint8_t)pn_seq_lane(); sq.cur = 0; sq.rec = 1; pn_goto(UI_P_SEQ, sq_lane * 2u); }   /* into the pattern shown (LANE: SEQ1), on its steps */
+                else { if (sq.cur) LP(sq_lane)->len = sq.cur; sq.rec = 0; seq_stop(); }      /* the pattern waits: PLAY on the SEQ page starts it */
             } else if (fm1_ms - t_rec >= 700u) {    /* held: ask first (REC again clears the pattern) */
                 rec_arm = 0;
-                if (sq.len || sq.rec) { pn.clr = 1; pn.t_clr = fm1_ms; }
+                if (LP(pn_seq_lane())->len || sq.rec) { pn.clr = 1; pn.t_clr = fm1_ms; }
             }
         }
         rec_pass = sq.rec;                      /* (a button that ends or enters the last step does nothing else in this pass) */
         if (sq.rec && b & (1u << BTN_PLAY) && sq.cur < SEQ_MAXN) {         /* step input: PLAY is a rest */
-            sq.note[sq.cur] = 0; sq.vel[sq.cur] = 0; sq.tie[sq.cur] = 0;
+            seq_pat_t *P = LP(sq_lane);
+            P->note[sq.cur] = 0; P->vel[sq.cur] = 0; P->tie[sq.cur] = 0;
             sq.cur++;
         }
         if (sq.rec && b & (1u << BTN_SEQ) && sq.cur && sq.cur < SEQ_MAXN) {   /* step input: SEQ ties the step before */
-            sq.note[sq.cur] = sq.note[sq.cur - 1u]; sq.vel[sq.cur] = sq.vel[sq.cur - 1u]; sq.tie[sq.cur] = 1;
+            seq_pat_t *P = LP(sq_lane);
+            P->note[sq.cur] = P->note[sq.cur - 1u]; P->vel[sq.cur] = P->vel[sq.cur - 1u]; P->tie[sq.cur] = 1;
             sq.cur++;
         }
-        if (sq.rec && sq.cur >= SEQ_MAXN) { sq.len = SEQ_MAXN; sq.rec = 0; seq_stop(); }  /* 32 steps: full */
-        if (!rec_pass && (b & (1u << BTN_PLAY)) && (pn.page == UI_P_SEQ || (patch_get(P_SEQ) && sq_run && sq.len))) {  /* PLAY stops the sequencer from any page; on the SEQ page it also starts it (elsewhere, stopped, it is LATCH) */
+        if (sq.rec && sq.cur >= SEQ_MAXN) { LP(sq_lane)->len = SEQ_MAXN; sq.rec = 0; seq_stop(); }  /* 32 steps: full */
+        if (!rec_pass && (b & (1u << BTN_PLAY)) && (pn.page == UI_P_SEQ || (patch_get(P_SEQ) && sq_run && (sq.len || sq2.len)))) {  /* PLAY stops the sequencer from any page; on the SEQ page it also starts it (elsewhere, stopped, it is LATCH) */
             if (patch_get(P_SEQ) && sq_run) seq_stop();
-            else if (sq.len) { patch_set(P_SEQ, 1); pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ]; sq_run = 1; }
+            else if (sq.len || sq2.len) { patch_set(P_SEQ, 1); pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ]; sq_run = 1; }
             else pn_msg("NO PATTERN", 0, 0);
         }
         else if (!rec_pass && (b & (1u << BTN_PLAY))) {             /* LATCH on / off: on keeps the keys held now; off lets every latched note go */
@@ -265,10 +268,10 @@ static void app_main(void)
             uint8_t look = set.look;
             uint32_t d0 = dirty;
             pn_buttons(rec_pass ? b & ~(1u << BTN_SEQ) : b, hb, &set, &dirty);
-            if (sq.rec && pn.page != UI_P_SEQ) { if (sq.cur) sq.len = sq.cur; sq.rec = 0; seq_stop(); }   /* another page while recording: the steps so far are the pattern */
+            if (sq.rec && pn.page != UI_P_SEQ) { if (sq.cur) LP(sq_lane)->len = sq.cur; sq.rec = 0; seq_stop(); }   /* another page while recording: the steps so far are the pattern */
             if (look != set.look || dirty != d0) t_change = fm1_ms;
         }
-        {   uint32_t am = sq.rec ? 0u : patch_get(P_SEQ) && sq.len ? 2u : patch_get(P_ARP) ? 1u : 0u;
+        {   uint32_t am = sq.rec ? 0u : patch_get(P_SEQ) && (sq.len || sq2.len) ? 2u : patch_get(P_ARP) ? 1u : 0u;
             if (am == 2u && route_prev != 2u) sq_run = 1;
             if (am && am != route_prev) t_rejoin = fm1_ms + 15u;   /* the arp or the sequencer came on over sounding notes (held keys, latched): after a block or two they become its notes */
             route_prev = am;
@@ -298,7 +301,7 @@ static void app_main(void)
                 else {
                     started |= 1u << k; held[k] = (uint8_t)(base + k); play(held[k], 100); midi_send(0x90, held[k], 100);
                     if (rec_pass) lat[held[k] >> 3] &= (uint8_t)~(1u << (held[k] & 7u));     /* (a latched note played again as a step is not latched any more) */
-                    if (sq.rec && sq.cur < SEQ_MAXN) { sq.note[sq.cur] = held[k]; sq.vel[sq.cur] = 100; sq.tie[sq.cur] = 0; sq.cur++; }    /* step input */
+                    if (sq.rec && sq.cur < SEQ_MAXN) { seq_pat_t *P = LP(sq_lane); P->note[sq.cur] = held[k]; P->vel[sq.cur] = 100; P->tie[sq.cur] = 0; sq.cur++; }    /* step input */
                 }
             }
             if (up >> k & 1u && started >> k & 1u) { started &= ~(1u << k); stop(held[k]); midi_send(0x80, held[k], 0); }
@@ -341,13 +344,16 @@ static void app_main(void)
         if (sq.rec) {                           /* step input: the steps entered, the next one blinking */
             lit = sq.cur >= 27u ? 0x7FFFFFFu : (1u << sq.cur) - 1u;
             if (sq.cur < 27u && fm1_ms >> 8 & 1u) lit |= 1u << sq.cur;
-        } else if (pn.page == UI_P_SEQ && sq_tap.on && sq.len && sq_tap.step < 27u) lit = 1u << sq_tap.step;      /* the SEQ page: the step playing */
+        } else if (pn.page == UI_P_SEQ && sq_tap.on) {              /* the SEQ page: the step playing of the pattern shown */
+            uint32_t st = pn_seq_lane() ? sq_tap.step2 : sq_tap.step;
+            if (LP(pn_seq_lane())->len && st < 27u) lit = 1u << st;
+        }
         for (k = 0; k < 27u; k++) {
             fm1_led_key(KEY_LED(k), (int)(lit >> k & 1u));
         }
         m = ui_button_leds(&pn_view, fm1_ms >> 8 & 1u);
         if (fm1_ms < pn.t_flash) m |= 1u << BTN_SAVE;
-        if (latch || (patch_get(P_SEQ) && sq_run && sq.len)) m |= 1u << BTN_PLAY;     /* LATCH on, or the sequencer playing */
+        if (latch || (patch_get(P_SEQ) && sq_run && (sq.len || sq2.len))) m |= 1u << BTN_PLAY;     /* LATCH on, or the sequencer playing */
         if (patch_get(P_ARP)) m |= 1u << BTN_ARP;
         if (patch_get(P_SEQ)) m |= 1u << BTN_SEQ;      /* (lit with no pattern too: nothing plays until REC has entered steps) */
         if (sq.rec) m |= 1u << BTN_REC;

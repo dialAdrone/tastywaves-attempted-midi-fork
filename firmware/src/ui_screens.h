@@ -959,7 +959,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             break;
         case UI_P_ARP: f = ui_arp_fn; pk = (0x20000000u | v->arp_mode | (uint32_t)v->arp_oct << 4 | (uint32_t)v->arp_gate << 8 | (uint32_t)v->arp_swing << 16) ^ (v->arp_mode == 5u ? v->arp_seed * 2654435761u : 0u); textch = !ui_eq(s->info, v->info); break;
         case UI_P_SEQ:
-            if (v->sub == 2u) {
+            if (v->sub == 1u || v->sub == 3u) {     /* SEQ1 / SEQ2 set 2: the chord */
                 uint32_t c;
                 f = ui_chord_fn; pk = 0x44000000u ^ v->chord_keys ^ (uint32_t)v->chord << 24 ^ (uint32_t)v->chord_root << 27 ^ (uint32_t)v->chord_oct << 20;
                 for (c = 0; c < 16u && v->chord_name[c]; c++) pk = (pk ^ (uint8_t)v->chord_name[c]) * 16777619u;

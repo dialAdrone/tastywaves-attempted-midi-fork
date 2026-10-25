@@ -198,7 +198,10 @@ int main(void)
         model_put(&md, 3, &p);
         CHECK(pl_get(3, &q) == 0 && q.n == 48 && !memcmp(q.v, p.v, 96) && !strcmp(q.name, "BRIGHT PAD 1"), "get 3 returns what was put");
         CHECK(pl_get(4, &q) == PL_E_NONE, "get of an unused id");
-        CHECK(pl_get(32, &q) == PL_E_ARGS && pl_put(32, &p) == PL_E_ARGS && pl_del(32) == PL_E_ARGS, "id 32 refused");
+        CHECK(pl_get(PL_SLOTS, &q) == PL_E_ARGS && pl_put(PL_SLOTS, &p) == PL_E_ARGS && pl_del(PL_SLOTS) == PL_E_ARGS, "id 64 refused");
+        CHECK(pl_put(PL_IDS + 3u, &p) == 0 && pl_get(PL_IDS + 3u, &q) == 0 && pl_present() == (1u << 3) && pl_seq(PL_IDS + 3u) > pl_seq(3), "a companion (id 35): stored, newer than its patch, not listed as a patch");
+        CHECK(pl_put(3, &p) == 0 && pl_seq(PL_IDS + 3u) < pl_seq(3), "the patch saved again: its old companion is older (the app ignores it)");
+        CHECK(pl_del(PL_IDS + 3u) == 0 && pl_get(PL_IDS + 3u, &q) == PL_E_NONE && pl_seq(PL_IDS + 3u) == 0u && pl_get(3, &q) == 0, "the companion deleted, the patch stays");
         p.n = PL_MAXP + 1;
         CHECK(pl_put(0, &p) == PL_E_ARGS, "too many parameters refused");
         p.n = 4; p.pw = PL_MAXPW + 1;

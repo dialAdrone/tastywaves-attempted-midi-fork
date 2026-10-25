@@ -42,7 +42,7 @@ Pages and pictures (U2 page map, docs/UI-NAV-PLAN.md section 3):
 | SEL | VOICE (MODE GLIDE PB RNG QUAL), CONTROL (MW>POS MW>VIB AT>CUT VEL>AMP), OUTPUT (VOLUME DRIVE VEL>CUT) | a panel per knob (voices lit while they sound, a glide, the bend range, a smooth / coarse cycle); the wheel / aftertouch / velocity routes; the drive curve at the volume and velocity > cutoff |
 | GLO | SETUP (LOOK: the HOME look, a setting), INFO (RESET) | the three looks, the chosen one filled; firmware, CPU MAX and DROPS since RESET, the boot key scan |
 | ARP | ARP, 2 sets (MODE RATE OCT GATE / SWING TEMPO) | 16 steps of the pattern a three-note chord plays (RANDOM from the run's seed) |
-| SEQ | NOTES (RATE GATE SWING TEMPO), LANE (TARGET DEPTH GLIDE VALUE), CHORD (CHORD ARP OCT) | the state, the steps and the 4 x 8 grid; CHORD: the chord name, two octaves of keys with the chord lit (root amber), what the arp does with it |
+| SEQ | SEQ1 and SEQ2, two sets each (RATE GATE SWING TEMPO; CHORD ARP OCT LEVEL), LANE (TARGET DEPTH GLIDE VALUE) | the state, the steps and the 4 x 8 grid; CHORD: the chord name, two octaves of keys with the chord lit (root amber), what the arp does with it |
 
 HOME on HOME does nothing (the look is GLO SETUP). The EDIT + black key and EDIT + HOME shortcuts are gone. A picture
 that keeps changing (a knob turning) is redrawn at most every 60 ms.

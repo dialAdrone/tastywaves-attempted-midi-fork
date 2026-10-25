@@ -8,6 +8,7 @@
  *   pl_put(id, &p)         append a new record (replaces the id); main loop only, when quiet(); may compact (up to
  *                          about 0.3 s, 3 sector erases of ~17 ms with interrupts off each): feeds the watchdog
  *   pl_del(id)             append a tombstone
+ *   pl_seq(id)             the live record's sequence (ids PL_IDS.. are companions: newer than the patch = it belongs to it)
  *
  * Record (little endian, 4-byte aligned): u16 length | u8 type (1 patch, 2 tombstone) | u8 id | u32 sequence |
  * u8 version | u8 n | char name[12] | u8 pattern words, u8 0 | int16 v[n] | int16 pattern[pw] | pad | u32 crc32 of everything before it.
@@ -36,6 +37,7 @@
 #define PL_SSZ 0x1000u
 #define PL_HI (PL_AT + PL_SECT * PL_SSZ)
 #define PL_IDS 32u
+#define PL_SLOTS 64u                             /* record ids: 0..31 the patches (PL_IDS, what pl_present lists), 32..63 each patch's companion (the app: pattern 2 and its settings) */
 #define PL_NAME 12u
 #define PL_MAXP 80u                              /* parameters per patch: with a full pattern (PL_MAXPW words) the record is 254 B, the limit is 256 */
 #define PL_MAXPW 33u                             /* pattern words: the length, then one word a step (arp.h, 32 steps) */
@@ -61,7 +63,7 @@ typedef struct {
 
 typedef struct { uint32_t off, seq; uint16_t len; uint8_t type; } pl_ent_t;   /* type 0: none */
 static struct {
-    pl_ent_t ent[PL_IDS];                        /* newest record per id (patch or tombstone) */
+    pl_ent_t ent[PL_SLOTS];                        /* newest record per id (patch or tombstone) */
     uint16_t free_from[PL_SECT];                 /* from here to the sector's end every byte is 0xFF (0 = erased) */
     uint32_t maxseq[PL_SECT];                    /* highest sequence of a valid record in the sector (0 = none) */
     uint32_t seq, live_bytes;
@@ -103,7 +105,7 @@ static int pl_valid(const uint8_t *r, uint32_t avail, uint32_t *len)
     uint32_t l = r[0] | (uint32_t)r[1] << 8, n;
     if (l < PL_HDR + 4u || l > PL_MAXREC || (l & 3u) || l > avail) return 0;
     n = r[9];
-    if (r[3] >= PL_IDS || r[8] != PL_VER) return 0;
+    if (r[3] >= PL_SLOTS || r[8] != PL_VER) return 0;
     if (r[2] == PL_T_PATCH) { if (n > PL_MAXP || r[22] > PL_MAXPW || r[23] || l != pl_reclen(n, r[22])) return 0; }   /* byte 22: pattern words (0 in the first records) */
     else if (r[2] == PL_T_DEL) { if (n != 0u || l != PL_HDR + 4u) return 0; }
     else return 0;
@@ -165,9 +167,14 @@ static int pl_init(void)
     for (s = 0; s < PL_SECT; s++) pl_scan(s);
     for (s = 0; s < PL_SECT; s++)
         if (pl.maxseq[s] > best) { best = pl.maxseq[s]; pl.head = (uint8_t)s; }
-    for (i = 0; i < PL_IDS; i++)
+    for (i = 0; i < PL_SLOTS; i++)
         if (pl.ent[i].type == PL_T_PATCH) pl.live_bytes += pl.ent[i].len;
     return PL_OK;
+}
+
+static uint32_t pl_seq(uint32_t id)              /* the sequence of id's live record (0: none): a companion counts only when newer than its patch */
+{
+    return id < PL_SLOTS && pl.ent[id].type == PL_T_PATCH ? pl.ent[id].seq : 0u;
 }
 
 static uint32_t pl_present(void)
@@ -182,7 +189,7 @@ static int pl_get(uint32_t id, pl_patch_t *out)
 {
     uint32_t len, n, i;
     if (!pl.ready) return PL_E_NOFLASH;
-    if (id >= PL_IDS || !out) return PL_E_ARGS;
+    if (id >= PL_SLOTS || !out) return PL_E_ARGS;
     if (pl.ent[id].type != PL_T_PATCH) return PL_E_NONE;
     if (st_read(pl.ent[id].off, pl_rec, pl.ent[id].len)) return PL_E_FLASH;
     if (!pl_valid(pl_rec, pl.ent[id].len, &len) || pl_rec[2] != PL_T_PATCH || pl_rec[3] != id) return PL_E_BAD;
@@ -236,7 +243,7 @@ static int pl_first_erased(void)
 static int pl_has_live(uint32_t s)
 {
     uint32_t i;
-    for (i = 0; i < PL_IDS; i++)
+    for (i = 0; i < PL_SLOTS; i++)
         if (pl.ent[i].type == PL_T_PATCH && pl.ent[i].off >= PL_AT + s * PL_SSZ && pl.ent[i].off < PL_AT + (s + 1u) * PL_SSZ) return 1;
     return 0;
 }
@@ -261,7 +268,7 @@ static void pl_reclaim(uint32_t keep)
 static void pl_drop_tombstones(void)             /* a tombstone whose sector was erased is gone */
 {
     uint32_t id;
-    for (id = 0; id < PL_IDS; id++)
+    for (id = 0; id < PL_SLOTS; id++)
         if (pl.ent[id].type == PL_T_DEL && pl.free_from[(pl.ent[id].off - PL_AT) / PL_SSZ] == 0u) pl.ent[id].type = 0;
 }
 
@@ -272,13 +279,13 @@ static int pl_evacuate(void)
 {
     uint32_t v = PL_SECT, best = 0xFFFFFFFFu, s, id, used = 0, cnt = 0, len, k;
     int rc0;
-    uint8_t ids[PL_IDS];
-    uint16_t lens[PL_IDS];
+    uint8_t ids[PL_SLOTS];
+    uint16_t lens[PL_SLOTS];
     pl.evacs++;
     for (s = 0; s < PL_SECT; s++)
         if (s != pl.head && pl.maxseq[s] < best) { best = pl.maxseq[s]; v = s; }
     if (v == PL_SECT) return PL_E_FLASH;
-    for (id = 0; id < PL_IDS; id++) {
+    for (id = 0; id < PL_SLOTS; id++) {
         if (pl.ent[id].type != PL_T_PATCH || pl.ent[id].off < PL_AT + v * PL_SSZ || pl.ent[id].off >= PL_AT + (v + 1u) * PL_SSZ) continue;
         if (used + pl.ent[id].len > PL_SSZ || st_read(pl.ent[id].off, pl_ram + used, pl.ent[id].len)) return PL_E_FLASH;
         if (!pl_valid_id(pl_ram + used, pl.ent[id].len, id, &len)) { pl.live_bytes -= pl.ent[id].len; pl.ent[id].type = 0; continue; }
@@ -338,7 +345,7 @@ static int pl_gc(void)
     }
     d = (uint32_t)e;
     pl.head = (uint8_t)d;
-    for (id = 0; id < PL_IDS; id++) {
+    for (id = 0; id < PL_SLOTS; id++) {
         if (pl.ent[id].type != PL_T_PATCH) continue;
         n = pl.ent[id].len;
         fm1_wdt_feed();
@@ -382,7 +389,7 @@ static int pl_put(uint32_t id, const pl_patch_t *in)
     uint32_t i, n, len, live;
     int rc;
     if (!pl.ready) return PL_E_NOFLASH;
-    if (id >= PL_IDS || !in || in->n > PL_MAXP || in->pw > PL_MAXPW) return PL_E_ARGS;
+    if (id >= PL_SLOTS || !in || in->n > PL_MAXP || in->pw > PL_MAXPW) return PL_E_ARGS;
     n = in->n;
     len = pl_reclen(n, in->pw);
     live = pl.live_bytes - (pl.ent[id].type == PL_T_PATCH ? pl.ent[id].len : 0u) + len;
@@ -412,7 +419,7 @@ static int pl_del(uint32_t id)
     uint32_t i, len = PL_HDR + 4u;
     int rc;
     if (!pl.ready) return PL_E_NOFLASH;
-    if (id >= PL_IDS) return PL_E_ARGS;
+    if (id >= PL_SLOTS) return PL_E_ARGS;
     if (pl.ent[id].type != PL_T_PATCH) return PL_OK;  /* nothing to delete */
     if ((rc = pl_reserve(len)) != 0) return rc;
     if (pl.ent[id].type != PL_T_PATCH) return PL_OK;  /* a compaction found the record unreadable and dropped it */

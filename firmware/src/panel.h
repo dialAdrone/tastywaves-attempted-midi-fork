@@ -68,8 +68,9 @@ typedef struct { const char *lab; uint8_t id, fmt, step, tx; } kdef_t;
 #define KN {"-", 0, F_NONE, 0, 0}
 #define PN_ID_LOOK 0xF0u                        /* not patch parameters: the HOME look (settings), the CPU max / drops reset */
 #define PN_ID_RESET 0xF1u
+#define PN_LANE_SET 4u                          /* the SEQ page's LANE set */
 
-static const uint8_t NSUB[UI_P_N] = {1, 4, 4, 3, 2, 3, 2, 2, 3, 2};   /* HOME EDIT FX ENV LFO SEL GLO ARP SEQ HELP (HELP: two text pages) */
+static const uint8_t NSUB[UI_P_N] = {1, 4, 4, 3, 2, 3, 2, 2, 5, 2};   /* HOME EDIT FX ENV LFO SEL GLO ARP SEQ HELP (HELP: two text pages) */
 static const kdef_t PG[UI_P_N][6][4] = {
     [UI_P_HOME] = {{K("CUTOFF", P_CUTOFF, F_PCT, 1, 0), K("RESO", P_RESO, F_PCT, 1, 0), K("ATK", P_A1, F_TIME, 1, 0),
                     K("REL", P_R1, F_TIME, 1, 0)}},
@@ -107,19 +108,24 @@ static const kdef_t PG[UI_P_N][6][4] = {
                   {K("SWING", P_ARP_SWING, F_INT, 1, 0), K("TEMPO", P_TEMPO, F_INT, 1, 0), KN, KN}},
     [UI_P_SEQ] = {{K("RATE", P_ARP_RATE, F_TXT, 1, TX_ARATE), K("GATE", P_ARP_GATE, F_PCT, 1, 0), K("SWING", P_ARP_SWING, F_INT, 1, 0),
                    K("TEMPO", P_TEMPO, F_INT, 1, 0)},
-                  {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), K("GLIDE", P_MOD_GLIDE, F_TXT, 1, TX_ONOFF), KN},       /* set 2: the modulation lane (SELECT picks the step, VALUE is drawn and edited by hand: pn_encoders) */
-                  {K("CHORD", P_CHORD, F_TXT, 1, TX_CHORD), K("ARP", P_ARP, F_TXT, 1, TX_ARP), K("OCT", P_ARP_OCT, F_INT, 1, 0), KN}},     /* set 3: the chord a step plays, and the arp that plays it */
+                  {K("CHORD", P_CHORD, F_TXT, 1, TX_CHORD), K("ARP", P_ARP, F_TXT, 1, TX_ARP), K("OCT", P_ARP_OCT, F_INT, 1, 0),
+                   K("LEVEL", P_SEQ_LVL1, F_PCT, 1, 0)},                  /* SEQ1 set 2: the chord a step plays, the arp that plays it, the pattern's level */
+                  {K("RATE", P_ARP2_RATE, F_TXT, 1, TX_ARATE), K("GATE", P_ARP2_GATE, F_PCT, 1, 0), K("SWING", P_ARP2_SWING, F_INT, 1, 0),
+                   K("TEMPO", P_TEMPO, F_INT, 1, 0)},                    /* SEQ2: the same for pattern 2 (one tempo) */
+                  {K("CHORD", P_CHORD2, F_TXT, 1, TX_CHORD), K("ARP", P_ARP2, F_TXT, 1, TX_ARP), K("OCT", P_ARP2_OCT, F_INT, 1, 0),
+                   K("LEVEL", P_SEQ_LVL2, F_PCT, 1, 0)},
+                  {K("TARGET", P_MOD, F_TXT, 1, TX_MOD), K("DEPTH", P_MOD_DEPTH, F_INT, 1, 0), K("GLIDE", P_MOD_GLIDE, F_TXT, 1, TX_ONOFF), KN}},       /* LANE: the modulation lane, on pattern 1's steps (SELECT picks the step, VALUE is drawn and edited by hand: pn_encoders) */
 };
 
 /* the tabs the strip shows (and HELP lists): a tab is one picture; it holds one or two knob sets (the page button steps
  * through the sets in order, the set tag under the tab says which). TABG: the tab of each set; TABN: the tab names */
 static const uint8_t TABG[UI_P_N][6] = {
     [UI_P_EDIT] = {0, 1, 2, 3}, [UI_P_FX] = {0, 1, 2, 3}, [UI_P_ENV] = {0, 1, 2}, [UI_P_LFO] = {0, 0},
-    [UI_P_SEL] = {0, 1, 2}, [UI_P_GLO] = {0, 1}, [UI_P_ARP] = {0, 0}, [UI_P_SEQ] = {0, 1, 2}, [UI_P_HELP] = {0, 1}};
+    [UI_P_SEL] = {0, 1, 2}, [UI_P_GLO] = {0, 1}, [UI_P_ARP] = {0, 0}, [UI_P_SEQ] = {0, 0, 1, 1, 2}, [UI_P_HELP] = {0, 1}};
 static const char *const TABN[UI_P_N][6] = {
     [UI_P_HOME] = {"HOME"}, [UI_P_EDIT] = {"OSC1", "OSC2", "MIX", "FILTER"}, [UI_P_FX] = {"SLOT1", "SLOT2", "SLOT3", "SLOT4"},
     [UI_P_ENV] = {"AMP", "MOD", "MOD>"}, [UI_P_LFO] = {"LFO"}, [UI_P_SEL] = {"VOICE", "CONTROL", "OUTPUT"}, [UI_P_GLO] = {"SETUP", "INFO"},
-    [UI_P_ARP] = {"ARP"}, [UI_P_SEQ] = {"NOTES", "LANE", "CHORD"}, [UI_P_HELP] = {"HELP", "HELP"}};
+    [UI_P_ARP] = {"ARP"}, [UI_P_SEQ] = {"SEQ1", "SEQ2", "LANE"}, [UI_P_HELP] = {"HELP", "HELP"}};
 static void pn_tabpos(uint32_t pg, uint32_t sub, uint8_t *tab, uint8_t *ntabs, uint8_t *tset, uint8_t *tsets)   /* where set `sub` sits in the strip */
 {
     uint32_t i, t = TABG[pg][sub], f = sub, n = 0;
@@ -163,51 +169,58 @@ static struct {
 } pn;
 static ui_view_t pn_view;
 static ui_shadow_t pn_shadow;
+static uint32_t pn_seq_lane(void) { return pn.page == UI_P_SEQ && (pn.sub == 2u || pn.sub == 3u); }     /* the pattern the SEQ page shows: 0 SEQ1 (and LANE), 1 SEQ2 */
 
 
 /* The note pattern and the mod lane go into a patch record as pattern words (patchlog.h): word 0 the length (1..32), then a word per
  * step: note (bits 0-6), sounds (7; clear = rest), tied (8), lane value + 64 (9-15). Only a patch saved with the sequencer on and a
  * pattern recorded has them. Loading a patch with a pattern replaces the pattern in RAM; a patch without one leaves it as it is
  * (the sequencer is a performance switch, like the arp: changing the patch does not stop the tune). */
-static uint32_t pn_pat_words(int16_t *w, uint32_t any)    /* the words for the pattern now (0: none; `any` 0 also gives none with the sequencer off) */
+static uint32_t pn_pat_words(uint32_t L, int16_t *w, uint32_t any)    /* the words for pattern L now (0: none; `any` 0 also gives none with the sequencer off); pattern 2 has no lane (bits 9-15: 64) */
 {
-    uint32_t n = sq.len > SEQ_MAXN ? SEQ_MAXN : sq.len, i;
+    seq_pat_t *P = LP(L);
+    uint32_t n = P->len > SEQ_MAXN ? SEQ_MAXN : P->len, i;
     if ((!any && !patch_get(P_SEQ)) || !n) return 0;
     if (w) {
         w[0] = (int16_t)n;
         for (i = 0; i < n; i++) {
-            uint32_t v = (sq.note[i] & 127u) | (sq.vel[i] ? 128u : 0u) | (sq.tie[i] ? 256u : 0u) | (uint32_t)((int32_t)ml[i] + 64) << 9;
+            uint32_t v = (P->note[i] & 127u) | (P->vel[i] ? 128u : 0u) | (P->tie[i] ? 256u : 0u) | (uint32_t)((L ? 0 : (int32_t)ml[i]) + 64) << 9;
             w[1u + i] = (int16_t)(uint16_t)v;
         }
     }
     return 1u + n;
 }
-static uint32_t pn_pat_sum(void)                 /* a cheap fingerprint of the pattern (0: none): a changed pattern is an edit, SEQ on or off */
+static uint32_t pn_pat_sum(void)                 /* a cheap fingerprint of both patterns (0: none): a changed pattern is an edit, SEQ on or off */
 {
     int16_t w[PL_MAXPW];
-    uint32_t n = pn_pat_words(w, 1u), i, h = 0;
-    for (i = 0; i < n; i++) h = (h * 31u + (uint16_t)w[i]) ^ (h >> 27);
-    return h;
+    uint32_t n, i, h = 0, L;
+    for (L = 0; L < 2u; L++) {
+        n = pn_pat_words(L, w, 1u);
+        for (i = 0; i < n; i++) h = (h * 31u + (uint16_t)w[i]) ^ (h >> 27);
+        h = h * 7u + L;
+    }
+    return h == 7u ? 0u : h;
 }
-static void pn_pat_apply(const pl_patch_t *t)    /* a loaded user patch's pattern becomes the pattern; a patch saved without one empties it */
+static void pn_pat_apply(uint32_t L, const pl_patch_t *t)    /* a loaded user patch's pattern L becomes the pattern; a patch saved without one empties it */
 {
+    seq_pat_t *P = LP(L);
     uint32_t n, i;
     n = t->pw ? (uint16_t)t->pv[0] : 0u;
     if (t->pw && (n < 1u || n > SEQ_MAXN || t->pw < 1u + n)) return;       /* a damaged pattern: leave the one in RAM */
-    sq.len = 0;                                  /* the ISR plays nothing while the arrays change */
+    P->len = 0;                                  /* the ISR plays nothing while the arrays change */
     __asm__ volatile("" ::: "memory");
     sq.rec = 0;
     for (i = 0; i < n; i++) {
         uint32_t v = (uint16_t)t->pv[1u + i];
-        sq.note[i] = (uint8_t)(v & 127u);
-        sq.vel[i] = v & 128u ? 100u : 0u;
-        sq.tie[i] = (v & 256u) != 0u;
-        ml[i] = (int8_t)((int32_t)(v >> 9) - 64);
+        P->note[i] = (uint8_t)(v & 127u);
+        P->vel[i] = v & 128u ? 100u : 0u;
+        P->tie[i] = (v & 256u) != 0u;
+        if (!L) ml[i] = (int8_t)((int32_t)(v >> 9) - 64);
     }
-    for (; i < SEQ_MAXN; i++) { sq.note[i] = 0; sq.vel[i] = 0; sq.tie[i] = 0; ml[i] = 0; }
-    sq.cur = (uint8_t)n;
+    for (; i < SEQ_MAXN; i++) { P->note[i] = 0; P->vel[i] = 0; P->tie[i] = 0; if (!L) ml[i] = 0; }
+    if (!L) sq.cur = (uint8_t)n;
     __asm__ volatile("" ::: "memory");
-    sq.len = (uint8_t)n;                         /* 0 = no pattern: the sequencer is silent until one is recorded */
+    P->len = (uint8_t)n;                         /* 0 = no pattern: the sequencer is silent until one is recorded */
 }
 
 static void pn_snapshot(void)
@@ -227,7 +240,7 @@ static int pn_modified(void)
 enum { SV_IDLE, SV_ARMED, SV_PICK, SV_CONFIRM, SV_DEL };       /* the SAVE gesture */
 enum { ACT_NONE, ACT_SAVE, ACT_DEL };
 
-typedef char pn_params_fit[P_COUNT <= PL_MAXP ? 1 : -1];     /* a patch must fit a log record (more: raise PL_MAXP; and PL_IDS * record size must stay under one sector, else STORE FULL comes early: widen the window, docs/PATCH-STORAGE-DESIGN.md) */
+typedef char pn_params_fit[P_MAIN <= PL_MAXP && P_COUNT - P_MAIN <= PL_MAXP ? 1 : -1];     /* a patch must fit a log record (more: raise PL_MAXP; and PL_IDS * record size must stay under one sector, else STORE FULL comes early: widen the window, docs/PATCH-STORAGE-DESIGN.md) */
 static pl_patch_t pn_tmp;                       /* one patch record in RAM (loading, saving) */
 static void pn_ucache(uint32_t id)              /* the name of user patch id from the log (empty when none) */
 {
@@ -243,9 +256,14 @@ static void pn_load_raw(uint32_t i, const app_set_t *st)
     uint32_t p;
     if (i >= PN_PRESETS) {
         if (i < PN_ENTRIES && pl_get(i - PN_PRESETS, &pn_tmp) == PL_OK) {
+            uint32_t id = i - PN_PRESETS;
             patch_reset();                      /* parameters a record does not have (older firmware) keep their defaults */
-            for (p = 0; p < pn_tmp.n && p < P_COUNT; p++) patch_set(p, pn_tmp.v[p]);
-            pn_pat_apply(&pn_tmp);
+            for (p = 0; p < pn_tmp.n && p < P_MAIN; p++) patch_set(p, pn_tmp.v[p]);
+            pn_pat_apply(0, &pn_tmp);
+            if (pl_seq(PL_IDS + id) > pl_seq(id) && pl_get(PL_IDS + id, &pn_tmp) == PL_OK) {     /* its companion (newer than the patch: saved with it): SEQ2's settings and pattern */
+                for (p = 0; p < pn_tmp.n && P_MAIN + p < P_COUNT; p++) patch_set(P_MAIN + p, pn_tmp.v[p]);
+            } else pn_tmp.pw = 0;                /* none: no pattern 2 */
+            pn_pat_apply(1, &pn_tmp);
             pn_snapshot();
             pn.slot = pn.browse = (uint8_t)i;
             pn.browse_pend = 0;
@@ -267,9 +285,10 @@ static void pn_load_raw(uint32_t i, const app_set_t *st)
  * while an arp plays does not stop it. A patch saved with an arp mode brings its own. */
 static void pn_load(uint32_t i, const app_set_t *st)
 {
-    int32_t arp = patch_get(P_ARP), seq = patch_get(P_SEQ), chord = patch_get(P_CHORD);
+    int32_t arp = patch_get(P_ARP), seq = patch_get(P_SEQ), chord = patch_get(P_CHORD), arp2 = patch_get(P_ARP2), chord2 = patch_get(P_CHORD2);
     pn_load_raw(i, st);
-    if (seq) { patch_set(P_CHORD, chord); pn.base[P_CHORD] = (int16_t)chord; }      /* (the chord of the tune playing stays, as the arp) */
+    if (seq) { patch_set(P_CHORD, chord); pn.base[P_CHORD] = (int16_t)chord; patch_set(P_CHORD2, chord2); pn.base[P_CHORD2] = (int16_t)chord2;
+               patch_set(P_ARP2, arp2); pn.base[P_ARP2] = (int16_t)arp2; }      /* (the chord of the tune playing stays, as the arp) */
     if (seq && patch_get(P_ARP) != arp) { patch_set(P_ARP, arp); pn.base[P_ARP] = (int16_t)arp; }       /* the sequencer plays: the arp stays as it was (a patch's own arp does not come on under it) */
     else if (arp && !patch_get(P_ARP)) { patch_set(P_ARP, arp); pn.base[P_ARP] = (int16_t)arp; }
     if (seq && !patch_get(P_SEQ)) { patch_set(P_SEQ, seq); pn.base[P_SEQ] = (int16_t)seq; }
@@ -587,7 +606,7 @@ static void pn_encoders(void)
     uint32_t i, o = pn_osc();
     int32_t d;
     if ((d = fm1_enc_take(ENC_ALGORITHM)) != 0) pn_table_step(o ? P_TABLE2 : P_TABLE1, d);
-    if (pn.page == UI_P_SEQ && pn.sub == 1u) {  /* the modulation lane: SELECT picks the step, VALUE sets it (RAM only until patterns are saved) */
+    if (pn.page == UI_P_SEQ && pn.sub == PN_LANE_SET) {  /* the modulation lane: SELECT picks the step, VALUE sets it (RAM only until patterns are saved) */
         int32_t n = sq.len ? (int32_t)sq.len : 32, m = (int32_t)pn.mstep, x;
         if ((d = fm1_enc_take(ENC_SELECT)) != 0) m += d > 0 ? 1 : -1;
         m = m < 0 ? 0 : m >= n ? n - 1 : m;
@@ -707,7 +726,7 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
         for (i = 0; i < 4u; i++) {
             const char *lab = PG[pg][t][i].fmt == F_NONE ? 0 : PG[pg][t][i].lab;
             if (pg == UI_P_FX) lab = i ? (i == 3u ? "MIX" : i == 1u ? "A" : "B") : "TYPE";
-            if (pg == UI_P_SEQ && t == 1u && i == 3u) lab = "VALUE";
+            if (pg == UI_P_SEQ && t == PN_LANE_SET && i == 3u) lab = "VALUE";
             if (!lab) continue;
             if (d != txt) *d++ = ' ';
             d = ui_cat(d, lab);
@@ -736,11 +755,9 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
     case UI_P_GLO: pn_hl(v->help[l++], "SYSTEM", "NOT SAVED IN A PATCH"); break;
     case UI_P_ARP: pn_hl(v->help[l++], "HOLD ARP", "ARP ON / OFF"); break;
     case UI_P_SEQ:
-        pn_hl(v->help[l++], "PLAY", "START / STOP");
-        pn_hl(v->help[l++], "REC", "STEP INPUT ON / OFF");
+        pn_hl(v->help[l++], "PLAY", "START / STOP BOTH");
+        pn_hl(v->help[l++], "REC", "STEPS OF THE SEQ SHOWN");
         pn_hl(v->help[l++], "HOLD REC", "CLEAR (REC AGAIN)");
-        pn_hl(v->help[l++], "LANE", "SELECT PICKS THE STEP");
-        pn_hl(v->help[l++], "ARP ON", "ARPEGGIATES EACH STEP");
         break;
     default: break;
     }
@@ -752,12 +769,14 @@ static void pn_help(ui_view_t *v, uint32_t pg, uint32_t sub)
 
 /* ---- SEQ CHORD: the chord the step playing sounds (or step 1's when stopped; C4 with no pattern), on two octaves of keys from
  * the C under its root, named; HELD names what the keys hold (lowest = root) */
-static void pn_chord_view(ui_view_t *v)
+static void pn_chord_view(ui_view_t *v, uint32_t L)     /* (L: the pattern, 0 SEQ1 1 SEQ2) */
 {
     static const char NN[12][3] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
     static const uint16_t CM[10] = {0x091, 0x089, 0x491, 0x891, 0x489, 0x0A1, 0x085, 0x049, 0x111, 0x081};      /* the intervals as bits, within an octave */
     static const char *const CNM[10] = {"MAJ", "MIN", "7", "MAJ7", "MIN7", "SUS4", "SUS2", "DIM", "AUG", "5"};
-    uint32_t ch = (uint32_t)patch_get(P_CHORD), k, iv = 1u, nh = 0, m12 = 0, len = sq.rec ? 0u : sq.len, i;
+    seq_pat_t *P = LP(L);
+    uint32_t pa = L ? P_ARP2 : P_ARP;           /* (P_ARP2, _RATE, _OCT: the same order as P_ARP's) */
+    uint32_t ch = (uint32_t)patch_get(L ? P_CHORD2 : P_CHORD), k, iv = 1u, nh = 0, m12 = 0, len = sq.rec ? 0u : P->len, i;
     int32_t lo = -1, r = 60, base;
     char *d = v->chord_name;
     for (k = 0; k < 128u; k++)
@@ -769,11 +788,12 @@ static void pn_chord_view(ui_view_t *v)
         }
     if (ch == CH_HELD && lo >= 0) r = lo;
     if (len) {                                  /* the step playing, or the next one that sounds */
-        i = sq_tap.on && sq_tap.step < len ? sq_tap.step : 0u;
-        for (k = 0; k < len && !sq.vel[(i + k) % len]; k++) {}
+        uint32_t st = L ? sq_tap.step2 : sq_tap.step;
+        i = sq_tap.on && st < len ? st : 0u;
+        for (k = 0; k < len && !P->vel[(i + k) % len]; k++) {}
         if (k < len) {
             i = (i + k) % len;
-            r = (int32_t)sq.note[i] + (ch == CH_HELD && lo >= 0 ? lo - 60 : qs.trans);
+            r = (int32_t)P->note[i] + (ch == CH_HELD && lo >= 0 ? lo - 60 : qs.trans);
         }
     }
     if (ch != CH_HELD) iv = 1u;
@@ -794,10 +814,10 @@ static void pn_chord_view(ui_view_t *v)
         } else { d = ui_cat(d, " "); ui_cat(d, TXT[TX_CHORD][ch]); }
     }
     d = v->info;                                /* what the arp does with it */
-    if (patch_get(P_ARP)) { d = ui_cat(d, "ARP "); d = ui_cat(d, TXT[TX_ARP][patch_get(P_ARP)]); d = ui_cat(d, "  OCT "); ui_num(d, patch_get(P_ARP_OCT)); }
+    if (patch_get(pa)) { d = ui_cat(d, "ARP "); d = ui_cat(d, TXT[TX_ARP][patch_get(pa)]); d = ui_cat(d, "  OCT "); ui_num(d, patch_get(pa + 2u)); }
     else ui_cat(d, ch ? "ARP OFF: PLAYED AS A CHORD" : "ARP OFF: THE NOTE ALONE");
     d = v->info2;
-    if (patch_get(P_ARP)) { d = ui_cat(d, "A STEP A BEAT, ARP AT "); ui_cat(d, TXT[TX_ARATE][patch_get(P_ARP_RATE)]); }
+    if (patch_get(pa)) { d = ui_cat(d, "A STEP A BEAT, ARP AT "); ui_cat(d, TXT[TX_ARATE][patch_get(pa + 1u)]); }
     else ui_cat(d, ch == CH_HELD ? "LOWEST KEY TRANSPOSES" : ch ? "HELD KEY TRANSPOSES" : "TURN CHORD FOR A CHORD");
 }
 
@@ -861,14 +881,16 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         if (PDESC[k->id].min < 0) kbip |= 1u << i;
         if (k->fmt == F_TIME || k->fmt == F_TXT || k->fmt == F_RATE) ksmall |= 1u << i;
     }
-    {   uint32_t m = 0, n = sq.rec ? sq.cur : sq.len;       /* recording: the steps entered so far */
-        for (i = 0; i < n && i < 32u; i++) if (sq.vel[i]) m |= 1u << i;
-        v->seq_mask = m; v->seq_len = (uint8_t)n; v->seq_rec = sq.rec; v->seq_on = (uint8_t)(sq_tap.on != 0u && sq.len != 0u);
-        v->seq_pos = sq.rec ? sq.cur : (uint8_t)sq_tap.step;
+    {   uint32_t L = pn_seq_lane(), rl = sq.rec && sq_lane == L;    /* the pattern shown; recording into it: the steps entered so far */
+        seq_pat_t *P = LP(L);
+        uint32_t m = 0, n = rl ? sq.cur : P->len;
+        for (i = 0; i < n && i < 32u; i++) if (P->vel[i]) m |= 1u << i;
+        v->seq_mask = m; v->seq_len = (uint8_t)n; v->seq_rec = (uint8_t)rl; v->seq_on = (uint8_t)(sq_tap.on != 0u && P->len != 0u);
+        v->seq_pos = rl ? sq.cur : (uint8_t)(L ? sq_tap.step2 : sq_tap.step);
         {   uint32_t tm = 0;                            /* the tiles show the stored notes; a held key's transposition is not shown */
             for (i = 0; i < n && i < 32u; i++) {
-                v->seq_note[i] = (uint8_t)(sq.vel[i] && sq.note[i] <= 127u ? sq.note[i] + 1 : 0);
-                if (sq.tie[i] && sq.vel[i]) tm |= 1u << i;
+                v->seq_note[i] = (uint8_t)(P->vel[i] && P->note[i] <= 127u ? P->note[i] + 1 : 0);
+                if (P->tie[i] && P->vel[i]) tm |= 1u << i;
             }
             for (; i < 32u; i++) v->seq_note[i] = 0;
             v->seq_tie = tm; v->seq_tr = 0;
@@ -883,13 +905,13 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             if (!ty) { v->kval[1u + c][0] = 0; v->kfrac[1u + c] = 0; }
         }
     }
-    if (pn.page == UI_P_SEQ && pn.sub == 1u) {          /* STEP and VALUE of the lane */
+    if (pn.page == UI_P_SEQ && pn.sub == PN_LANE_SET) {          /* STEP and VALUE of the lane */
         uint32_t m = pn.mstep < 32u ? pn.mstep : 31u;
         v->klabel[3] = "VALUE";
         ui_num(v->kval[3], (int32_t)ml[m] + 64);
         v->kfrac[3] = (uint8_t)(((int32_t)ml[m] + 64) * 2);
     }
-    v->seq_set = (uint8_t)(pn.page == UI_P_SEQ ? pn.sub : 0u);       /* 1: the lane is shown and edited */
+    v->seq_set = (uint8_t)(pn.page == UI_P_SEQ && pn.sub == PN_LANE_SET);       /* 1: the lane is shown and edited */
     v->seq_cur = pn.mstep;
     for (i = 0; i < 32u; i++) v->seq_mod[i] = (uint8_t)((int32_t)ml[i] + 64);
     v->kbip = (uint8_t)kbip;
@@ -958,14 +980,16 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         }
         if (pn.page == UI_P_SEQ) {
             char *d = v->info;
-            ui_copy(v->ptxt, sq.rec ? "RECORD" : !sq.len ? "EMPTY" : patch_get(P_SEQ) && sq_run ? "PLAY" : "STOP", 8);
-            if (pn.sub == 1u) ui_copy(v->ptxt, TXT[TX_MOD][patch_get(P_MOD)], 8);           /* the lane: its target, big */
+            uint32_t L = pn_seq_lane(), rl = sq.rec && sq_lane == L;
+            seq_pat_t *P = LP(L);
+            ui_copy(v->ptxt, rl ? "RECORD" : sq.rec ? (L ? "REC SQ1" : "REC SQ2") : !P->len ? "EMPTY" : patch_get(P_SEQ) && sq_run ? "PLAY" : "STOP", 8);   /* (recording the other pattern) */
+            if (pn.sub == PN_LANE_SET) ui_copy(v->ptxt, TXT[TX_MOD][patch_get(P_MOD)], 8);           /* the lane: its target, big */
 
-            if (pn.sub == 2u) pn_chord_view(v);
-            else if (pn.sub == 1u) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)(pn.mstep < 32u ? pn.mstep : 31u) + 1); d = ui_cat(d, "  SELECT KNOB MOVES"); }
-            else if (sq.rec) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, "/32  PLAY=REST SEQ=TIE"); }
-            else if (!sq.len) ui_cat(d, "NO PATTERN: PRESS REC");
-            else { d = ui_cat(d, "LEN "); d = ui_num(d, sq.len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }
+            if (pn.sub == 1u || pn.sub == 3u) pn_chord_view(v, L);
+            else if (pn.sub == PN_LANE_SET) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)(pn.mstep < 32u ? pn.mstep : 31u) + 1); d = ui_cat(d, "  SELECT KNOB MOVES"); }
+            else if (rl) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, "/32  PLAY=REST SEQ=TIE"); }
+            else if (!P->len) ui_cat(d, "NO PATTERN: PRESS REC");
+            else { d = ui_cat(d, "LEN "); d = ui_num(d, P->len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }
                    if (!(patch_get(P_SEQ) && sq_run)) ui_cat(d, "  PLAY=START"); }
         }
         if (pn.page == UI_P_ARP) {
@@ -1001,11 +1025,19 @@ static int pn_save_poll(app_set_t *st, uint32_t *dirty)
             const char *src = pn.slot >= PN_PRESETS ? pn.uname[(pn.slot - PN_PRESETS) % PL_IDS] : PRESET[pn.slot % PN_PRESETS].name;
             for (i = 0; i < PL_NAME && src[i]; i++) pn_tmp.name[i] = src[i];       /* named after the patch it was made from */
             pn_tmp.name[i] = 0;
-            for (i = 0; i < P_COUNT; i++) pn_tmp.v[i] = (int16_t)patch.p[i];
-            pn_tmp.n = P_COUNT;
-            pn_tmp.pw = (uint8_t)pn_pat_words(pn_tmp.pv, 1u);
+            for (i = 0; i < P_MAIN; i++) pn_tmp.v[i] = (int16_t)patch.p[i];
+            pn_tmp.n = P_MAIN;
+            pn_tmp.pw = (uint8_t)pn_pat_words(0, pn_tmp.pv, 1u);
             while (pn_tmp.n > P_COUNT_V1 && pn_tmp.v[pn_tmp.n - 1u] == PDESC[pn_tmp.n - 1u].def) pn_tmp.n--;     /* trailing defaults are not stored: a patch without arp keeps its 124 bytes */
             rc = pl_put(id, &pn_tmp);
+            if (rc == PL_OK) {                  /* then its companion (after the patch, so it is the newer): SEQ2's settings and pattern; none needed: the old one goes */
+                for (i = 0; i < P_COUNT - P_MAIN; i++) pn_tmp.v[i] = (int16_t)patch.p[P_MAIN + i];
+                pn_tmp.n = (uint8_t)(P_COUNT - P_MAIN);
+                pn_tmp.pw = (uint8_t)pn_pat_words(1, pn_tmp.pv, 1u);
+                while (pn_tmp.n && pn_tmp.v[pn_tmp.n - 1u] == PDESC[P_MAIN + pn_tmp.n - 1u].def) pn_tmp.n--;
+                if (pn_tmp.n || pn_tmp.pw) rc = pl_put(PL_IDS + id, &pn_tmp);
+                else if (pl_seq(PL_IDS + id)) (void)pl_del(PL_IDS + id);       /* (left behind it would be older than the patch: never used) */
+            }
             pn.save_req = 0;
             if (rc != PL_OK) { pn_msg(rc == PL_E_FULL ? "STORE FULL" : "SAVE FAILED", 0, 0); return 1; }
             pn_ucache(id);
@@ -1020,6 +1052,7 @@ static int pn_save_poll(app_set_t *st, uint32_t *dirty)
             int32_t e = (int32_t)(PN_PRESETS + id);
             pn.save_req = 0;
             if (pl_del(id) != PL_OK) { pn_msg("DEL FAILED", 0, 0); return 1; }
+            (void)pl_del(PL_IDS + id);          /* its companion (a failure leaves an older one: never used) */
             pn_ucache(id);
             do e--; while (e > 0 && !pn_entry_ok((uint32_t)e));      /* the patch before it in the list */
             pn_load((uint32_t)e, st);
