@@ -75,7 +75,8 @@ typedef struct {
     uint8_t seq_mod[32];                        /* SEQ picture, MOD set: the lane, 0..127 (64 = neutral) */
     uint8_t seq_set, seq_cur;                   /* SEQ picture: the MOD set is shown; the lane step being edited */
     uint8_t seq_tr;                             /* SEQ picture: a key is held, the notes shown are transposed */
-    char boot[2][32];                           /* GLO set 3 (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
+    char boot[2][32];
+    uint16_t btn_now;                           /* GLO BOOT: the buttons held now (bit = BTN_*), to see a stuck one */                           /* GLO set 3 (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
     const char *const *tabn;                    /* the page's tab names (NULL: no strip, as in the mock-up) */
     uint8_t ntabs, tab;                         /* tabs on the page, the one shown */
     uint8_t tsets, tset;                        /* knob sets of the tab shown (2: the set tag "1/2" under it), the one shown */
@@ -464,11 +465,13 @@ static void ui_filter_fn(const ui_view_t *v)    /* FX FILTER: the response, the 
         if (x > 8) { cv_line(x - 1, py, x, yy, UI_ACC); cv_line(x - 1, py + 1, x, yy + 1, UI_ACC); }
         py = yy;
     }
-    {   /* the cutoff: a white line and its frequency. 0..127 = 20 Hz x 2^(0.94 c / 12): n = 1/16 octaves */
+    {   /* the cutoff: a white line and its frequency, as the engine: note 16 (20.6 Hz) + 15/16 semitone a step, capped
+         * at 18 kHz (gen_engine_tables.py SVF_G). n = 1/16 octaves above 20.6 Hz = c x 5 / 4 */
         static const uint16_t T16[16] = {256, 267, 279, 291, 304, 317, 331, 345, 362, 378, 395, 412, 431, 449, 470, 490};
-        uint32_t n = (uint32_t)v->flt_cut * 94u / 75u, hz = (20u * T16[n & 15u] << (n >> 4)) >> 8;
+        uint32_t n = (uint32_t)v->flt_cut * 5u / 4u, hz = ((2060u * T16[n & 15u] << (n >> 4)) >> 8) / 100u;
         char t[8], *d = t;
         int32_t tw;
+        if (hz > 18000u) hz = 18000u;
         if (hz < 1000u) ui_num(d, (int32_t)hz);
         else if (hz < 10000u) { d = ui_num(d, (int32_t)(hz / 1000u)); *d++ = '.'; *d++ = (char)('0' + hz / 100u % 10u); *d++ = 'K'; *d = 0; }
         else { d = ui_num(d, (int32_t)((hz + 500u) / 1000u)); ui_cat(d, "K"); }
@@ -564,9 +567,23 @@ static void ui_ctrl_fn(const ui_view_t *v)      /* GLO CONTROL: what the wheel, 
 
 static void ui_boot_fn(const ui_view_t *v)      /* GLO BOOT: what the boot key scan saw */
 {
-    cv_text(4, 4, &FONT_S, "BOOT KEYS (SCAN AT POWER-ON)", UI_GRAY);
-    cv_text(4, 24, &FONT_S, v->boot[0], UI_TXT);
-    cv_text(4, 44, &FONT_S, v->boot[1], UI_TXT);
+    cv_text(4, 0, &FONT_S, "BOOT KEYS (SCAN AT POWER-ON)", UI_GRAY);
+    cv_text(4, 17, &FONT_S, v->boot[0], UI_TXT);
+    cv_text(4, 34, &FONT_S, v->boot[1], UI_TXT);
+    {   static const char *const BN[14] = {"OCT-", "OCT+", "FX", "SEL", "ENV", "LFO", "EDIT", "GLO", "HOME", "SAVE", "ARP", "SEQ", "PLAY", "REC"};
+        uint32_t i;
+        int32_t x = 4, y = 74;
+        cv_text(4, 55, &FONT_S, "HELD NOW (LIVE)", UI_GRAY);
+        for (i = 0; i < 14u; i++) {             /* every button: lit while it reads as held */
+            int32_t w = text_w(&FONT_S, BN[i]) + 8;
+            uint32_t on = v->btn_now >> i & 1u;
+            if (x + w > 236) { x = 4; y += 20; }
+            cv_rect(x, y, w, 17, on ? UI_ACC : UI_DIM);
+            if (!on) cv_rect(x + 1, y + 1, w - 2, 15, C_BLACK);
+            cv_text(x + 4, y + 1, &FONT_S, BN[i], on ? C_BLACK : UI_GRAY);
+            x += w + 4;
+        }
+    }
 }
 
 static void ui_fx_fn(const ui_view_t *v)        /* FX slot: the chain of four slots, the one shown filled; where delay and reverb are */
@@ -756,7 +773,10 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         s->tname[0] = 0xFF;                     /* never equal */
     }
     if (v->page == UI_P_HELP) {                 /* text only: no knob columns, status line or patch name */
-        if (full || s->sub != v->sub) ui_help(v);
+        uint32_t hk = 2166136261u, j, c;            /* a hash of the text: a page button on HELP changes it, the page stays */
+        for (j = 0; j < 14u; j++) for (c = 0; c < 32u && v->help[j][c]; c++) hk = (hk ^ (uint8_t)v->help[j][c]) * 16777619u;
+        if (full || s->sub != v->sub || s->pic_key != hk) ui_help(v);
+        s->pic_key = hk;
         s->page = v->page; s->variant = v->variant; s->sub = v->sub;
         return;
     }
@@ -830,7 +850,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
             textch = !ui_eq(s->ptxt, v->ptxt) || !ui_eq(s->info, v->info);
             break;
         default:                                /* GLO */
-            if (v->sub == 2u) { f = ui_boot_fn; pk = 0x60000000u; }
+            if (v->sub == 2u) { f = ui_boot_fn; pk = 0x60000000u | v->btn_now; }
             else if (v->sub == 1u) { f = ui_ctrl_fn; pk = 0x70000000u ^ (uint32_t)v->mod[0] ^ (uint32_t)v->mod[1] << 7 ^ (uint32_t)v->mod[2] << 14 ^ (uint32_t)v->mod[3] << 21; }
             else { f = ui_drive_fn; pk = (uint32_t)v->drive | (uint32_t)v->cpu_max << 8 | (uint32_t)v->drops << 16; }
             break;
