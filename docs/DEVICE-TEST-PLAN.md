@@ -449,3 +449,5 @@ Flash `build/vavewave.fwsc`. SEQ works as ARP: a press opens its page; holding i
 | 25.12b | REC on the SEQ page | the status row reads `RECORD` (amber) in place of PLAY; recording SEQ2 while SEQ1 is shown: `REC SQ2` |
 | 25.13 | REC on SEQ2, enter steps, SAVE (REC still on), enter more steps | SAVE lights again; REC off, reload: the steps up to the save |
 | 25.14 | Web tool, patch section | one list in PRESETS order: the 8 factory patches first (greyed, no buttons), then the saved ones; the text says patches are loaded with PRESETS on the FM-1 |
+| 25.15 | (review fix) MIDI clock from a DAW; SEQ1 with ARP on, SEQ2 plain; press Start in the DAW a few times mid-pattern | both patterns restart together on the beat each time (SEQ1 was up to a beat off) |
+| 25.16 | (review fix) Fill the store until SAVE says STORE FULL on a patch with a SEQ2 pattern | if the patch got in but SEQ2 did not: STORE FULL, the patch is in the PRESETS list under its number, SAVE stays lit |

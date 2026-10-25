@@ -383,7 +383,7 @@ static void arp_run(uint32_t frames)            /* once per block, after events_
     if (d) { ar.ext_idle = 0; ar.ext_ever = 1; if (d > 6u) d = 6u; }       /* (a burst after a stalled main loop: at most one 1/16) */
     else if (ar.ext_idle < 100000u) ar.ext_idle++;
     t = arp_ext.start;
-    if (t != ar.ext_start) { ar.ext_start = t; sq_run = 1; ar.pos = 0; qs.pos = 0; ar.step_idx = 0; ar.step_left = 0; ar.acc = 0; seq_lane_reset(1); }
+    if (t != ar.ext_start) { ar.ext_start = t; sq_run = 1; ar.pos = 0; ar.acc = 0; seq_lane_reset(0); seq_lane_reset(1); }     /* (both patterns from step 1, on the beat: the arp-played one's beat counter too) */
     arp_tap.ext = ar.ext_ever && ar.ext_idle < ARP_EXT_IDLE;      /* (tracked while the arp is off too: the page shows it) */
     if (sq.rec) {                               /* step input: nothing plays from the clock, keys are plain notes */
         if (ar.active) arp_deactivate();

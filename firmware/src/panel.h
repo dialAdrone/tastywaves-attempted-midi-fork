@@ -1036,7 +1036,7 @@ static int pn_save_poll(app_set_t *st, uint32_t *dirty)
         pn.t_save = fm1_ms;
         id = pn.act_id % PL_IDS;
         if (pn.act == ACT_SAVE) {
-            int rc;
+            int rc, rc2 = PL_OK;
             const char *src = pn.slot >= PN_PRESETS ? pn.uname[(pn.slot - PN_PRESETS) % PL_IDS] : PRESET[pn.slot % PN_PRESETS].name;
             for (i = 0; i < PL_NAME && src[i]; i++) pn_tmp.name[i] = src[i];       /* named after the patch it was made from */
             pn_tmp.name[i] = 0;
@@ -1050,17 +1050,18 @@ static int pn_save_poll(app_set_t *st, uint32_t *dirty)
                 pn_tmp.n = (uint8_t)(P_COUNT - P_MAIN);
                 pn_tmp.pw = (uint8_t)pn_pat_words(1, pn_tmp.pv, 1u);
                 while (pn_tmp.n && pn_tmp.v[pn_tmp.n - 1u] == PDESC[P_MAIN + pn_tmp.n - 1u].def) pn_tmp.n--;
-                if (pn_tmp.n || pn_tmp.pw) rc = pl_put(PL_IDS + id, &pn_tmp);
+                if (pn_tmp.n || pn_tmp.pw) rc2 = pl_put(PL_IDS + id, &pn_tmp);
                 else if (pl_seq(PL_IDS + id)) (void)pl_del(PL_IDS + id);       /* (left behind it would be older than the patch: never used) */
             }
             pn.save_req = 0;
             if (rc != PL_OK) { pn_msg(rc == PL_E_FULL ? "STORE FULL" : "SAVE FAILED", 0, 0); return 1; }
             pn_ucache(id);
-            pn_snapshot();
+            if (rc2 == PL_OK) pn_snapshot();     /* (the patch is stored but SEQ2 is not: it stays modified, SAVE again retries) */
             pn.slot = pn.browse = (uint8_t)(PN_PRESETS + id);
             pn.browse_pend = 0;
             st->slot = pn.slot;
             *dirty = 1;
+            if (rc2 != PL_OK) { pn_msg(rc2 == PL_E_FULL ? "STORE FULL" : "SAVE FAILED", 0, 0); return 1; }
             pn_msg("SAVED", id, 1);
             return 1;
         } else {
