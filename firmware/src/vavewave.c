@@ -350,7 +350,7 @@ static void app_main(void)
         }
         m = ui_button_leds(&pn_view, fm1_ms >> 8 & 1u);
         if (fm1_ms < pn.t_flash) m |= 1u << BTN_SAVE;
-        if (latch) m |= 1u << BTN_PLAY;
+        if (latch || (patch_get(P_SEQ) && sq_run && sq.len)) m |= 1u << BTN_PLAY;     /* LATCH on, or the sequencer playing */
         if (patch_get(P_ARP)) m |= 1u << BTN_ARP;
         if (patch_get(P_SEQ)) m |= 1u << BTN_SEQ;      /* (lit with no pattern too: nothing plays until REC has entered steps) */
         if (sq.rec) m |= 1u << BTN_REC;

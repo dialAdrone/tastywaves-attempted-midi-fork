@@ -855,7 +855,8 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         v->mod[2] = (uint8_t)patch_get(P_AT_CUT); v->mod[3] = (uint8_t)patch_get(P_VEL_AMP);
         v->vmode = (uint8_t)patch_get(P_VMODE); v->wdest = (uint8_t)patch_get(P_WARP_DEST);
         v->qual = (uint8_t)patch_get(P_QUALITY); v->ecurve = (uint8_t)patch_get(P_ECURVE);
-        v->arp_mode = (uint8_t)patch_get(P_ARP); v->arp_oct = (uint8_t)patch_get(P_ARP_OCT);
+        v->arp_mode = (uint8_t)patch_get(P_ARP);
+        v->arp_seed = ar.seed; v->arp_oct = (uint8_t)patch_get(P_ARP_OCT);
         v->arp_gate = (uint8_t)patch_get(P_ARP_GATE); v->arp_swing = (uint8_t)patch_get(P_ARP_SWING);
         if (pn.page == UI_P_FX && pn.sub >= 2u) {      /* the chain of slots; where delay and reverb are */
             uint32_t c;

@@ -57,6 +57,7 @@ static struct {
     uint8_t active;
     uint32_t step_len;
     uint32_t gate_left, step_left, step_idx, pos, acc, rnd;
+    uint32_t seed;                              /* RANDOM: the seed of the run, taken at the first key (the screen draws the same sequence) */
     uint32_t ext_seen, ext_start, ext_idle, ext_ever, blk, mark, tk_acc;
 } ar = { .rnd = 12345u };
 static struct { uint8_t active, nh, h[ARP_MAXN]; int32_t trans; uint32_t pos; } qs;     /* the sequencer (ISR): running, keys held (for the transposition), pattern position */
@@ -87,6 +88,7 @@ static void arp_in_on(uint32_t note, uint32_t vel)
     if (!ar.n) {                                /* the first key: start now, from the bottom; RANDOM: a new sequence (the clock's ticks into the seed) */
         ar.step_left = 0; ar.pos = 0; ar.step_idx = 0;
         ar.rnd ^= fm1_ticks() * 2654435761u;
+        ar.seed = ar.rnd;
     }
     ar.note[ar.n] = (uint8_t)note;
     ar.vel[ar.n] = (uint8_t)vel;

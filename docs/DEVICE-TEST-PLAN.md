@@ -333,4 +333,6 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 19.35 | On HOME / FX press REC | nothing happens |
 | 19.36 | On SEQ: REC, enter steps (SEQ = tie, PLAY = rest), REC | recording ends, nothing plays until PLAY; long REC asks CLEAR PATTERN? |
 | 19.37 | Recording, press FX | recording ends with the steps so far, FX opens; PLAY there is LATCH; back on SEQ, PLAY starts the pattern |
+| 19.38 | On SEQ press PLAY; go to FX | the PLAY LED is lit while the pattern plays (and while LATCH is on), off when stopped |
+| 19.39 | ARP RANDOM: hold a chord, release, hold again | the ARP picture changes with each new chord, matching the new order |
 | 19.18 | Turn a knob fast on FX FILT while playing | the picture keeps up (at most ~16 redraws a second); notes do not stutter |

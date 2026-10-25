@@ -64,6 +64,7 @@ typedef struct {
     uint8_t mod[4];                             /* GLO CONTROL picture: wheel > pos, wheel > vibrato, aftertouch > cutoff, velocity > level, 0..127 */
     uint8_t fxt[4];                             /* FX slot picture: the four slots' effect types (0 off) */
     uint8_t vmode, wdest, qual, ecurve;         /* SEL picture: voice mode (0 poly 1 mono 2 legato), BEND on (0 both 1 osc1 2 osc2), quality (0 hi 1 eco), env curve (0 lin 1 exp) */
+    uint32_t arp_seed;                          /* ARP picture, RANDOM: the run's seed (the arp's own generator, so the picture is what plays) */
     uint8_t arp_mode, arp_oct, arp_gate, arp_swing;     /* ARP picture: mode (0 off), octaves 1..4, gate 1..127, swing 0..50 */
     char ptxt[8];                               /* SEQ picture: the state (OFF PLAY STOP RECORD) or the lane's target */
     char info2[40];                             /* FX slot pictures: the once-only effects */
@@ -654,7 +655,7 @@ static void ui_sel_fn(const ui_view_t *v)       /* SEL: a panel per knob, in kno
 
 static void ui_arp_fn(const ui_view_t *v)       /* ARP: 16 steps of the pattern a three-note chord plays (gate = note length, swing = late odd steps) */
 {
-    static const uint8_t RND[16] = {2, 0, 5, 1, 4, 3, 0, 5, 2, 4, 1, 3, 5, 0, 2, 4};
+    uint32_t rnd = v->arp_seed;
     int32_t oct = v->arp_oct < 1u ? 1 : v->arp_oct > 4u ? 4 : v->arp_oct, n = 3 * oct, s, lh = 96 / n;
     int32_t gw = (int32_t)v->arp_gate * 13 / 127, sw = (int32_t)v->arp_swing * 14 / 100;
     cv_text(4, 0, &FONT_S, v->info, UI_GRAY);
@@ -667,7 +668,7 @@ static void ui_arp_fn(const ui_view_t *v)       /* ARP: 16 steps of the pattern 
         case 2: lo = n - 1 - s % n; break;                               /* DOWN */
         case 3: k = s % m; lo = k < n ? k : m - k; break;                /* UP-DN */
         case 4: k = s % (2 * n); lo = k < n ? k : 2 * n - 1 - k; break;  /* UP-DN2: the ends twice */
-        case 5: lo = RND[s] % n; break;                                  /* RANDOM */
+        case 5: rnd = rnd * 1664525u + 1013904223u; lo = (int32_t)(((rnd >> 16) * (uint32_t)n) >> 16); break;   /* RANDOM: as arp.h steps it */
         case 6: { static const uint8_t PL[3] = {0, 2, 1}; lo = PL[s % 3] + 3 * (s / 3 % oct); break; }   /* PLAYED: in the order played (C G E) */
         default: lo = -1; break;                                         /* CHORD: all notes each step */
         }
@@ -844,7 +845,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         case UI_P_ENV: f = ui_env_fn; pk = (uint32_t)v->sub << 28 ^ (uint32_t)v->env[v->sub & 1u][0] ^ (uint32_t)v->env[v->sub & 1u][1] << 7 ^ (uint32_t)v->env[v->sub & 1u][2] << 14 ^ (uint32_t)v->env[v->sub & 1u][3] << 21; break;
         case UI_P_LFO: f = ui_lfo_fn; pk = 0x10000000u | v->lfo_shape | (uint32_t)v->lfo_rate << 8; break;
         case UI_P_SEL: f = ui_sel_fn; pk = 0x30000000u | v->voices | (uint32_t)v->voices_max << 8 | (uint32_t)v->vmode << 16 | (uint32_t)v->wdest << 18 | (uint32_t)v->qual << 20 | (uint32_t)v->ecurve << 21; break;
-        case UI_P_ARP: f = ui_arp_fn; pk = 0x20000000u | v->arp_mode | (uint32_t)v->arp_oct << 4 | (uint32_t)v->arp_gate << 8 | (uint32_t)v->arp_swing << 16; textch = !ui_eq(s->info, v->info); break;
+        case UI_P_ARP: f = ui_arp_fn; pk = (0x20000000u | v->arp_mode | (uint32_t)v->arp_oct << 4 | (uint32_t)v->arp_gate << 8 | (uint32_t)v->arp_swing << 16) ^ (v->arp_mode == 5u ? v->arp_seed * 2654435761u : 0u); textch = !ui_eq(s->info, v->info); break;
         case UI_P_SEQ:
             pk = v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ v->seq_tie * 2654435761u ^ (uint32_t)v->seq_tr << 8 ^ ui_seq_h(v) ^ 0x40000000u;
             textch = !ui_eq(s->ptxt, v->ptxt) || !ui_eq(s->info, v->info);
