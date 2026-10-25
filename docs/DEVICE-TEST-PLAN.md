@@ -447,4 +447,4 @@ Flash `build/vavewave.fwsc`. SEQ works as ARP: a press opens its page; holding i
 | 25.11 | GLO HELP page 2 and the SEQ page's help | `SEQ  PAGE, HOLD: ON/OFF`; `PLAY  LATCH; SEQ ON: START/STOP`; on SEQ `HOLD SEQ  ON / OFF (OFF: PLAY=LATCH)` |
 | 25.12 | FX page, no bypass | `HOLD FX: BYPASS` dim at the bottom; bypassed: the amber BYPASSED bar |
 | 25.13 | REC on SEQ2, enter steps, SAVE (REC still on), enter more steps | SAVE lights again; REC off, reload: the steps up to the save |
-| 25.14 | Web tool, patch section | "Built in" lists the 8 factory patches (greyed, no buttons); "Your saved patches" below; the text says patches are loaded with PRESETS on the FM-1 |
+| 25.14 | Web tool, patch section | one list in PRESETS order: the 8 factory patches first (greyed, no buttons), then the saved ones; the text says patches are loaded with PRESETS on the FM-1 |

@@ -86,13 +86,13 @@ async function refreshPatches() {
   const box = $('patches');
   $('patchSec').classList.toggle('hide', fw.stage < 5);
   if (fw.stage < 5) return;
-  $('factory').replaceChildren(...FACTORY.map((n, k) => {
+  const fixed = FACTORY.map((n, k) => {
     const d = document.createElement('div'); d.className = 'card prow fixed';
     d.innerHTML = '<span class="pid"></span><span class="pname"></span><span class="pinfo mute">factory patch, cannot be changed</span><span class="row"></span>';
     d.querySelector('.pid').textContent = String(k + 1);
     d.querySelector('.pname').textContent = n;
     return d;
-  }));
+  });
   pdir = await vw.patchDirectory();
   patches = [];
   for (const e of pdir) if (e.present) {
@@ -114,7 +114,7 @@ async function refreshPatches() {
     d.querySelector('.row').append(mkb('Rename…', () => renamePatch(p)), mkb('▲', () => movePatch(k, -1), k === 0), mkb('▼', () => movePatch(k, 1), k === patches.length - 1), mkb('Delete', () => deletePatch(p)));
     return d;
   });
-  box.replaceChildren(...(rows.length ? rows : [Object.assign(document.createElement('div'), { className: 'mute', textContent: 'No user patches saved yet (SAVE on the FM-1 makes one).' })]));
+  box.replaceChildren(...fixed, ...(rows.length ? rows : [Object.assign(document.createElement('div'), { className: 'mute', textContent: 'No user patches saved yet (SAVE on the FM-1 makes one).' })]));     // one list, in PRESETS order
   $('pcount').textContent = `${patches.length} of 32 patches saved`;
 }
 async function renamePatch(p) {

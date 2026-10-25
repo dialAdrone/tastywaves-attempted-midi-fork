@@ -35,8 +35,7 @@
   progress { width:100%; height:10px; accent-color:var(--accent); }
   pre { margin:8px 0 0; white-space:pre-wrap; font-size:12px; color:var(--mute); }
   details { margin-top:16px; color:var(--mute); } details p { margin:6px 0; }
-  #patches, #factory { display:flex; flex-direction:column; gap:6px; }
-  #patchSec h3 { font-size:13px; color:var(--mute); font-weight:600; margin:14px 0 6px; }
+  #patches { display:flex; flex-direction:column; gap:6px; }
   .prow { display:grid; grid-template-columns:3em minmax(8em,14em) 1fr auto; gap:10px; align-items:center; padding:8px 12px; }
   .pid { font-family: ui-monospace, Menlo, monospace; color:var(--mute); } .pname { font-weight:700; font-family: ui-monospace, Menlo, monospace; } .pinfo { font-size:12px; }
   .prow.fixed .pname { color:var(--mute); }
@@ -68,9 +67,6 @@
     <div id="patchSec" class="hide">
       <h2>Patches on the FM-1</h2>
       <p class="mute">This is the PRESETS list of the FM-1, in order. To play a patch, turn PRESETS on the FM-1; this page renames, reorders, deletes and backs up your saved patches.</p>
-      <h3>Built in</h3>
-      <div id="factory"></div>
-      <h3>Your saved patches</h3>
       <div id="patches"></div>
       <div class="row" style="margin-top:10px">
         <button id="btnBackup">Backup all…</button>
