@@ -319,4 +319,5 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 19.21 | Press SEQ, press SEQ again; same with ARP | SEQ: NOTES, then LANE (the sequencer is not switched); ARP: SET 1/2, then SET 2/2 |
 | 19.22 | Hold SEQ half a second; hold ARP half a second | the sequencer / the arp switches on or off at the half second, the page does not change |
 | 19.23 | LFO: turn RATE from 0 to max | the picture goes from 1 cycle to 8 cycles; SHAPE still changes the shape |
+| 19.24 | GLO OUTPUT: note DROPS, play the fast same-note repeats that click | DROPS stays 0 (if it counts up with the clicks, the audio is overloaded: report CPU MAX and the page you were on) |
 | 19.18 | Turn a knob fast on FX FILT while playing | the picture keeps up (at most ~16 redraws a second); notes do not stutter |

@@ -55,6 +55,7 @@ typedef struct {
     uint32_t wave_key;                          /* changes when `wave` does (the shadow compares it) */
     uint32_t ms;                                /* the clock (ms): the waterfall redraws once the position rests; 0 in the mock-up */
     uint8_t cpu_max, flash;                     /* worst CPU % since reset; flash: 1 = "SAVED" instead of the patch name */
+    uint16_t drops;                             /* GLO OUTPUT: audio blocks the overload guard cut voices in, since boot (9999 max) */
     uint8_t latch;                              /* LATCH is on: the voice counter on the status line reads L instead of V, in the accent colour */
     uint8_t flt_cut, flt_res, flt_mode;         /* FX picture: cutoff, resonance 0..127, mode 0 LP 1 BP 2 HP */
     int8_t flt_env;                             /* FX picture: the envelope's reach on the cutoff, -64..63 semitones */
@@ -531,8 +532,11 @@ static void ui_drive_fn(const ui_view_t *v)     /* GLO OUTPUT: the drive's curve
     }
     d = ui_num(d, v->cpu_max);
     ui_cat(d, "%");
-    cv_text(152, 40, &FONT_S, "CPU MAX", UI_GRAY);
-    cv_text(152, 54, &FONT_M, t, v->cpu_max > 80u ? RGB(255, 90, 90) : UI_TXT);
+    cv_text(152, 24, &FONT_S, "CPU MAX", UI_GRAY);
+    cv_text(152, 38, &FONT_M, t, v->cpu_max > 80u ? RGB(255, 90, 90) : UI_TXT);
+    ui_num(t, v->drops);                        /* voices cut by the overload guard: each is a click */
+    cv_text(152, 72, &FONT_S, "DROPS", UI_GRAY);
+    cv_text(152, 86, &FONT_M, t, v->drops ? RGB(255, 90, 90) : UI_TXT);
 }
 
 static void ui_ctrl_fn(const ui_view_t *v)      /* GLO CONTROL: what the wheel, aftertouch and velocity reach; a line per route, thicker = more */
@@ -828,7 +832,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         default:                                /* GLO */
             if (v->sub == 2u) { f = ui_boot_fn; pk = 0x60000000u; }
             else if (v->sub == 1u) { f = ui_ctrl_fn; pk = 0x70000000u ^ (uint32_t)v->mod[0] ^ (uint32_t)v->mod[1] << 7 ^ (uint32_t)v->mod[2] << 14 ^ (uint32_t)v->mod[3] << 21; }
-            else { f = ui_drive_fn; pk = (uint32_t)v->drive | (uint32_t)v->cpu_max << 8; }
+            else { f = ui_drive_fn; pk = (uint32_t)v->drive | (uint32_t)v->cpu_max << 8 | (uint32_t)v->drops << 16; }
             break;
         }
         tc = full || s->sub != v->sub;          /* a new tab: at once; else at most every UI_PIC_MS while it changes */
