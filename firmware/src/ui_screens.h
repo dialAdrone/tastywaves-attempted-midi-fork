@@ -890,8 +890,8 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
     for (i = 0; i < 8u; i++) s->env[i >> 2][i & 3u] = v->env[i >> 2][i & 3u];
 }
 
-/* ---- button LEDs: the page button of the shown page, SAVE blinking while the patch is edited, PLAY unused (v1).
- * Returns a mask over BTN_* ids; `blink` toggles about 2 Hz. Key LEDs: a key is lit while it sounds (as today). */
+/* ---- button LEDs: the page button of the shown page, SAVE lit (steady, not blinking: it distracted) while the patch
+ * is edited, PLAY unused (v1). Returns a mask over BTN_* ids; `blink` (about 2 Hz) is no longer used. Key LEDs: a key is lit while it sounds (as today). */
 static uint32_t ui_button_leds(const ui_view_t *v, uint32_t blink)
 {
     uint32_t m = 0;
@@ -905,6 +905,7 @@ static uint32_t ui_button_leds(const ui_view_t *v, uint32_t blink)
     case UI_P_GLO: m |= 1u << BTN_GLO; break;
     default: break;
     }
-    if (v->modified && blink) m |= 1u << BTN_SAVE;
+    (void)blink;
+    if (v->modified) m |= 1u << BTN_SAVE;
     return m;
 }

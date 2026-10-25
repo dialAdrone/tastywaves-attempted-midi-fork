@@ -120,7 +120,7 @@ only when P_WARP_DEST selects it (BEND> on SEL).
 - **SAVE (stub, T17 is real slots).** The working patch is copied to `uval` and the settings sector is written; the
   patch then replaces that factory slot when it is loaded (`uslot`). One user patch at a time: a SAVE on another slot
   replaces it. The write waits for `quiet()` (the flash erase stops the sound) and at most one a second; nothing
-  changed = only the `SAVED` flash. The blinking SAVE LED shows the patch is edited. `FL_RANGE_OK` and the flash
+  changed = only the `SAVED` flash. The lit SAVE LED shows the patch is edited. `FL_RANGE_OK` and the flash
   write path are untouched.
 - "Modified" = the patch differs from what was loaded or saved, so a MIDI CC that moves a value shows the tick too.
 
@@ -154,7 +154,7 @@ before adding anything bigger.
 ## LEDs
 
 - Page buttons: the shown page's button is lit (HOME / EDIT / FX / ENV / LFO / SEL / GLO), one at a time.
-- SAVE blinks (about 2 Hz) while the patch is edited; solid for 0.9 s after a save.
+- SAVE is lit (steady; it blinked until 2026-10, which distracted) while the patch is edited; lit for 0.9 s after a save.
 - Key LEDs: lit while the key's note sounds; OCT- / OCT+ lit when the octave is below / above 0.
 - While EDIT is held the four oscillator black keys (OP1..OP4) light as the osc chips.
 - ARP / SEQ / PLAY / REC dark in v1.

@@ -72,7 +72,7 @@ knobs, redraw delay (noticeable lag from knob to screen).
 | SEL | SEL | MODE POLY/MONO/LEGATO, BEND>, QUAL, CURVE; voice squares |
 | GLO 1, 2 | GLO, GLO again | VOLUME DRIVE GLIDE PB RNG; CPU MAX; MW/AT/VEL routings |
 | PRESETS | turn PRESETS | name changes at once, sound loads after ~0.4 s; 8 patches all sensible |
-| LEDs | all pages | page button lit one at a time; SAVE blinks when edited; key LEDs follow |
+| LEDs | all pages | page button lit one at a time; SAVE lit (steady) when edited; key LEDs follow |
 
 Review points for the design (what we most want your opinion on):
 - Is the 4-column value strip readable and does it feel right under the real encoders?
@@ -271,7 +271,7 @@ Flash `build/vavewave.fwsc`. TYPE now also has PHASER, DELAY, REVERB. DELAY and 
 | 17.2 | Power off and on, PRESETS to that patch | SEQ comes on and plays the same notes, ties and rests, with the lane's movement |
 | 17.3 | Load a factory patch while the pattern plays | the sound changes, the pattern keeps playing |
 | 17.4 | Record a different pattern, then PRESETS to the saved one | the saved pattern replaces it |
-| 17.5 | Load the saved patch, change one lane value, look at SAVE | SAVE blinks (a lane edit counts); SAVE again replaces it, reload shows the new value |
+| 17.5 | Load the saved patch, change one lane value, look at SAVE | SAVE lit (a lane edit counts); SAVE again replaces it, reload shows the new value |
 | 17.6 | Save several patches with 16 step patterns (about 20) | each is saved; when the store is full the message says STORE FULL (delete one to go on) |
 | 17.6b | While a pattern plays, switch to a user patch saved without a pattern | the pattern is emptied and the sound stops sequencing; switching to a factory preset leaves the pattern playing |
 | 17.7 | Record a pattern, turn SEQ off, SAVE, PRESETS elsewhere and back | the pattern comes back with the patch (it is saved whether SEQ is on or off); SEQ on plays it |
@@ -335,4 +335,5 @@ Serve `tools/web` (see its README), connect, and look at "Patches on the FM-1". 
 | 19.37 | Recording, press FX | recording ends with the steps so far, FX opens; PLAY there is LATCH; back on SEQ, PLAY starts the pattern |
 | 19.38 | On SEQ press PLAY; go to FX | the PLAY LED is lit while the pattern plays (and while LATCH is on), off when stopped |
 | 19.39 | ARP RANDOM: hold a chord, release, hold again | the ARP picture changes with each new chord, matching the new order |
+| 19.40 | Turn any knob on a loaded patch | SAVE lights steadily (no blinking); SAVE: off again |
 | 19.18 | Turn a knob fast on FX FILT while playing | the picture keeps up (at most ~16 redraws a second); notes do not stutter |

@@ -490,7 +490,7 @@ static void pn_buttons(uint32_t b, uint32_t held, app_set_t *st, uint32_t *dirty
             if (patch_get(P_ARP)) { pn.arp_last = (uint8_t)patch_get(P_ARP); patch_set(P_ARP, 0); }
             else patch_set(P_ARP, pn.arp_last ? pn.arp_last : 1);
             pn.t_arp_tog = fm1_ms ? fm1_ms : 1u;
-            pn.base[P_ARP] = (int16_t)patch.p[P_ARP];               /* the button is a performance switch, not a patch edit: SAVE does not blink for it */
+            pn.base[P_ARP] = (int16_t)patch.p[P_ARP];               /* the button is a performance switch, not a patch edit: SAVE does not light for it */
         }
     }
     if (b & 1u << BTN_SEQ) pn_page_btn(UI_P_SEQ);               /* SEQ only opens its page (again: NOTES / LANE); PLAY on that page starts / stops it */
@@ -907,7 +907,7 @@ static int pn_save_poll(app_set_t *st, uint32_t *dirty)
     uint32_t i, id;
     if (!pn.save_req) return 0;
     if (pn.act != ACT_NONE) {
-        if (fm1_ms - pn.t_save < 1000u) return 0;                  /* try again in a later pass; the LED keeps blinking (not waiting for quiet: with a latched note or the arp it would never come; a compaction erase costs one 17 ms gap) */
+        if (fm1_ms - pn.t_save < 1000u) return 0;                  /* try again in a later pass; the LED stays lit (not waiting for quiet: with a latched note or the arp it would never come; a compaction erase costs one 17 ms gap) */
         pn.t_save = fm1_ms;
         id = pn.act_id % PL_IDS;
         if (pn.act == ACT_SAVE) {

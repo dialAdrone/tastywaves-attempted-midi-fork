@@ -161,7 +161,7 @@ match its parameter count and skips the record, so a downgrade hides patches tha
 - **Load**: a patch with a pattern replaces the pattern in RAM (the ISR plays nothing while the arrays change). A user patch
   saved without one empties the pattern (the sequencer stays on but is silent until you record one); the factory presets leave it as it is.
   (Earlier builds kept the old pattern playing under the new sound; changed after a device test.)
-- **Modified**: a changed pattern or lane makes SAVE blink, like a parameter edit.
+- **Modified**: a changed pattern or lane lights SAVE, like a parameter edit.
 - **Capacity**: live data is capped at one sector (4,096 B). A record with a 16 step pattern is about 200 B, so about 20 such patches fit
   (STORE FULL after that); plain patches are not affected.
 - **Downgrade**: going back to a firmware older than S4 hides patches saved with a pattern, and that firmware's next compaction erases them for good. Back up with the web library (section 12) before downgrading.
