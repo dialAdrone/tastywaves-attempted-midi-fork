@@ -8,9 +8,9 @@ counterpoint on one clock. Patches are saved on the device, and a browser tool m
 wavetables.
 
 <p align="center">
+  <img src="docs/images/splash.gif" width="240" alt="The power-on animation: waves crash and TastyWaves rises out of the splash">
   <img src="docs/images/home.png" width="240" alt="HOME: the oscillator's wave and its harmonics">
   <img src="docs/images/seq.png" width="240" alt="SEQ: a pattern playing, with the status row">
-  <img src="docs/images/chord.png" width="240" alt="SEQ chord tab: A major on a two-octave keyboard">
 </p>
 
 > **Version 1.0.0.** Tested on the FM-1 against [docs/DEVICE-TEST-PLAN.md](docs/DEVICE-TEST-PLAN.md).
@@ -49,7 +49,7 @@ wavetables.
 | **Patches** | 8 factory patches and 32 of your own, saved on the FM-1 with both sequences |
 | **Sync** | Follows MIDI clock (Start restarts the patterns on the beat) |
 | **USB** | Class-compliant USB-MIDI in and out; the FM-1 is also a 16-bit stereo USB audio input at 44.1 or 48 kHz |
-| **Screen** | A picture for every page: the wave, the filter response, the envelopes, the LFO, the effects chain, the arpeggio, the pattern; three HOME looks; built-in help |
+| **Screen** | An animated splash at power-on (waves crash, the name rises out of the spray); a picture for every page: the wave, the filter response, the envelopes, the LFO, the effects chain, the arpeggio, the pattern; three HOME looks; built-in help |
 | **Safe** | The FM-1's update path and USB rescue stay intact: you can always install another firmware |
 
 ## Install

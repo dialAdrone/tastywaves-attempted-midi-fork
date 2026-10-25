@@ -451,3 +451,12 @@ Flash `build/tastywaves.fwsc`. SEQ works as ARP: a press opens its page; holding
 | 25.14 | Web tool, patch section | one list in PRESETS order: the 8 factory patches first (greyed, no buttons), then the saved ones; the text says patches are loaded with PRESETS on the FM-1 |
 | 25.15 | (review fix) MIDI clock from a DAW; SEQ1 with ARP on, SEQ2 plain; press Start in the DAW a few times mid-pattern | both patterns restart together on the beat each time (SEQ1 was up to a beat off) |
 | 25.16 | (review fix) Fill the store until SAVE says STORE FULL on a patch with a SEQ2 pattern | if the patch got in but SEQ2 did not: STORE FULL, the patch is in the PRESETS list under its number, SAVE stays lit |
+
+## 26. Power-on splash (1.0.0)
+
+| # | Do | Expect |
+|---|----|--------|
+| 26.1 | Switch the FM-1 on | about 3 s: sine waves roll in, the front wave grows and crashes, spray flies, "TastyWaves" rises out of it, then "Sounds Delicious!"; then HOME. Smooth, no tearing or long pauses |
+| 26.2 | Hold a chord through the splash | no crash; after it the keys play as usual |
+| 26.3 | Hold OCT- while switching on | the USB rescue, no splash (the rescue comes first) |
+| 26.4 | Install a build over USB right after power-on (during the splash) | the install works (USB is served throughout) |
