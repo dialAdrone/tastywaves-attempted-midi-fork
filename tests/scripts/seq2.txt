@@ -1,5 +1,5 @@
 # REC on HOME does nothing; on the SEQ page: steps entered, REC ends: the pattern waits (nothing plays); PLAY on the SEQ page starts it, PLAY stops it, PLAY starts
-# it again; on another page PLAY is LATCH and the pattern goes on. See tests/run_arp_panel.sh.
+# it again; on another page PLAY stops it too, and stopped there PLAY is LATCH (it does not start it). See tests/run_arp_panel.sh.
 50 btn 13
 100 btn 11
 200 btn 13
@@ -13,4 +13,5 @@
 3000 btn 12
 3500 btn 7
 3600 btn 12
+4100 btn 12
 4600 end

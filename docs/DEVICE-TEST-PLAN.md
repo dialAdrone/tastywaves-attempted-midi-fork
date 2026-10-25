@@ -381,3 +381,4 @@ Before: ARP on while SEQ played did nothing (the sequencer bypassed the arp). No
 | 21.10 | Change the patch while SEQ + CHORD play | the chord stays (as the arp does) |
 | 21.11 | SAVE a patch with CHORD set, load another, load it back | CHORD comes back; older patches load with CHORD OFF |
 | 21.12 | ARP alone (SEQ off), with LATCH | as before: CHORD has no effect without the sequencer |
+ | 21.13 | SEQ playing: go to any other page (ARP, EDIT, HOME...), press PLAY | the sequencer stops (PLAY LED off); PLAY again there is LATCH (it does not start the sequencer: start it on the SEQ page) |

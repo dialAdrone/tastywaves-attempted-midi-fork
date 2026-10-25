@@ -247,7 +247,7 @@ static void app_main(void)
             sq.cur++;
         }
         if (sq.rec && sq.cur >= SEQ_MAXN) { sq.len = SEQ_MAXN; sq.rec = 0; seq_stop(); }  /* 32 steps: full */
-        if (!rec_pass && (b & (1u << BTN_PLAY)) && pn.page == UI_P_SEQ) {  /* on the SEQ page PLAY starts / stops the sequencer (elsewhere it is LATCH) */
+        if (!rec_pass && (b & (1u << BTN_PLAY)) && (pn.page == UI_P_SEQ || (patch_get(P_SEQ) && sq_run && sq.len))) {  /* PLAY stops the sequencer from any page; on the SEQ page it also starts it (elsewhere, stopped, it is LATCH) */
             if (patch_get(P_SEQ) && sq_run) seq_stop();
             else if (sq.len) { patch_set(P_SEQ, 1); pn.base[P_SEQ] = (int16_t)patch.p[P_SEQ]; sq_run = 1; }
             else pn_msg("NO PATTERN", 0, 0);
