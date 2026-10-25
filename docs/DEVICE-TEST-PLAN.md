@@ -433,18 +433,19 @@ Flash `build/vavewave.fwsc`. SEQ works as ARP: a press opens its page; holding i
 
 | # | Do | Expect |
 |---|----|--------|
-| 25.1 | SEQ off, patterns recorded; press SEQ | the SEQ page opens; SEQ LED stays off; the page reads OFF and `HOLD SEQ=ON`; PLAY here is LATCH |
-| 25.1b | Hold SEQ half a second | SEQ LED on, nothing plays (STOP, `PLAY=START`) |
-| 25.2 | Press PLAY | both patterns start; PLAY LED on |
+| 25.1 | SEQ off, patterns recorded; press SEQ | the SEQ page opens; SEQ LED stays off; the status row reads `HOLD SEQ: OFF` `PLAY: STOPPED`; PLAY here is LATCH |
+| 25.1b | Hold SEQ half a second, on each tab (SEQ1 1/2 and 2/2, SEQ2 1/2 and 2/2, LANE) | SEQ LED and `HOLD SEQ: ON` / `OFF` switch on every tab; nothing starts (`PLAY: STOPPED`) |
+| 25.2 | Press PLAY | both patterns start; PLAY LED on; `PLAY: PLAYING` on every SEQ tab |
 | 25.3 | Go to FX (or any page), press PLAY | the patterns stop; SEQ stays lit; PLAY LED off |
 | 25.4 | Press PLAY again there | they start again (not LATCH) |
 | 25.5 | Press SEQ again a few times | only the tabs change; SEQ stays lit, playback goes on; ARP behaves the same way (press: page, hold: on / off) |
-| 25.6 | Hold SEQ half a second | SEQ LED off, the patterns stop; the SEQ page reads OFF and `HOLD SEQ=ON` |
+| 25.6 | Hold SEQ half a second | SEQ LED off, the patterns stop; `HOLD SEQ: OFF` `PLAY: STOPPED` |
 | 25.7 | Hold a chord, press PLAY | LATCH (PLAY LED on), the chord keeps sounding; the ARP applies if lit; PLAY again lets go |
 | 25.8 | SEQ off with LATCH on, hold SEQ, PLAY | the latched keys transpose the patterns; PLAY stops / starts them |
 | 25.9 | SEQ lit and stopped, play keys | silent: they only set the transposition for the next PLAY |
 | 25.10 | Load a patch saved with SEQ on, or end REC | SEQ lit, nothing plays until PLAY |
 | 25.11 | GLO HELP page 2 and the SEQ page's help | `SEQ  PAGE, HOLD: ON/OFF`; `PLAY  LATCH; SEQ ON: START/STOP`; on SEQ `HOLD SEQ  ON / OFF (OFF: PLAY=LATCH)` |
-| 25.12 | FX page, no bypass | `HOLD FX: BYPASS` dim at the bottom; bypassed: the amber BYPASSED bar |
+| 25.12 | FX page, no bypass; ARP page | `HOLD FX: BYPASS` dim at the bottom (bypassed: the amber BYPASSED bar); ARP: `HOLD ARP: ON` / `OFF` at the bottom, switching with a hold |
+| 25.12b | REC on the SEQ page | the status row reads `RECORD` (amber) in place of PLAY; recording SEQ2 while SEQ1 is shown: `REC SQ2` |
 | 25.13 | REC on SEQ2, enter steps, SAVE (REC still on), enter more steps | SAVE lights again; REC off, reload: the steps up to the save |
 | 25.14 | Web tool, patch section | one list in PRESETS order: the 8 factory patches first (greyed, no buttons), then the saved ones; the text says patches are loaded with PRESETS on the FM-1 |

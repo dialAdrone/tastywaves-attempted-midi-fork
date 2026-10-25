@@ -998,15 +998,14 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
             char *d = v->info;
             uint32_t L = pn_seq_lane(), rl = sq.rec && sq_lane == L;
             seq_pat_t *P = LP(L);
-            ui_copy(v->ptxt, rl ? "RECORD" : sq.rec ? (L ? "REC SQ1" : "REC SQ2") : !P->len ? "EMPTY" : !patch_get(P_SEQ) ? "OFF" : sq_run ? "PLAY" : "STOP", 8);   /* (recording the other pattern) */
-            if (pn.sub == PN_LANE_SET) ui_copy(v->ptxt, TXT[TX_MOD][patch_get(P_MOD)], 8);           /* the lane: its target, big */
+            ui_copy(v->ptxt, rl ? "RECORD" : sq.rec ? (L ? "REC SQ1" : "REC SQ2") : patch_get(P_SEQ) && sq_run && (sq.len || sq2.len) ? "PLAYING" : "STOPPED", 8);   /* (recording the other pattern) */
+            v->seq_st = (uint8_t)((patch_get(P_SEQ) ? 1u : 0u) | (sq.rec ? 2u : 0u));    /* the status row on every tab: HOLD SEQ: ON / OFF, PLAY: PLAYING / STOPPED */
 
             if (pn.sub == 1u || pn.sub == 3u) pn_chord_view(v, L);
             else if (pn.sub == PN_LANE_SET) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)(pn.mstep < 32u ? pn.mstep : 31u) + 1); d = ui_cat(d, "  SELECT KNOB MOVES"); }
             else if (rl) { d = ui_cat(d, "STEP "); d = ui_num(d, (int32_t)sq.cur + 1); d = ui_cat(d, "/32  PLAY=REST SEQ=TIE"); }
             else if (!P->len) ui_cat(d, "NO PATTERN: PRESS REC");
-            else { d = ui_cat(d, "LEN "); d = ui_num(d, P->len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); d = ui_cat(d, " BPM"); }
-                   if (!patch_get(P_SEQ)) ui_cat(d, "  HOLD SEQ=ON"); else if (!sq_run) ui_cat(d, "  PLAY=START"); }
+            else { d = ui_cat(d, "LEN "); d = ui_num(d, P->len); d = ui_cat(d, "  "); if (arp_tap.ext) d = ui_cat(d, "EXT"); else { d = ui_num(d, patch_get(P_TEMPO)); ui_cat(d, " BPM"); } }
         }
         if (pn.page == UI_P_ARP) {
             char *d = v->info;

@@ -67,7 +67,8 @@ typedef struct {
     uint8_t vmode, wdest, qual, ecurve;         /* SEL picture: voice mode (0 poly 1 mono 2 legato), BEND on (0 both 1 osc1 2 osc2), quality (0 hi 1 eco), env curve (0 lin 1 exp) */
     uint32_t arp_seed;                          /* ARP picture, RANDOM: the run's seed (the arp's own generator, so the picture is what plays) */
     uint8_t arp_mode, arp_oct, arp_gate, arp_swing;     /* ARP picture: mode (0 off), octaves 1..4, gate 1..127, swing 0..50 */
-    char ptxt[8];                               /* SEQ picture: the state (OFF PLAY STOP RECORD) or the lane's target */
+    char ptxt[8];                               /* SEQ status row: the transport (PLAYING STOPPED RECORD, REC SQ1 / SQ2: the other pattern) */
+    uint8_t seq_st;                             /* SEQ status row: 1 SEQ on (lit), 2 step input on */
     char info2[40];                             /* FX slot pictures: the once-only effects */
     char info[40];                              /* ARP and SEQ pictures: tempo and rate; steps */
     uint8_t seq_len, seq_pos, seq_rec, seq_on;  /* SEQ picture: steps, the step playing / being recorded, step input on, running */
@@ -732,12 +733,18 @@ static void ui_sel_fn(const ui_view_t *v)       /* SEL VOICE: a panel per knob, 
     }
 }
 
+static void ui_hold(int32_t x, int32_t y, const char *lab, const char *st, uint16_t c)     /* "HOLD FX: BYPASS": the gesture grey, the state in its colour */
+{
+    cv_text(x, y, &FONT_S, lab, UI_GRAY);
+    cv_text(x + text_w(&FONT_S, lab), y, &FONT_S, st, c);
+}
 static void ui_arp_fn(const ui_view_t *v)       /* ARP: 16 steps of the pattern a three-note chord plays (gate = note length, swing = late odd steps) */
 {
     uint32_t rnd = v->arp_seed;
     int32_t oct = v->arp_oct < 1u ? 1 : v->arp_oct > 4u ? 4 : v->arp_oct, n = 3 * oct, s, lh = 96 / n;
     int32_t gw = (int32_t)v->arp_gate * 13 / 127, sw = (int32_t)v->arp_swing * 14 / 100;
     cv_text(4, 0, &FONT_S, v->info, UI_GRAY);
+    ui_hold((240 - text_w(&FONT_S, v->arp_mode ? "HOLD ARP: ON" : "HOLD ARP: OFF")) / 2, 118, "HOLD ARP: ", v->arp_mode ? "ON" : "OFF", v->arp_mode ? UI_ACC : UI_DIM);
     if (!v->arp_mode) { cv_text((240 - text_w(&FONT_M, "ARP OFF")) / 2, 60, &FONT_M, "ARP OFF", UI_DIM); return; }
     cv_rect(8, 117, 224, 1, UI_DIM);
     for (s = 0; s < 16; s++) {
@@ -763,23 +770,33 @@ static void ui_edit_fn(const ui_view_t *v)      /* EDIT: one cycle of the oscill
     ui_wave_in(112, v->wave ? v->wave : v->frames + (uint32_t)v->frame * v->stride, UI_ACC, 1);
 }
 
+static void ui_seq_status(int32_t y, const ui_view_t *v)  /* SEQ, every tab: what holding SEQ switches (left), what PLAY switches (right) */
+{
+    uint32_t on = v->seq_st & 1u, rec = v->seq_st & 2u;
+    ui_hold(10, y, "HOLD SEQ: ", on ? "ON" : "OFF", on ? UI_ACC : UI_DIM);
+    if (rec) ui_hold(130, y, "", v->ptxt, RGB(255, 200, 90));
+    else ui_hold(130, y, "PLAY: ", v->ptxt, !on ? UI_DIM : v->ptxt[0] == 'P' ? UI_ACC : UI_TXT);
+}
+static void ui_seq_status_fn(const ui_view_t *v) { ui_seq_status(0, v); }
+
 static void ui_chord_fn(const ui_view_t *v)     /* SEQ CHORD: the name, two octaves of keys with the chord lit (the root amber), what the arp does with it */
 {
     static const uint8_t WK[7] = {0, 2, 4, 5, 7, 9, 11}, BK[5] = {1, 3, 6, 8, 10}, BW[5] = {1, 2, 4, 5, 6};    /* white keys; black keys and the white key they sit left of */
     uint32_t o, j;
     char t[4];
-    cv_text((240 - text_w(&FONT_L, v->chord_name)) / 2, 0, &FONT_L, v->chord_name, v->chord ? UI_ACC : UI_DIM);
+    ui_seq_status(0, v);
+    cv_text((240 - text_w(&FONT_M, v->chord_name)) / 2, 15, &FONT_M, v->chord_name, v->chord ? UI_ACC : UI_DIM);
     for (o = 0; o < 2u; o++) {
         for (j = 0; j < 7u; j++) {
             uint32_t k = o * 12u + WK[j];
             uint16_t c = v->chord_keys >> k & 1u ? (k == v->chord_root ? RGB(255, 200, 90) : UI_ACC) : UI_GRAY;
-            cv_rect(8 + (int32_t)(o * 7u + j) * 16, 38, 15, 56, c);
+            cv_rect(8 + (int32_t)(o * 7u + j) * 16, 40, 15, 54, c);
         }
         for (j = 0; j < 5u; j++) {
             uint32_t k = o * 12u + BK[j];
             int32_t x = 8 + (int32_t)(o * 7u + BW[j]) * 16 - 6;
-            cv_rect(x - 1, 38, 13, 35, C_BLACK);
-            cv_rect(x, 38, 11, 34, v->chord_keys >> k & 1u ? (k == v->chord_root ? RGB(255, 200, 90) : UI_ACC) : UI_DIM);
+            cv_rect(x - 1, 40, 13, 33, C_BLACK);
+            cv_rect(x, 40, 11, 32, v->chord_keys >> k & 1u ? (k == v->chord_root ? RGB(255, 200, 90) : UI_ACC) : UI_DIM);
         }
     }
     t[0] = 'C'; t[1] = (char)('0' + (v->chord_oct > 9u ? 0u : v->chord_oct)); t[2] = 0;
@@ -962,12 +979,12 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         case UI_P_SEQ:
             if (v->sub == 1u || v->sub == 3u) {     /* SEQ1 / SEQ2 set 2: the chord */
                 uint32_t c;
-                f = ui_chord_fn; pk = 0x44000000u ^ v->chord_keys ^ (uint32_t)v->chord << 24 ^ (uint32_t)v->chord_root << 27 ^ (uint32_t)v->chord_oct << 20;
+                f = ui_chord_fn; pk = 0x44000000u ^ (uint32_t)v->seq_st << 29 ^ v->chord_keys ^ (uint32_t)v->chord << 24 ^ (uint32_t)v->chord_root << 27 ^ (uint32_t)v->chord_oct << 20;
                 for (c = 0; c < 16u && v->chord_name[c]; c++) pk = (pk ^ (uint8_t)v->chord_name[c]) * 16777619u;
-                textch = !ui_eq(s->info, v->info) || !ui_eq(s->info2, v->info2);
+                textch = !ui_eq(s->info, v->info) || !ui_eq(s->info2, v->info2) || !ui_eq(s->ptxt, v->ptxt);
                 break;
             }
-            pk = v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ v->seq_tie * 2654435761u ^ (uint32_t)v->seq_tr << 8 ^ ui_seq_h(v) ^ 0x40000000u;
+            pk = v->seq_mask ^ (uint32_t)v->seq_len << 24 ^ (uint32_t)v->seq_pos << 16 ^ (uint32_t)v->seq_rec << 9 ^ (uint32_t)v->seq_on << 10 ^ v->seq_tie * 2654435761u ^ (uint32_t)v->seq_tr << 8 ^ ui_seq_h(v) ^ (uint32_t)v->seq_st << 30 ^ 0x40000000u;
             textch = !ui_eq(s->ptxt, v->ptxt) || !ui_eq(s->info, v->info);
             break;
         default:                                /* GLO */
@@ -979,7 +996,7 @@ static void ui_draw(const ui_view_t *v, ui_shadow_t *s)
         if (tc || ((s->pic_key != pk || textch) && (v->ms == 0 || v->ms - s->t_pic >= UI_PIC_MS))) {
             if (f) ui_pic(UI_Y_BODY, UI_BODY_H, f, v);
             else {                              /* SEQ: the state and the steps, then the grid */
-                ui_text_line(UI_Y_BODY, v->ptxt, UI_ACC);
+                ui_pic(UI_Y_BODY, 16u, ui_seq_status_fn, v);
                 ui_text_line(UI_Y_BODY + 16u, v->info, UI_GRAY);
                 ui_seq_grid(UI_Y_BODY + 34u, v);
             }
