@@ -681,6 +681,7 @@ static void ui_fx_fn(const ui_view_t *v)        /* FX slot: the chain of four sl
     }
     cv_text(4, 100, &FONT_S, v->info2, UI_GRAY);
     if (v->fx_byp) { cv_rect(0, 116, 240, 18, RGB(255, 200, 90)); cv_text((240 - text_w(&FONT_S, "BYPASSED  HOLD FX: ON")) / 2, 117, &FONT_S, "BYPASSED  HOLD FX: ON", C_BLACK); }
+    else cv_text((240 - text_w(&FONT_S, "HOLD FX: BYPASS")) / 2, 117, &FONT_S, "HOLD FX: BYPASS", UI_DIM);
 }
 
 static void ui_sel_fn(const ui_view_t *v)       /* SEL VOICE: a panel per knob, in knob order (MODE GLIDE top, PB RNG QUAL below) */

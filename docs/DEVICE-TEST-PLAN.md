@@ -421,7 +421,7 @@ Open the web tool (`tools/web_tool.sh`), connect. Use a patch saved on the FM-1 
 | # | Do | Expect |
 | --- | --- | --- |
 | 24.1 | Patch library list | the patch shows "SEQ1 n + SEQ2 m steps" |
-| 24.2 | Rename it, then load it on the FM-1 and PLAY | new name; both patterns and SEQ2's settings intact |
+| 24.2 | Rename it, then pick it with PRESETS on the FM-1 and PLAY (the page does not load patches) | new name; both patterns and SEQ2's settings intact |
 | 24.3 | Move it up / down (▲ ▼) | it changes places; loaded on the FM-1, SEQ2 is still there |
 | 24.4 | Backup; delete the patch; Restore from the file | the patch comes back with SEQ2 (pattern and settings) |
 | 24.5 | Restore an older backup (made before this build) | restores as before; those patches have no SEQ2 |

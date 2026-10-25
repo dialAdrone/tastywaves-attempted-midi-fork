@@ -180,6 +180,7 @@ static uint32_t pn_pat_words(uint32_t L, int16_t *w, uint32_t any)    /* the wor
 {
     seq_pat_t *P = LP(L);
     uint32_t n = P->len > SEQ_MAXN ? SEQ_MAXN : P->len, i;
+    if (sq.rec && sq_lane == L && sq.cur) n = sq.cur > SEQ_MAXN ? SEQ_MAXN : sq.cur;     /* recording it: the steps entered so far (what REC off keeps) */
     if ((!any && !patch_get(P_SEQ)) || !n) return 0;
     if (w) {
         w[0] = (int16_t)n;
