@@ -1,4 +1,4 @@
-# Wavetable oscillator bench (BENCH 1 in firmware/src/vavewave.c). Starts with the 12-note chord held, LINEAR.
+# Wavetable oscillator bench (BENCH 1 in firmware/src/tastywaves.c). Starts with the 12-note chord held, LINEAR.
 # 2 s per setting: LINEAR, CUBIC, SINC8 (EDIT = btn 6); then chord off (PLAY = btn 12) and A4 alone (key 16)
 # in each interpolator, for a pitch / alias check; then voices cycle (SEL = btn 3) with the chord on again.
 # Host timing is the computer's, not the FM-1's.

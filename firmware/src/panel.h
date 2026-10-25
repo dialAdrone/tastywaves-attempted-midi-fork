@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 /* panel.h: the front panel of the v1 synth (T18): what each knob, encoder and button does on each page, the factory
  * patches, the settings struct's patch overlay, and the filling of ui_view_t for ui_screens.h. Included once from
- * vavewave.c (after engine.h and ui_screens.h) when BENCH is 0. Main loop only; never from the ISR. No registers.
+ * tastywaves.c (after engine.h and ui_screens.h) when BENCH is 0. Main loop only; never from the ISR. No registers.
  *
  * Data flow: encoders / buttons -> patch_set() (patch.h) -> patch.p[] (the ISR reads it once per block). The screen
  * is filled from patch.p[], so a MIDI CC that moves a value is drawn too. Nothing here reads the voices.
@@ -948,7 +948,7 @@ static void pn_view_fill(uint32_t cpu, uint32_t cpu_max, uint32_t voices, uint32
         static const char HX[] = "0123456789ABCDEF";
         char *d = v->boot[0];
         uint32_t n;
-        ui_cat(ui_cat(v->ver, "VAVEWAVE "), APP_VER);
+        ui_cat(ui_cat(v->ver, "TASTYWAVES "), APP_VER);
         if (pn.page == UI_P_GLO && pn.sub == 1u) {
             d = ui_cat(d, "BTN 0x");
             for (n = 0; n < 4u; n++) *d++ = HX[boot_btn >> (12u - 4u * n) & 15u];

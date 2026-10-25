@@ -1,4 +1,4 @@
-# VAVEWave v1 engine: alias / pitch sweep of osc 1 (T16). Run: tests/run_engine.sh (host WAV + tests/engine_check.py).
+# TastyWaves v1 engine: alias / pitch sweep of osc 1 (T16). Run: tests/run_engine.sh (host WAV + tests/engine_check.py).
 # osc 2 off, filter open (cutoff 127, reso 0, key track 0), amp env: attack 0, sustain 127; one note at a time, vel 127.
 # '#! check' lines are read by tests/engine_check.py (tests/host.c ignores comments).
 10 midi 0xB0 23 0

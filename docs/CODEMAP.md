@@ -1,15 +1,15 @@
 # Code map (read this instead of re-reading the source)
 
-Dinghy = one compilation unit. `build.py` compiles **only** `firmware/src/vavewave.c`; it `#include`s
+Dinghy = one compilation unit. `build.py` compiles **only** `firmware/src/tastywaves.c`; it `#include`s
 `platform.c`, which `#include`s everything else (`libc.c lcd.c gfx.c usb.c fm1_flash.h ota.c recovery.c`, HAL
 headers). Static functions everywhere, no linking between .c files. Target: JieLi AC791N, pi32v2, JieLi clang
-4.0.1, no FPU, no libgcc. Goal of this repo: custom **M-VAVE FM-1 synth firmware** by editing `vavewave.c`.
+4.0.1, no FPU, no libgcc. Goal of this repo: custom **M-VAVE FM-1 synth firmware** by editing `tastywaves.c`.
 
 ## Files that matter (and sizes)
 
 | file | lines | what | touch? |
 | --- | --- | --- | --- |
-| `firmware/src/vavewave.c` | ~220 | THE APP: main loop (keys, buttons, encoders, MIDI, LEDs, settings, draw); BENCH 1 = the CPU bench loop | **yes** |
+| `firmware/src/tastywaves.c` | ~220 | THE APP: main loop (keys, buttons, encoders, MIDI, LEDs, settings, draw); BENCH 1 = the CPU bench loop | **yes** |
 | `firmware/src/panel.h` | ~410 | the front panel: pages / knob table `PG`, factory patches `PRESET`, SAVE stub, view filling, EDIT BEND preview | **yes** |
 | `firmware/src/platform.c` | 344 | boot, ISRs (timer5, alnk0), `platform_poll`, settings, MIDI, OTA glue, crash screen | rarely |
 | `firmware/src/gfx.c` | 183 | canvas (`cv_*`), `draw_text_box`, fonts (data in `firmware/gen/felucca_font.h`) | no |
@@ -42,9 +42,9 @@ main loop (app_main)     -> platform_poll(); read fm1_in / fm1_input_edges / fm1
 ```
 
 Audio ISR output: Q15 ±32767, `out` pre-zeroed, you **add**. Budget 5.8 ms/block, aim < 2.9 ms.
-Main↔ISR sharing: `volatile` 32-bit, one writer each (vavewave.c: voice `inc`/`gate` written by main, `amp`/`ph` by ISR).
+Main↔ISR sharing: `volatile` 32-bit, one writer each (tastywaves.c: voice `inc`/`gate` written by main, `amp`/`ph` by ISR).
 
-## vavewave.c anatomy (the original sine build; the engine is engine.h, the panel panel.h)
+## tastywaves.c anatomy (the original sine build; the engine is engine.h, the panel panel.h)
 
 - `voice[NV=4]`: `inc` (phase step), `gate` (target level Q15), `amp` (ISR-owned glide), `ph`, `age`, `note`.
 - `sine(ph)`: parabola approximation (~0.1%), integer only.
@@ -65,7 +65,7 @@ Main↔ISR sharing: `volatile` 32-bit, one writer each (vavewave.c: voice `inc`/
 - `PG[page][set][knob]` (panel.h) is the whole control map: label, `P_*` id, format, step. Add a parameter there.
 - Gestures: page button again = next set, HOME again = next look (2 -> 1 -> 3, kept), EDIT held + HOME = reset CPU max,
   SAVE = write the settings sector (stub: one user-patch overlay on the factory slot; T17 does real slots).
-- Settings (`app_set_t`, vavewave.c, 102 B): ver, oct, look, slot, uslot, uval[P_COUNT]; `pn_validate` range-checks.
+- Settings (`app_set_t`, tastywaves.c, 102 B): ver, oct, look, slot, uslot, uval[P_COUNT]; `pn_validate` range-checks.
 - BEND preview: `pn_edit_wave` uses `eng_warp_preview` (pure, const tables) from the main loop.
 
 ## Hardware facts (FM-1)
@@ -115,7 +115,7 @@ Main↔ISR sharing: `volatile` 32-bit, one writer each (vavewave.c: voice `inc`/
 
 Skills: `fm1-build-test`, `fm1-fixed-point`, `fm1-add-control`, `fm1-crash-triage`, `fm1-release-install`.
 Controller flow for a feature: `synth-dsp` and/or `panel-ui` (parallel if files don't collide: both edit
-`vavewave.c`, so serialise or split the code into headers first) → `fm1-build-verifier` → `rules-reviewer` →
+`tastywaves.c`, so serialise or split the code into headers first) → `fm1-build-verifier` → `rules-reviewer` →
 (user ok) `release-engineer`.
 
 ## Build baseline (unmodified Dinghy, 2026-10-11)

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* synth.h: the VAVEWave v1 engine (T16). Included once from engine.h when BENCH is 0; no registers, ISR code
+/* synth.h: the TastyWaves v1 engine (T16). Included once from engine.h when BENCH is 0; no registers, ISR code
  * except where marked. The UI talks to it only through patch.h.
  *
  * Signal path, per voice (12):

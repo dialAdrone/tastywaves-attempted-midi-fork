@@ -5,8 +5,8 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p build/host
-cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/vavewave firmware/src/vavewave.c
-run() { printf "%s\n" "$2" "50 patch 15 100" "100 keys 0x1" "3000 keys 0" "3500 end" > build/host/fx_$1.txt; build/host/vavewave build/host/fx_$1 build/host/fx_$1.txt > /dev/null; }
+cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/tastywaves firmware/src/tastywaves.c
+run() { printf "%s\n" "$2" "50 patch 15 100" "100 keys 0x1" "3000 keys 0" "3500 end" > build/host/fx_$1.txt; build/host/tastywaves build/host/fx_$1 build/host/fx_$1.txt > /dev/null; }
 run dry "1 patch 57 0"
 run cho "1 patch 57 1
 2 patch 58 40
@@ -19,7 +19,7 @@ run fla "1 patch 57 2
 run off "1 patch 57 2
 2 patch 60 127
 3 patch 57 0"
-runk() { printf "%s\n" "$2" "50 patch 15 100" "100 keys 0x1" "400 keys 0" "3500 end" > build/host/fx_$1.txt; build/host/vavewave build/host/fx_$1 build/host/fx_$1.txt > /dev/null; }
+runk() { printf "%s\n" "$2" "50 patch 15 100" "100 keys 0x1" "400 keys 0" "3500 end" > build/host/fx_$1.txt; build/host/tastywaves build/host/fx_$1 build/host/fx_$1.txt > /dev/null; }
 run pha "1 patch 57 3
 2 patch 58 40
 3 patch 59 100

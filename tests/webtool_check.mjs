@@ -159,7 +159,8 @@ check(crc32(new TextEncoder().encode('123456789')) === 0xCBF43926, 'crc32 check 
     check((await vw.getSeq2Body(1)) === null, 'SEQ2: a put without it deletes it');
     await vw.putPatch(1, { body: c, seq2: s2 }); await vw.deletePatch(1);
     check(!(await vw.patchDirectory())[1].present && (await vw.getSeq2Body(1)) === null, 'SEQ2: deleting the patch deletes it');
-    check(parseBackup({ format: 'vavewave-patches', version: 1, patches: [{ id: 2, name: 'X', body: Array.from(a).map((v) => v.toString(16).padStart(2, '0')).join('') }] })[0].seq2 === null, 'a backup without SEQ2 (older tool) still parses');
+    check(parseBackup({ format: 'tastywaves-patches', version: 1, patches: [{ id: 2, name: 'X', body: Array.from(a).map((v) => v.toString(16).padStart(2, '0')).join('') }] })[0].seq2 === null, 'a backup without SEQ2 (older tool) still parses');
+    check(parseBackup({ format: 'vavewave-patches', version: 1, patches: [{ id: 2, name: 'X', body: Array.from(a).map((v) => v.toString(16).padStart(2, '0')).join('') }] }).length === 1, 'a backup from before the rename (vavewave-patches) still parses');
   }
   let full = 0;
   for (let i = 0; i < 32; i++) { try { await vw.putPatchBody(i, mk('FILL ' + i, i, 33)); full++; } catch (x) { if (/full/.test(x.message)) break; throw x; } }

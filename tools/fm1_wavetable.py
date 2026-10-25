@@ -1,5 +1,5 @@
 # SPDX-License-Identifier: GPL-3.0-only
-"""fm1_wavetable.py: turn wavetable WAV files (Serum, WaveEdit, Ableton, Surge exports) into a VAVEWave user table.
+"""fm1_wavetable.py: turn wavetable WAV files (Serum, WaveEdit, Ableton, Surge exports) into a TastyWaves user table.
 
     build  NAME OUT.vwt INPUT...  (WAV or Surge .wt) [--frame N] [--format auto|serum|waveedit|ableton|surge] [--pick WHICH]
     inspect INPUT...              what each file looks like and how it would be split (no output file)

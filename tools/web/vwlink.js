@@ -293,11 +293,11 @@ export class VwLink {
       const { body, seq2 } = await this.getPatch(e.id);
       patches.push({ id: e.id, name: e.name, body: hex(body), ...(seq2 ? { seq2: hex(seq2) } : {}) });
     }
-    return { format: 'vavewave-patches', version: 1, patches };       // (seq2: optional, so older tools still read the file)
+    return { format: 'tastywaves-patches', version: 1, patches };       // (seq2: optional, so older tools still read the file)
   }
 }
 export function parseBackup(obj) {
-  if (!obj || obj.format !== 'vavewave-patches' || obj.version !== 1 || !Array.isArray(obj.patches)) throw new LinkError('not a VAVEWave patch backup');
+  if (!obj || (obj.format !== 'tastywaves-patches' && obj.format !== 'vavewave-patches') || obj.version !== 1 || !Array.isArray(obj.patches)) throw new LinkError('not a TastyWaves patch backup');     // (vavewave-patches: the same file from before the rename)
   const seen = new Set();
   return obj.patches.map((p) => {
     if (!Number.isInteger(p.id) || p.id < 0 || p.id >= PATCH_IDS || seen.has(p.id) || typeof p.body !== 'string' || !/^([0-9a-f]{2})+$/.test(p.body)) throw new LinkError('damaged entry in the backup');

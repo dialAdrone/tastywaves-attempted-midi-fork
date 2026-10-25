@@ -1,4 +1,4 @@
-# VAVEWave stage 4b: a user table of full-scale noise (tests/make_hostile_table.py) in slot 3, on both oscillators, with the
+# TastyWaves stage 4b: a user table of full-scale noise (tests/make_hostile_table.py) in slot 3, on both oscillators, with the
 # loudest settings: the engine must not leave the table, overflow, or crash (UBSan + ASan in tests/run_engine.sh). No audio check
 # beyond "the run finishes": the sound is garbage by construction.
 50 patch 0 15

@@ -6,9 +6,9 @@ description: Cut a versioned release build and install a .fwsc on a connected M-
 
 **Hardware write — get explicit user confirmation before step 3.**
 
-1. `./build.sh --release X.Y` (one digit each) → `build/vavewave-X.Y.fwsc`, identity `FM-1_95Y`. Without
-   `--release`: `build/vavewave.fwsc`, identity `FM-1_950`. Own firmware → pick own identity in `tools/build.py`
-   (see `docs/MAKE-IT-YOURS.md`; check the taken list).
+1. `./build.sh --release X.Y` (one digit each) → `build/tastywaves-X.Y.fwsc`, identity `FM-1_95Y`. Without
+   `--release`: `build/tastywaves.fwsc`, identity `FM-1_950`. Own firmware → pick own identity in `tools/build.py`
+   (see Dinghy's [MAKE-IT-YOURS.md](https://github.com/zvenson/dinghy/blob/main/docs/MAKE-IT-YOURS.md); check the taken list).
 2. `.venv/bin/python tools/fm1_install.py --info` — what runs on the connected FM-1 (needs `mido python-rtmidi`).
 3. `.venv/bin/python tools/fm1_install.py build/<file>.fwsc` — it asks before writing; FM-1 restarts into the new
    firmware. Exit codes: 3 no FM-1, 4 connection lost, 5 timeout, 6 wrong model / identity mismatch.

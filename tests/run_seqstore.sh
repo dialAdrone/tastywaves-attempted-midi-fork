@@ -6,14 +6,14 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p build/host
-cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/vavewave firmware/src/vavewave.c
+cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/tastywaves firmware/src/tastywaves.c
 F=build/host/seqstore.bin
 rm -f $F
-for n in 1 2 3; do DINGHY_PATCHES=$F build/host/vavewave build/host/ss$n tests/scripts/seqstore$n.txt > build/host/ss$n.log; done
+for n in 1 2 3; do DINGHY_PATCHES=$F build/host/tastywaves build/host/ss$n tests/scripts/seqstore$n.txt > build/host/ss$n.log; done
 G=build/host/seq45.bin
 rm -f $G
-DINGHY_PATCHES=$G build/host/vavewave build/host/s4 tests/scripts/seq4.txt > build/host/s4.log
-DINGHY_PATCHES=$G build/host/vavewave build/host/s5 tests/scripts/seq5.txt > build/host/s5.log
+DINGHY_PATCHES=$G build/host/tastywaves build/host/s4 tests/scripts/seq4.txt > build/host/s4.log
+DINGHY_PATCHES=$G build/host/tastywaves build/host/s5 tests/scripts/seq5.txt > build/host/s5.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re

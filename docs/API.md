@@ -1,6 +1,6 @@
 # Dinghy API
 
-Everything [platform.c](../firmware/src/platform.c) gives your app. One compilation unit: `vavewave.c` includes
+Everything [platform.c](../firmware/src/platform.c) gives your app. One compilation unit: `tastywaves.c` includes
 `platform.c` first, so all of this is just there. Nothing here is a library you link against; read the source
 when in doubt, it is short.
 
@@ -41,8 +41,8 @@ static void app_main(void)
 ```
 
 Names the platform defines that you can change from the build: `APP_NAME` (the rescue and crash screens,
-default `"VAVEWAVE"`), `APP_VER` (set by `./build.sh --release`), `FELUCCA_ID` (the package identity; see
-[MAKE-IT-YOURS.md](MAKE-IT-YOURS.md)).
+default `"TASTYWAVES"`), `APP_VER` (set by `./build.sh --release`), `FELUCCA_ID` (the package identity; see
+[MAKE-IT-YOURS.md](https://github.com/zvenson/dinghy/blob/main/docs/MAKE-IT-YOURS.md), in Dinghy).
 
 ## Time
 
@@ -139,7 +139,7 @@ static void app_audio(int32_t *out, uint32_t n)
   (one writer each). If a render runs late the sound breaks up; see [RULES.md](RULES.md).
 
 Pitch: a 32-bit phase that wraps is an oscillator with no division at run time: `inc = f * 2^32 / 44100`,
-`ph += inc` each frame. `vavewave.c` keeps a table for one octave and shifts it for the others.
+`ph += inc` each frame. `tastywaves.c` keeps a table for one octave and shifts it for the others.
 
 ## MIDI
 
@@ -164,7 +164,7 @@ Up to 256 bytes, kept with their length and a CRC32 in one 4 KiB flash sector (`
 change of size or a broken save reads as "nothing saved": start from your defaults then.
 
 **Save when nothing sounds.** Erasing the sector holds the interrupts off for tens of milliseconds: the sound
-drops out. `vavewave.c` saves 2 s after the last change, once all voices are silent. Flash wears out after about
+drops out. `tastywaves.c` saves 2 s after the last change, once all voices are silent. Flash wears out after about
 100,000 erases of a sector: never save in a loop.
 
 ## Memory and flash

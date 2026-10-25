@@ -147,7 +147,7 @@ async function backupPatches() {
   await guarded('Backup', async () => {
     status('Reading the patches…');
     const bk = await vw.backup();
-    download(`vavewave-patches-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(bk));
+    download(`tastywaves-patches-${new Date().toISOString().slice(0, 10)}.json`, JSON.stringify(bk));
     status(`${bk.patches.length} patches saved to a file.`);
   });
 }
@@ -278,4 +278,4 @@ const drop = $('drop');
 drop.ondragover = (e) => { e.preventDefault(); drop.classList.add('over'); };
 drop.ondragleave = () => drop.classList.remove('over');
 drop.ondrop = (e) => { e.preventDefault(); drop.classList.remove('over'); loadFiles(e.dataTransfer.files); };
-status('Use Chrome or Edge (Safari has no Web MIDI). Plug the FM-1 in by USB with VAVEWave running.');
+status('Use Chrome or Edge (Safari has no Web MIDI). Plug the FM-1 in by USB with TastyWaves running.');

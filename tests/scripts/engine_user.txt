@@ -1,4 +1,4 @@
-# VAVEWave stage 4b: user wavetables in the engine (tests/run_engine.sh). Slot 0 holds a table that is the 2nd harmonic alone
+# TastyWaves stage 4b: user wavetables in the engine (tests/run_engine.sh). Slot 0 holds a table that is the 2nd harmonic alone
 # (a sine at twice the played pitch, so it is told from table 0 by pitch), slot 1 is listed as damaged (BAD), slot 2 is
 # not checked yet (the engine must not read it); slots 3..7 are empty. OSC 2 is silenced (patch 7 = P_LEVEL2).
 50 patch 7 0

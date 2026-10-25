@@ -1,11 +1,11 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# LATCH on the real panel (vavewave.c on the fake FM-1): the notes sent out as MIDI show what the keys did.
+# LATCH on the real panel (tastywaves.c on the fake FM-1): the notes sent out as MIDI show what the keys did.
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p build/host
-cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/vavewave firmware/src/vavewave.c
-build/host/vavewave build/host/latch tests/scripts/latch.txt > build/host/latch.log
+cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/tastywaves firmware/src/tastywaves.c
+build/host/tastywaves build/host/latch tests/scripts/latch.txt > build/host/latch.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re

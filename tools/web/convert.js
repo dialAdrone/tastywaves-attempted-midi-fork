@@ -1,5 +1,5 @@
 // SPDX-License-Identifier: GPL-3.0-only
-// Wavetable WAV / Surge .wt -> VAVEWave user table, in the browser: a port of tools/fm1_wavetable.py (reader, frame
+// Wavetable WAV / Surge .wt -> TastyWaves user table, in the browser: a port of tools/fm1_wavetable.py (reader, frame
 // detection, harmonics 1..64, 32-frame mapping) with tools/gen_wavetables.py (band-limiter, gain, quantiser) and
 // tools/gen_bench_tables.py relayout (the engine's native 7-level layout). tests/webtool_check.mjs checks the output
 // against the Python tool on the same files. The factory-table generator is not here: only conversion of user files.

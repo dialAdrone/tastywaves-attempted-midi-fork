@@ -1,21 +1,21 @@
 #!/bin/sh
 # SPDX-License-Identifier: GPL-3.0-only
-# The arp on the real panel (vavewave.c on the fake FM-1): ARP button, held keys, latch, page; the "ARP on/off n" lines
+# The arp on the real panel (tastywaves.c on the fake FM-1): ARP button, held keys, latch, page; the "ARP on/off n" lines
 # of the host log show what the engine played (the engine itself is tested by tests/run_arp.sh).
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p build/host
-cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/vavewave firmware/src/vavewave.c
-build/host/vavewave build/host/arp tests/scripts/arp.txt > build/host/arp.log
-build/host/vavewave build/host/arp2 tests/scripts/arp2.txt > build/host/arp2.log
-build/host/vavewave build/host/arp3 tests/scripts/arp3.txt > build/host/arp3.log
-build/host/vavewave build/host/arp4 tests/scripts/arp4.txt > build/host/arp4.log
-build/host/vavewave build/host/arp5 tests/scripts/arp5.txt > build/host/arp5.log
-build/host/vavewave build/host/arp6 tests/scripts/arp6.txt > build/host/arp6.log
-build/host/vavewave build/host/seq tests/scripts/seq.txt > build/host/seq.log
-build/host/vavewave build/host/seq2 tests/scripts/seq2.txt > build/host/seq2.log
-build/host/vavewave build/host/seq3 tests/scripts/seq3.txt > build/host/seq3.log
-build/host/vavewave build/host/fxbyp tests/scripts/fxbyp.txt > build/host/fxbyp.log
+cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/tastywaves firmware/src/tastywaves.c
+build/host/tastywaves build/host/arp tests/scripts/arp.txt > build/host/arp.log
+build/host/tastywaves build/host/arp2 tests/scripts/arp2.txt > build/host/arp2.log
+build/host/tastywaves build/host/arp3 tests/scripts/arp3.txt > build/host/arp3.log
+build/host/tastywaves build/host/arp4 tests/scripts/arp4.txt > build/host/arp4.log
+build/host/tastywaves build/host/arp5 tests/scripts/arp5.txt > build/host/arp5.log
+build/host/tastywaves build/host/arp6 tests/scripts/arp6.txt > build/host/arp6.log
+build/host/tastywaves build/host/seq tests/scripts/seq.txt > build/host/seq.log
+build/host/tastywaves build/host/seq2 tests/scripts/seq2.txt > build/host/seq2.log
+build/host/tastywaves build/host/seq3 tests/scripts/seq3.txt > build/host/seq3.log
+build/host/tastywaves build/host/fxbyp tests/scripts/fxbyp.txt > build/host/fxbyp.log
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 "$PY" - <<'PY'
 import re

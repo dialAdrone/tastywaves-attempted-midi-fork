@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* ui.h: the screen. Included once from vavewave.c after engine.h (main loop only: never call from the ISR).
+/* ui.h: the screen. Included once from tastywaves.c after engine.h (main loop only: never call from the ISR).
  * Sine build: the name, the last note big, the ISR cost, the keyboard with what sounds, the octave.
  * BENCH build: what is measured, the settings, the ISR cost, the keyboard, the button legend. */
 #pragma once

@@ -5,7 +5,7 @@
     python -I tests/font_sheet.py OUTDIR NAME|SMALLSPEC|LARGESPEC|LICENCE [...]   (SPEC as tools/gen_font.py)
 
 For every candidate: tools/gen_font.py makes a felucca_font.h, tests/font_sheet.c draws the UI's strings with the
-firmware's own gfx.c (-> OUTDIR/text-NAME.png), and the real app (vavewave.c, host mode) is built with that header and
+firmware's own gfx.c (-> OUTDIR/text-NAME.png), and the real app (tastywaves.c, host mode) is built with that header and
 run on tests/scripts/panel_ui.txt for three screens. The current font (firmware/gen/felucca_font.h) is the first row.
 Writes OUTDIR/font-sheet-text.png and OUTDIR/font-sheet-screens.png. Font files are only read by gen_font.py (Pillow /
 a BDF parser); nothing from them is executed."""
@@ -37,7 +37,7 @@ def make(out: Path, name, cand_dir: Path):
     # real screens
     app = out / f"app-{name}"
     run("cc", "-O1", "-Wno-unused-function", "-DDINGHY_HOST", '-DAPP_VER="font"', f"-I{cand_dir}", f"-I{ROOT / 'firmware/src'}",
-        f"-I{ROOT / 'firmware/gen'}", "-o", app, ROOT / "firmware/src/vavewave.c")
+        f"-I{ROOT / 'firmware/gen'}", "-o", app, ROOT / "firmware/src/tastywaves.c")
     with open(out / f"app-{name}.log", "w") as log:
         run(app, out / f"scr-{name}", ROOT / "tests/scripts/panel_ui.txt", stdout=log)
     app.unlink()

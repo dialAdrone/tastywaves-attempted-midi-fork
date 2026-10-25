@@ -1,6 +1,6 @@
-# VAVEWave Tables (browser)
+# TastyWaves Tables (browser)
 
-Sends wavetables to the 8 user slots of an FM-1 running VAVEWave. Same protocol and the same converter as
+Sends wavetables to the 8 user slots of an FM-1 running TastyWaves. Same protocol and the same converter as
 `tools/fm1_wavetable.py` (the converter output is byte-identical to the Python tool's; `tests/run_webtool.sh` checks it).
 
 Run it (Chrome or Edge; Safari has no Web MIDI; Chrome blocks ES modules from `file://`, so serve the folder):
@@ -18,4 +18,4 @@ Nothing is sent anywhere but to the MIDI port. No tables are shipped with this p
 
 With firmware stage 5 the page also lists the user patches (U01..U32): rename, move up or down (the order of the PRESETS list),
 delete, **Backup all** (a JSON file with every parameter and pattern) and **Restore from a file**. Restore puts each patch back
-under its own number and keeps the others. With firmware stage 6 (VAVEWave 1.0) the second sequencer (SEQ2: its settings and pattern) travels with each patch through all of these. A patch refers to a user table by slot number; back the tables up with Save on each slot.
+under its own number and keeps the others. With firmware stage 6 (TastyWaves 1.0) the second sequencer (SEQ2: its settings and pattern) travels with each patch through all of these. A patch refers to a user table by slot number; back the tables up with Save on each slot.

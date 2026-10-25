@@ -1,4 +1,4 @@
-# VAVEWave device test plan (engine v1 + panel UI, commit 193d2dc)
+# TastyWaves device test plan (engine v1 + panel UI, commit 193d2dc)
 
 Everything below was verified on a computer (host mode), none of it on the FM-1 yet. What to look for is in
 *italics*; record numbers in the "Result" column or in `docs/TASKS.md` Log. Controls: docs/UI-DESIGN.md.
@@ -8,7 +8,7 @@ Everything below was verified on a computer (host mode), none of it on the FM-1 
 - [ ] `rules-reviewer` verdict on HEAD is SAFE TO INSTALL (asked for 2026-10-12; do not flash without it).
 - [ ] MASTER down. Headphones off or low for the first boot.
 - [ ] Stock `FM-1_093` package downloaded from the FM-1 Firmware Hub (way back). Rescue: hold OCT- while powering on.
-- [ ] `build/vavewave.fwsc` is from HEAD: `./build.sh` shows image 512,688 B, identity FM-1_950.
+- [ ] `build/tastywaves.fwsc` is from HEAD: `./build.sh` shows image 512,688 B, identity FM-1_950.
 - [ ] `.venv/bin/python tools/fm1_install.py --info` reads the device (FM-1_950 bench now, or FM-1_093).
 
 ## 1. First boot (2 min)
@@ -172,7 +172,7 @@ SAVE (one patch in the settings sector) is copied to U01 at the first boot.
 
 ## 12. Arpeggiator (ARP button)
 
-Flash `build/vavewave.fwsc`. The arp is part of the patch (6 new parameters); old saved patches load with the arp off.
+Flash `build/tastywaves.fwsc`. The arp is part of the patch (6 new parameters); old saved patches load with the arp off.
 
 | # | Do | Expect |
 | --- | --- | --- |
@@ -192,7 +192,7 @@ Flash `build/vavewave.fwsc`. The arp is part of the patch (6 new parameters); ol
 
 ## 13. Note sequencer (SEQ and REC buttons)
 
-Flash `build/vavewave.fwsc`. One pattern of up to 32 steps lives in RAM (it is lost at power-off; saving it with the patch is stage S4). It uses the arp's RATE, GATE, SWING and TEMPO (ARP page 1/2 or the SEQ page). The ARP page also still has the clock readout.
+Flash `build/tastywaves.fwsc`. One pattern of up to 32 steps lives in RAM (it is lost at power-off; saving it with the patch is stage S4). It uses the arp's RATE, GATE, SWING and TEMPO (ARP page 1/2 or the SEQ page). The ARP page also still has the clock readout.
 
 | # | Do | Expect |
 | --- | --- | --- |
@@ -215,7 +215,7 @@ Flash `build/vavewave.fwsc`. One pattern of up to 32 steps lives in RAM (it is l
 
 ## 14. Modulation lane (SEQ page, second knob set)
 
-Flash `build/vavewave.fwsc`. The lane is one value a step (shown 0..127, 64 = neutral), as long as the note pattern, and moves one parameter while the sequencer plays. Like the pattern it is RAM only (lost at power-off, not in the patch; TARGET, DEPTH and GLIDE are in the patch). Record a pattern first (section 13). PLAY starts / stops the sequencer while SEQ is on.
+Flash `build/tastywaves.fwsc`. The lane is one value a step (shown 0..127, 64 = neutral), as long as the note pattern, and moves one parameter while the sequencer plays. Like the pattern it is RAM only (lost at power-off, not in the patch; TARGET, DEPTH and GLIDE are in the patch). Record a pattern first (section 13). PLAY starts / stops the sequencer while SEQ is on.
 
 | # | Do | Expect |
 | --- | --- | --- |
@@ -232,7 +232,7 @@ Flash `build/vavewave.fwsc`. The lane is one value a step (shown 0..127, 64 = ne
 
 ## 15. Effects chain (FX page, sets 3 to 6)
 
-Flash `build/vavewave.fwsc`. Press FX: set 1 and 2 are the filter, sets 3..6 are effect slots 1..4 (TYPE, A, B, MIX). The slots run in order, 1 first. Types so far: CHORUS, FLANGER (delay, reverb and phaser come later).
+Flash `build/tastywaves.fwsc`. Press FX: set 1 and 2 are the filter, sets 3..6 are effect slots 1..4 (TYPE, A, B, MIX). The slots run in order, 1 first. Types so far: CHORUS, FLANGER (delay, reverb and phaser come later).
 
 | # | Do | Expect |
 | --- | --- | --- |
@@ -248,7 +248,7 @@ Flash `build/vavewave.fwsc`. Press FX: set 1 and 2 are the filter, sets 3..6 are
 
 ## 16. Phaser, delay, reverb (FX slots)
 
-Flash `build/vavewave.fwsc`. TYPE now also has PHASER, DELAY, REVERB. DELAY and REVERB can be in only one slot each.
+Flash `build/tastywaves.fwsc`. TYPE now also has PHASER, DELAY, REVERB. DELAY and REVERB can be in only one slot each.
 
 | # | Do | Expect |
 | --- | --- | --- |
@@ -429,7 +429,7 @@ Open the web tool (`tools/web_tool.sh`), connect. Use a patch saved on the FM-1 
 
 ## 25. SEQ is a switch like ARP; PLAY follows it
 
-Flash `build/vavewave.fwsc`. SEQ works as ARP: a press opens its page; holding it switches it on / off. SEQ lit: PLAY starts / stops the patterns on any page. SEQ off: PLAY is LATCH. Also: the FX page hint, SAVE during REC, the web tool's patch lists.
+Flash `build/tastywaves.fwsc`. SEQ works as ARP: a press opens its page; holding it switches it on / off. SEQ lit: PLAY starts / stops the patterns on any page. SEQ off: PLAY is LATCH. Also: the FX page hint, SAVE during REC, the web tool's patch lists.
 
 | # | Do | Expect |
 |---|----|--------|

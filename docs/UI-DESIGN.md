@@ -1,8 +1,8 @@
-# VAVEWave UI design (T18)
+# TastyWaves UI design (T18)
 
 Status: phase 2 done (2026-10-12): the mock-ups are wired to the engine and the panel works. Code:
 `firmware/src/ui_screens.h` (screens drawn from a plain `ui_view_t`), `firmware/src/panel.h` (what each control does,
-the factory patches, SAVE, filling the view from `patch.p[]`), `firmware/src/vavewave.c` (main loop).
+the factory patches, SAVE, filling the view from `patch.p[]`), `firmware/src/tastywaves.c` (main loop).
 Tests: `tests/run_panel.sh` (the real app, `tests/scripts/panel_ui.txt` -> `build/host/panel-*.png`, 480x480 = 2x) and
 `tests/run_ui.sh` (the phase-1 demo with fake values, `build/host/ui-*.png`).
 
@@ -119,7 +119,7 @@ only when P_WARP_DEST selects it (BEND> on SEL).
 
 ## Settings, SAVE and presets
 
-- Settings struct (`app_set_t` in vavewave.c, 102 of the 256 bytes): version byte, octave, HOME look, last patch slot,
+- Settings struct (`app_set_t` in tastywaves.c, 102 of the 256 bytes): version byte, octave, HOME look, last patch slot,
   `uslot` + `uval[47]` (the saved user patch). Validated after load (version, ranges of every `uval` against
   `PDESC`); anything wrong = defaults. Saved 2 s after the last change when `quiet()`.
 - Factory patches: 8 in a const table in panel.h (`PRESET[]`: tables, positions, filter, envelopes, a few

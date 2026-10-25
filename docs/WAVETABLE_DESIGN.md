@@ -98,7 +98,7 @@ highlighted / live waveform of the current frame / four value cards. Draw only o
 ## 7. Prerequisites in the task queue
 
 T4 (encoder events in host mode), T5 (LED log, ticks, ADC stubs), T9 (WAV analysis, plus a table spectrum test),
-T10 (ISR timing readout), T8 (split `vavewave.c` into headers before the engine lands). See `docs/TASKS.md`.
+T10 (ISR timing readout), T8 (split `tastywaves.c` into headers before the engine lands). See `docs/TASKS.md`.
 
 ## 8. Answered by the photo (2026-10-11)
 

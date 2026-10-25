@@ -1,4 +1,4 @@
-# VAVEWave navigation and usability plan (proposal, 2026-10-20)
+# TastyWaves navigation and usability plan (proposal, 2026-10-20)
 
 Status: **plan approved 2026-10-20 with the decisions in section 5; U1 written (host-tested, device test: DEVICE-TEST-PLAN section 19).** It reorganises how the existing parameters are reached, so no sound,
 algorithm, patch format or MIDI CC changes. Saved patches load and sound exactly as before.

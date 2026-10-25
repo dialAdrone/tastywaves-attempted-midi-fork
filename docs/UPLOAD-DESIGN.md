@@ -1,7 +1,7 @@
 # User wavetable upload: design lock (T19) - DRAFT for the user and `rules-reviewer`
 
 Date 2026-10-15. Status: **proposal, nothing built**. Facts about other firmwares and the protocol options are in
-`docs/research/sample-transfer.md` (cited there); this file is the VAVEWave decision set. Anything marked **[verify]**
+`docs/research/sample-transfer.md` (cited there); this file is the TastyWaves decision set. Anything marked **[verify]**
 is an assumption to be measured on the unit before it is relied on.
 
 ## 1. Goal and scope

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* engine.h: the sound. Included once from vavewave.c, after platform.c (one translation unit; no registers here).
+/* engine.h: the sound. Included once from tastywaves.c, after platform.c (one translation unit; no registers here).
  *   app_audio        the audio ISR entry: renders, and times itself (cpu_last / cpu_max, T10)
  *   play/stop/quiet  notes from the main loop; eng_midi() takes any MIDI channel message; eng_lit() the keys to light
  * BENCH 0 (default): the v1 wavetable engine, synth.h; its whole UI interface is patch.h.

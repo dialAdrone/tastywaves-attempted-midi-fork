@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* ui_screens.h: VAVEWave screens (T18). Draws from a plain struct of display values (ui_view_t): no engine, no
+/* ui_screens.h: TastyWaves screens (T18). Draws from a plain struct of display values (ui_view_t): no engine, no
  * patch, no globals but the shadow struct. Included from tests/ui_demo.c (host mock-up, fake values) and, through
- * panel.h, from vavewave.c (the real app: panel.h fills the view from the patch).
+ * panel.h, from tastywaves.c (the real app: panel.h fills the view from the patch).
  *
  * Needs: gfx.c (cv_begin / cv_rect / cv_line / cv_text / cv_blit, cv_oy, FONT_S / FONT_M / FONT_L, RGB) and BTN_* (platform.c).
  * Integer only. Main loop only (never from the ISR).
@@ -82,7 +82,7 @@ typedef struct {
     uint32_t chord_keys;                        /* SEQ CHORD picture: bit k = key k of the two octaves sounds */
     char chord_name[16];                        /* SEQ CHORD picture: "C MAJ7", "HOLD KEYS", "OFF" */
     char boot[2][32];                           /* GLO INFO (BOOT KEYS): "BTN 0x0001 FR 80", "RAW" + 11 bytes hex */
-    char ver[24];                               /* GLO INFO: "VAVEWAVE " + the firmware version */
+    char ver[24];                               /* GLO INFO: "TASTYWAVES " + the firmware version */
     uint8_t volume, fvel, glide, pbr;           /* SEL pictures: volume, velocity > cutoff, glide 0..127, bend range 0..24 */
     int8_t menv[3];                             /* ENV MOD> picture: the MOD envelope > cutoff, > position, > BEND (-64..63) */
     uint8_t lvl[4];                             /* EDIT MIX picture: OSC1, OSC2, SUB, NOISE levels 0..127 */

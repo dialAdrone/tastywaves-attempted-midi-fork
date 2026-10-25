@@ -1,12 +1,12 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* A fake FM-1 on a computer: the app (firmware/src/vavewave.c) runs unchanged on it. platform.c includes
+/* A fake FM-1 on a computer: the app (firmware/src/tastywaves.c) runs unchanged on it. platform.c includes
  * this file instead of the hardware when DINGHY_HOST is set. A script presses keys over time; out come
  * the screen (PPM, at the times SHOT asks) and the sound (WAV, as the FM-1 sends it over USB).
  *
  *   mkdir -p build/host
- *   cc -O2 -Wall -DDINGHY_HOST -Ifirmware/src -Ifirmware/gen -o build/host/vavewave firmware/src/vavewave.c
- *   build/host/vavewave build/host/vavewave        (-> build/host/vavewave.wav, build/host/vavewave-<ms>.ppm)
- *   build/host/vavewave OUT script.txt [FPS]    (your own script; with FPS: OUT-NNNNN.ppm, a frame every 1/FPS s:
+ *   cc -O2 -Wall -DDINGHY_HOST -Ifirmware/src -Ifirmware/gen -o build/host/tastywaves firmware/src/tastywaves.c
+ *   build/host/tastywaves build/host/tastywaves        (-> build/host/tastywaves.wav, build/host/tastywaves-<ms>.ppm)
+ *   build/host/tastywaves OUT script.txt [FPS]    (your own script; with FPS: OUT-NNNNN.ppm, a frame every 1/FPS s:
  *                                             a film of your firmware, e.g. ffmpeg -r 30 -i OUT-%05d.ppm ...)
  *
  * Script lines (ms first): keys MASK | btn ID | bdown ID | bup ID | enc ID DELTA | midi ST D1 D2 | end. enc ID is 0..6 (ENC_SELECT ..
@@ -19,7 +19,7 @@
 #include <string.h>
 
 #ifndef APP_NAME
-#define APP_NAME "VAVEWAVE"
+#define APP_NAME "TASTYWAVES"
 #endif
 #ifndef APP_VER
 #define APP_VER "0.0"
@@ -249,7 +249,7 @@ static void read_script(const char *path)
     script_n = n;
 }
 
-static const char *host_out = "build/host/vavewave";
+static const char *host_out = "build/host/tastywaves";
 static int16_t *wav;
 static uint32_t wav_n;
 

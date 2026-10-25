@@ -2,7 +2,7 @@
 """Host spectrum test of the wavetable mip scheme (task T15, docs/WAVETABLE_DESIGN.md section 5 item 5).
 
 An integer-exact model of the planned oscillator, reading the generated tables (build/wavetables.bin):
-    inc   = INC_C9[n % 12] >> (10 - n / 12)                 (as vavewave.c)
+    inc   = INC_C9[n % 12] >> (10 - n / 12)                 (as tastywaves.c)
     L     = smallest L in 0..5 with inc < 2^(25 + L)         ((64 >> L) * f0 < 22050, no divide); clamp at 5
     idx   = ph >> (24 + L), frac = (ph >> (8 + L)) & 0xFFFF; s = a + (((b - a) * frac) >> 16)
     pos   = 12-bit, f = pos >> 7, x = (pos & 127) << 8 (Q15, 32 frames); out = s0 + (((s1 - s0) * x) >> 15)

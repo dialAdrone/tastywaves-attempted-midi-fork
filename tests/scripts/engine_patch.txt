@@ -1,4 +1,4 @@
-# VAVEWave v1 engine: patch changes (T16). Run: tests/run_engine.sh. Every parameter group is touched through
+# TastyWaves v1 engine: patch changes (T16). Run: tests/run_engine.sh. Every parameter group is touched through
 # MIDI (CC map in firmware/src/patch.h); '#! check' lines are read by tests/engine_check.py.
 # Times in ms. Status bytes: 0x90 note on, 0x80 off, 0xB0 CC, 0xE0 pitch bend, 0xD0 aftertouch.
 # 1 default patch (2 osc, osc 2 +7 cents), a C major chord; then the keys (C4 E4 G4 = key bits 7 11 14)

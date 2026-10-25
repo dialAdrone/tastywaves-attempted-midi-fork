@@ -6,13 +6,13 @@
 set -e
 cd "$(dirname "$0")/.."
 mkdir -p build/host
-cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/vavewave firmware/src/vavewave.c
+cc -O2 -Wall -Wno-unused-function -DDINGHY_HOST -DAPP_VER='"dev"' -Ifirmware/src -Ifirmware/gen -o build/host/tastywaves firmware/src/tastywaves.c
 PY="${PYTHON:-$( [ -x .venv/bin/python ] && echo .venv/bin/python || echo python3 )}"
 F=build/host/patches.bin
 rm -f $F build/host/patches-*.ppm build/host/patches-*.png
-DINGHY_PATCHES=$F build/host/vavewave build/host/patches tests/scripts/patches1.txt > build/host/patches1.log
+DINGHY_PATCHES=$F build/host/tastywaves build/host/patches tests/scripts/patches1.txt > build/host/patches1.log
 "$PY" tests/patches_check.py $F run1
-DINGHY_PATCHES=$F build/host/vavewave build/host/patches tests/scripts/patches2.txt > build/host/patches2.log
+DINGHY_PATCHES=$F build/host/tastywaves build/host/patches tests/scripts/patches2.txt > build/host/patches2.log
 "$PY" tests/patches_check.py $F run2
 "$PY" - <<'PY'
 from pathlib import Path

@@ -1,5 +1,5 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
-/* VAVEWave: a wavetable synth for the M-VAVE FM-1, on the Dinghy platform (Felucca / SLOOP). The v1 engine
+/* TastyWaves: a wavetable synth for the M-VAVE FM-1, on the Dinghy platform (Felucca / SLOOP). The v1 engine
  * (firmware/src/synth.h, 12 voices x 2 wavetable osc, SVF, 2 ADSR, LFO, BEND, drive; docs/WAVETABLE_DESIGN.md) is
  * driven through patch.h; the front panel is panel.h (what each control does) and ui_screens.h (the screens).
  * This is the file to change. Everything below it (platform.c) is done: updates, the USB rescue,
