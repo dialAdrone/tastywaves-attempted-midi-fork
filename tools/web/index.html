@@ -16,6 +16,7 @@
   a { color: var(--accent); }
   header.top { display:flex; align-items:center; gap:20px; margin-bottom:16px; } header.top p.sub { margin:0; }
   header.top .logo { flex:none; width:220px; height:auto; }
+  header.top a.home { font-size:13px; text-decoration:none; color:var(--mute); }
   @media (max-width:640px) { header.top { flex-direction:column-reverse; align-items:flex-start; } header.top .logo { width:100%; max-width:300px; } }
   .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:14px; }
   .row { display:flex; gap:10px; flex-wrap:wrap; align-items:center; }
@@ -53,6 +54,7 @@
 <main>
   <header class="top">
     <div>
+      <a class="home" href="https://tastysynth.com/">← tastysynth.com</a>
       <h1>TastyWaves Tables and Patches</h1>
       <p class="sub">Send wavetables (Serum, WaveEdit, Ableton, Surge) to the 8 user slots of your FM-1. The conversion runs in this page; nothing is uploaded to a server.</p>
     </div>

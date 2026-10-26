@@ -53,8 +53,8 @@ TastyWaves' identity is **`FM-1_937`**, the same for every release (`PRODUCT` in
    git add -A && git commit -m "TastyWaves 1.1.0" && git push
    ```
 
-   The push publishes the web tool (`.github/workflows/pages.yml`); in a minute or two
-   https://marksweiss.github.io/tastywaves/ offers **Install TastyWaves 1.1.0**.
+   The push publishes the website (`.github/workflows/pages.yml`); in a minute or two
+   https://tastysynth.com/tool/ offers **Install TastyWaves 1.1.0** and the landing page shows the new version.
 
 6. **Tag and publish the GitHub release** with the package attached:
 
@@ -101,6 +101,7 @@ release by itself (nightly).
 | `web_tool.sh` | Serves `web/` at http://localhost:8000 and opens it |
 | `web_serve.py` | The server behind it (caching off, so a reload always gets the current scripts) |
 | `web_release.sh` | Bundles a release build with the web tool, for its Install button and GitHub Pages |
+| `site_build.sh` | Assembles the website into `build/site`: the landing page (`site/`), the pictures (`docs/images`) and the web tool at `/tool/`. `--serve` previews it at http://localhost:8000. GitHub Pages runs it on every push |
 
 ### Data and testing
 

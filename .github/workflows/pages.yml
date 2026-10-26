@@ -1,9 +1,9 @@
-# The web tool (tools/web: install, wavetables, patches) on GitHub Pages: https://marksweiss.github.io/tastywaves/
-name: Web tool on GitHub Pages
+# The website on GitHub Pages, at https://tastysynth.com: the landing page (site/) and the web tool at /tool/ (tools/web).
+name: Website on GitHub Pages
 on:
   push:
     branches: [main]
-    paths: [tools/web/**, .github/workflows/pages.yml]
+    paths: [site/**, docs/images/**, tools/web/**, tools/site_build.sh, .github/workflows/pages.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,8 +21,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
+      - run: tools/site_build.sh
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: tools/web
+          path: build/site
       - id: deployment
         uses: actions/deploy-pages@v4
