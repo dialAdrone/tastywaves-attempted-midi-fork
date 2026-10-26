@@ -8,8 +8,8 @@ Everything below was verified on a computer (host mode), none of it on the FM-1 
 - [ ] `rules-reviewer` verdict on HEAD is SAFE TO INSTALL (asked for 2026-10-12; do not flash without it).
 - [ ] MASTER down. Headphones off or low for the first boot.
 - [ ] Stock `FM-1_093` package downloaded from the FM-1 Firmware Hub (way back). Rescue: hold OCT- while powering on.
-- [ ] `build/tastywaves.fwsc` is from HEAD: `./build.sh` shows image 512,688 B, identity FM-1_950.
-- [ ] `.venv/bin/python tools/fm1_install.py --info` reads the device (FM-1_950 bench now, or FM-1_093).
+- [ ] `build/tastywaves.fwsc` is from HEAD: `./build.sh` shows the image size and identity FM-1_937.
+- [ ] `.venv/bin/python tools/fm1_install.py --info` reads the device (FM-1_937 for TastyWaves, FM-1_015 for the official V15).
 
 ## 1. First boot (2 min)
 All good
@@ -460,3 +460,15 @@ Flash `build/tastywaves.fwsc`. SEQ works as ARP: a press opens its page; holding
 | 26.2 | Hold a chord through the splash | no crash; after it the keys play as usual |
 | 26.3 | Hold OCT- while switching on | the USB rescue, no splash (the rescue comes first) |
 | 26.4 | Install a build over USB right after power-on (during the splash) | the install works (USB is served throughout) |
+
+## 27. Identity FM-1_937 and the Firmware Hub's tests (1.0.1)
+
+The hub lists only firmwares that install from the official V15 and from another firmware, and that leave again.
+Back up your patches first (web tool: Backup all).
+
+| # | Do | Expect |
+|---|----|--------|
+| 27.1 | From TastyWaves 1.0.0, install the official V15 through the FM-1 Firmware Hub | the hub's install starts and finishes; the FM-1 runs V15 (leaving TastyWaves works) |
+| 27.2 | From V15, install TastyWaves 1.0.1 with the web tool's Install button | installs; the splash; GLO INFO `TASTYWAVES 1.0.1` |
+| 27.3 | `tools/install_fw.sh --info` (or the hub's page) | the FM-1 reports `FM-1_937` |
+| 27.4 | Your patches after the round trip | there, or restore them from the backup (note which: it goes in the README) |

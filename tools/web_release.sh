@@ -8,6 +8,6 @@ F="build/tastywaves-$V.fwsc"
 [ -f "$F" ] || { echo "web_release.sh: no $F (./build.sh --release $V)"; exit 1; }
 mkdir -p tools/web/firmware
 cp "$F" tools/web/firmware/tastywaves.fwsc
-MINOR=$(echo "$V" | cut -d. -f2)
-printf '{ "version": "%s", "product": "FM-1_95%s", "pkg": "firmware/tastywaves.fwsc" }\n' "$V" "$MINOR" > tools/web/firmware/release.json
+P=$(sed -n 's/^PRODUCT = "\(FM-1_[0-9]*\)".*/\1/p' tools/build.py)      # the identity the package carries
+printf '{ "version": "%s", "product": "%s", "pkg": "firmware/tastywaves.fwsc" }\n' "$V" "$P" > tools/web/firmware/release.json
 cat tools/web/firmware/release.json

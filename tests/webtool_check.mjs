@@ -76,7 +76,7 @@ writeFileSync(join(tmp, 'b.vwt'), imgB);
 const fl = new FakeLink([`2:${join(tmp, 'b.vwt')}`]);
 const vw = new VwLink(fl, { tries: 4, timeout: 50 });
 const h = await vw.hello();
-check(h.proto === 1 && h.stage === 6 && h.slots === 8 && h.slotSize === 0x9000 && h.id === 'FM-1_950', 'HELLO from the firmware logic');
+check(h.proto === 1 && h.stage === 6 && h.slots === 8 && h.slotSize === 0x9000 && h.id === 'FM-1_937', 'HELLO from the firmware logic');
 let d = await vw.directory();
 check(d.length === 8 && d[2].valid && d[2].name === 'WE-64' && d[2].crc === crcB && !d[0].valid, 'DIR: slot 2 holds WE-64, others empty');
 const g = await vw.get(2);

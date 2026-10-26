@@ -93,7 +93,7 @@ highlighted / live waveform of the current frame / four value cards. Draw only o
 | 4 | Warp in v1 | **Yes**: BEND in v1 |
 | 5 | On-device table upload | **Very desirable**: needs a platform SysEx path, a storage region and a PC uploader (section 9) |
 | 6 | Cores | **One core** |
-| 7 | Firmware name | open (identity is `FM-1_950`) |
+| 7 | Firmware name | TastyWaves (identity `FM-1_937`) |
 
 ## 7. Prerequisites in the task queue
 

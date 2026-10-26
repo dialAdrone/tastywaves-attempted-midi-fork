@@ -42,7 +42,7 @@ enum { ENC_SELECT = 0, ENC_ALGORITHM = 1, ENC_KNOB1 = 2, ENC_KNOB2 = 3, ENC_KNOB
 #define APP_NAME "TASTYWAVES"
 #endif
 #ifndef FELUCCA_ID
-#define FELUCCA_ID "FM-1_950"                   /* package identity: 95N = this fork, build N (tools/build.py) */
+#define FELUCCA_ID "FM-1_937"                   /* package identity: TastyWaves (tools/build.py PRODUCT) */
 #endif
 #ifndef APP_VER
 #define APP_VER "0.0"

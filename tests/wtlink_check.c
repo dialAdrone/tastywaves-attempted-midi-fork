@@ -11,7 +11,7 @@ static uint8_t flash[0x100000];
 static uint8_t flash_ok = 1;
 static uint32_t flash_writes, fake_ms;
 static void fm1_wdt_feed(void) {}
-#define FELUCCA_ID "FM-1_950"
+#define FELUCCA_ID "FM-1_937"
 static uint32_t crc32(const uint8_t *p, uint32_t n)
 {
     uint32_t c = 0xFFFFFFFFu, k;
@@ -194,7 +194,7 @@ static int check_main(void)
     wt_service();
     CHECK(in_taken && reply(&rc, &seq) && rc == 0 && seq == 7 && rep_n == 16);
     CHECK(rep[8] == 1 && rep[9] == WT_STAGE && rep[10] == 8 && rep[11] == 64 && ota_rd32(rep + 12) == 0x9000u);
-    CHECK(!memcmp(rep + 16, "FM-1_950", 8));
+    CHECK(!memcmp(rep + 16, "FM-1_937", 8));
 
     /* DIR of all slots */
     out_n = 0; a[0] = 0; a[1] = 8; request(WT_CMD_DIR, 8, a, 2); wt_service();

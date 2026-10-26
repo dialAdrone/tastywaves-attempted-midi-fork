@@ -15,7 +15,7 @@ const output = {
   send(pkt) {
     const d = unpack7(pkt.subarray(1, pkt.length - 1)), cmd = d[3], seq = d[4], pl = d.subarray(7, d.length - 1);
     let p = new Uint8Array(0);
-    if (cmd === 1) { p = new Uint8Array(16); p.set([1, 5, 8, 64, 0, 0x90, 0, 0]); p.set(enc.encode('FM-1_950'), 8); }
+    if (cmd === 1) { p = new Uint8Array(16); p.set([1, 5, 8, 64, 0, 0x90, 0, 0]); p.set(enc.encode('FM-1_937'), 8); }
     else if (cmd === 2) {
       const start = pl[0], n = pl[1]; p = new Uint8Array(16 * n);
       for (let i = 0; i < n; i++) { const e = p.subarray(16 * i, 16 * i + 16); e[0] = start + i; if (start + i === 3) { e[1] = 1; e[2] = 32; e[3] = 7; e.set(enc.encode('TESTTAB'), 4); e.set([0x78, 0x56, 0x34, 0x12], 12); } }

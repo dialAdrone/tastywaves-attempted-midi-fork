@@ -32,6 +32,7 @@ creating pattern-based music and evolving soundscapes. We aim to be the definiti
 - [Patches](#patches)
 - [The web tool: your own wavetables, patch library](#the-web-tool-your-own-wavetables-patch-library)
 - [MIDI and USB audio](#midi-and-usb-audio)
+- [Compatibility](#compatibility)
 - [Build from source](#build-from-source)
 - [Credits and licence](#credits-and-licence)
 
@@ -207,6 +208,12 @@ the command line.
   Sound Off release everything, latched notes included.
 - **Out:** the notes you play on the keys.
 - **USB audio:** the FM-1 appears as a stereo audio input; record it in any DAW without a cable.
+
+## Compatibility
+
+TastyWaves reads only its own patches and wavetables. It does not read projects, patches or samples saved by other
+FM-1 firmwares, the official one included: save or back up what you keep in another firmware before switching. Its
+FM-1 identity is `FM-1_937`.
 
 ## Build from source
 

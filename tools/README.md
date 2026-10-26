@@ -10,17 +10,11 @@ the same package bundled with the web tool on GitHub Pages (its Install button).
 
 ### Version numbers and the FM-1 identity
 
-Versions are `X.Y.Z`, one digit each (`build.py` enforces it). Every package carries an FM-1 identity, which the
-installers check after writing: TastyWaves uses `FM-1_95Y`, where `Y` is the **minor** digit.
-
-| Version | Identity | Use for |
-| --- | --- | --- |
-| `1.0.1`, `1.0.2` | `FM-1_950` (unchanged) | fixes |
-| `1.1.0` | `FM-1_951` | new features |
-| dev builds (no `--release`) | `FM-1_950`, version text `0.0` | testing only, never published |
-
-The major digit is not in the identity (`2.0.0` would be `FM-1_950` again): before a 2.0, decide on the identity in
-`tools/build.py` (`PRODUCT`). Identities `FM-1_95N` are this project's; Dinghy upstream uses `99N`.
+Versions are `X.Y.Z`, one digit each (`build.py` enforces it); the screen and the release name show it. Every
+package also carries an FM-1 identity, which the FM-1 reports over USB and the installers check after writing.
+TastyWaves' identity is **`FM-1_937`**, the same for every release (`PRODUCT` in `tools/build.py`). It is ours in the
+[FM-1 Firmware Hub](https://thefirmwarehub.com/) catalogue: do not change it without telling the hub. Dev builds
+(no `--release`) carry it too, with the version text `0.0`; they are for testing only, never published.
 
 ### Checklist
 
@@ -36,7 +30,7 @@ The major digit is not in the identity (`2.0.0` would be `FM-1_950` again): befo
 3. **Build the release:**
 
    ```sh
-   ./build.sh --release 1.1.0          # -> build/tastywaves-1.1.0.fwsc, identity FM-1_951
+   ./build.sh --release 1.1.0          # -> build/tastywaves-1.1.0.fwsc, identity FM-1_937
    ```
 
    The build fails on what would break the FM-1 (size, RAM, ROM calls, registers outside `hal/`); note the free
