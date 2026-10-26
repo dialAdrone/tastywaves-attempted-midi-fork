@@ -218,6 +218,8 @@ tools/web_release.sh 1.0.0    # bundle it with the web tool (its Install button,
 tools/install_fw.sh     # install build/tastywaves.fwsc on the connected FM-1
 ```
 
+The release process, step by step, and what every script does: [tools/README.md](tools/README.md).
+
 The build refuses what would break the FM-1: a 64-bit division, a call into the chip ROM, too much RAM, a hardware
 register touched outside `firmware/hal/`.
 
