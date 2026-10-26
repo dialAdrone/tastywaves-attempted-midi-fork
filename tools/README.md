@@ -73,7 +73,7 @@ TastyWaves' identity is **`FM-1_937`**, the same for every release (`PRODUCT` in
    ```sh
    shasum -a 256 build/tastywaves-1.1.0.fwsc
    curl -sL https://github.com/marksweiss/tastywaves/releases/download/v1.1.0/tastywaves-1.1.0.fwsc | shasum -a 256
-   curl -s https://marksweiss.github.io/tastywaves/firmware/tastywaves.fwsc | shasum -a 256
+   curl -s https://tastysynth.com/tool/firmware/tastywaves.fwsc | shasum -a 256
    ```
 
 Once TastyWaves is listed on the [FM-1 Firmware Hub](https://thefirmwarehub.com/), the hub picks up each new GitHub

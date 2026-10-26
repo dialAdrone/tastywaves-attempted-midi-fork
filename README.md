@@ -1,6 +1,6 @@
 # TastyWaves
 
-**A wavetable synthesizer firmware for the M-VAVE FM-1.**
+**A wavetable synthesizer firmware for the M-VAVE FM-1.** · [tastysynth.com](https://tastysynth.com)
 
 <p align="center">
   <img src="docs/images/splash.gif" width="240" alt="The power-on animation: waves crash and TastyWaves rises out of the splash">
@@ -60,7 +60,7 @@ creating pattern-based music and evolving soundscapes. We aim to be the definiti
 
 ## Install
 
-**In your browser (easiest).** Open **[marksweiss.github.io/tastywaves](https://marksweiss.github.io/tastywaves/)**
+**In your browser (easiest).** Open **[tastysynth.com/tool](https://tastysynth.com/tool/)**
 in Chrome or Edge, plug the FM-1 in by USB, switch it on and press **Install on the FM-1**. It takes about a minute;
 keep the page open and the cable in. Updating TastyWaves keeps your saved patches and wavetables.
 
@@ -189,7 +189,7 @@ sequence. The patch store holds about 32 patches without sequences and fewer wit
 
 <p align="center"><img src="docs/images/web-tool.png" width="450" alt="The web tool, here with a simulated FM-1"></p>
 
-A page in your browser that talks to the FM-1 over USB-MIDI: **[marksweiss.github.io/tastywaves](https://marksweiss.github.io/tastywaves/)**
+A page in your browser that talks to the FM-1 over USB-MIDI: **[tastysynth.com/tool](https://tastysynth.com/tool/)**
 (or `tools/web_tool.sh` in this repository, at http://localhost:8000). Everything runs in the page; nothing is
 uploaded anywhere. Use Chrome or Edge (Safari has no Web MIDI), press **Connect to MIDI** and allow SysEx.
 

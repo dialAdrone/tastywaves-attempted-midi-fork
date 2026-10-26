@@ -27,4 +27,5 @@ over the FM-1's own USB update, with Felucca's installer: `fm1ota.js` and `fm1pk
 commit 1c0798e, unchanged (GPL-3.0, Leo Kuroshita / Hügelton Instruments). Without `firmware/release.json` the card hides.
 
 A release: `./build.sh --release X.Y.Z`, then `tools/web_release.sh X.Y.Z` (copies the package, writes `release.json`),
-commit and push. `.github/workflows/pages.yml` publishes this folder at https://marksweiss.github.io/tastywaves/.
+commit and push. `.github/workflows/pages.yml` publishes this folder as https://tastysynth.com/tool/ (with the landing page,
+`site/`, at the root: `tools/site_build.sh`).
