@@ -18,7 +18,7 @@ creating pattern-based music and evolving soundscapes. We aim to be the definiti
   <img src="docs/images/seq.png" width="240" alt="SEQ: a pattern playing, with the status row">
 </p>
 
-> **Version 1.0.0.** Tested on the FM-1 against [docs/DEVICE-TEST-PLAN.md](docs/DEVICE-TEST-PLAN.md).
+> **Version 1.0.1.** Tested on the FM-1 against [docs/DEVICE-TEST-PLAN.md](docs/DEVICE-TEST-PLAN.md).
 > It is free software (GPL-3.0), built on [Dinghy](https://github.com/zvenson/dinghy), which is built on
 > [Felucca](https://github.com/hugelton/Felucca) and [SLOOP](https://github.com/isod89/sloop-fm1). See [Credits](#credits-and-licence).
 
@@ -62,9 +62,9 @@ creating pattern-based music and evolving soundscapes. We aim to be the definiti
 
 **In your browser (easiest).** Open **[marksweiss.github.io/tastywaves](https://marksweiss.github.io/tastywaves/)**
 in Chrome or Edge, plug the FM-1 in by USB, switch it on and press **Install on the FM-1**. It takes about a minute;
-keep the page open and the cable in. Your saved patches and wavetables are kept.
+keep the page open and the cable in. Updating TastyWaves keeps your saved patches and wavetables.
 
-**Or download the firmware:** [tastywaves-1.0.0.fwsc](https://github.com/marksweiss/tastywaves/releases/download/v1.0.0/tastywaves-1.0.0.fwsc)
+**Or download the firmware:** [tastywaves-1.0.1.fwsc](https://github.com/marksweiss/tastywaves/releases/download/v1.0.1/tastywaves-1.0.1.fwsc)
 (all versions on the [Releases](https://github.com/marksweiss/tastywaves/releases) page), for any FM-1 installer
 that takes a `.fwsc` file, or the manual install below.
 
@@ -72,13 +72,15 @@ that takes a `.fwsc` file, or the manual install below.
 only the updater), and either install works from there. A firmware that crashes twice at boot lands there by itself.
 
 **Going back:** the [FM-1 Firmware Hub](https://fm1.designburgapps.com) installs the official firmware, or any
-other, over the same USB update path. Back up your patches with the [web tool](#the-web-tool-your-own-wavetables-patch-library) first.
+other, over the same USB update path. Another firmware erases TastyWaves' patches and user wavetables: back them up
+with the [web tool](#the-web-tool-your-own-wavetables-patch-library) first (Backup all, and Save on each table slot), and
+restore them after you come back.
 
 ### Manual install
 
 You need a computer with Python 3.
 
-1. Download `tastywaves-1.0.0.fwsc` (above).
+1. Download `tastywaves-1.0.1.fwsc` (above).
 2. Get the installer (this repository) and its two Python packages:
 
    ```sh
@@ -90,7 +92,7 @@ You need a computer with Python 3.
 3. Plug in the FM-1, switch it on, and install:
 
    ```sh
-   tools/install_fw.sh ~/Downloads/tastywaves-1.0.0.fwsc
+   tools/install_fw.sh ~/Downloads/tastywaves-1.0.1.fwsc
    ```
 
    It shows what runs on the FM-1, asks before it writes, and checks the result after the FM-1 restarts.
@@ -212,8 +214,9 @@ the command line.
 ## Compatibility
 
 TastyWaves reads only its own patches and wavetables. It does not read projects, patches or samples saved by other
-FM-1 firmwares, the official one included: save or back up what you keep in another firmware before switching. Its
-FM-1 identity is `FM-1_937`.
+FM-1 firmwares, the official one included: save or back up what you keep in another firmware before switching. The
+other way round, installing another firmware erases TastyWaves' patches and user wavetables: back them up with the
+web tool first, and restore them when you come back. Its FM-1 identity is `FM-1_937`.
 
 ## Build from source
 
@@ -223,8 +226,8 @@ container by itself), plus Python 3 and [uv](https://docs.astral.sh/uv/).
 ```sh
 tools/install.sh        # once: a venv, JieLi's toolchain, three files of the JieLi AC79 SDK; then a build and a host test
 ./build.sh              # -> build/tastywaves.fwsc
-./build.sh --release 1.0.0    # -> build/tastywaves-1.0.0.fwsc
-tools/web_release.sh 1.0.0    # bundle it with the web tool (its Install button, GitHub Pages)
+./build.sh --release 1.0.1    # -> build/tastywaves-1.0.1.fwsc
+tools/web_release.sh 1.0.1    # bundle it with the web tool (its Install button, GitHub Pages)
 tools/install_fw.sh     # install build/tastywaves.fwsc on the connected FM-1
 ```
 

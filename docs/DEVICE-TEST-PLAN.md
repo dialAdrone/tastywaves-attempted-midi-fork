@@ -471,4 +471,4 @@ Back up your patches first (web tool: Backup all).
 | 27.1 | From TastyWaves 1.0.0, install the official V15 through the FM-1 Firmware Hub | the hub's install starts and finishes; the FM-1 runs V15 (leaving TastyWaves works) |
 | 27.2 | From V15, install TastyWaves 1.0.1 with the web tool's Install button | installs; the splash; GLO INFO `TASTYWAVES 1.0.1` |
 | 27.3 | `tools/install_fw.sh --info` (or the hub's page) | the FM-1 reports `FM-1_937` |
-| 27.4 | Your patches after the round trip | there, or restore them from the backup (note which: it goes in the README) |
+| 27.4 | Your patches after the round trip | gone (V15 erases them): Restore from the backup brings them back. Passed 2026-10-25, with 27.1-27.3 |
