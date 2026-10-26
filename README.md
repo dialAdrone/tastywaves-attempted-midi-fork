@@ -2,6 +2,10 @@
 
 **A wavetable synthesizer firmware for the M-VAVE FM-1.**
 
+<p align="center">
+  <img src="docs/images/splash.gif" width="240" alt="The power-on animation: waves crash and TastyWaves rises out of the splash">
+</p>
+
 TastyWaves turns the FM-1 into a 12-voice wavetable synth with two oscillators per voice, a resonant filter, two
 envelopes, an LFO, a four-slot effects chain, an arpeggiator and two step sequencers that can play chords and
 counterpoint on one clock. Patches are saved on the device, and a browser tool manages them and loads your own
@@ -10,7 +14,6 @@ focusing on intuitive performance and usability, and to provide a rich nuanced s
 creating pattern-based music and evolving soundscapes. We aim to be the definitive wavetable synth on the FM-1.
 
 <p align="center">
-  <img src="docs/images/splash.gif" width="240" alt="The power-on animation: waves crash and TastyWaves rises out of the splash">
   <img src="docs/images/home.png" width="240" alt="HOME: the oscillator's wave and its harmonics">
   <img src="docs/images/seq.png" width="240" alt="SEQ: a pattern playing, with the status row">
 </p>
