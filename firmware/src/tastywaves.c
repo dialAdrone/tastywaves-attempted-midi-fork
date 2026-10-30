@@ -249,6 +249,14 @@ static void app_main(void)
     boot_btn = fm1_in.buttons;                  /* before anything else */
     boot_frames = fm1_in.frames;
     for (k = 0; k < 11u; k++) boot_raw[k] = fm1_in.raw[k];
+    /* 🔌 PLACE THE FIX RIGHT HERE INSIDE THE FUNCTION BLOCK: */
+    #ifdef UART0_CON
+    UART0_CON = 0x01; 
+    #endif
+    #ifdef UART1_CON
+    UART1_CON = 0x01;
+    #endif
+    
     memset(&set, 0, sizeof set);
     if (settings_load(&set, sizeof set)) set.ver = 0;       /* nothing (or another size): the defaults */
     pn_validate(&set);
@@ -407,13 +415,24 @@ static void app_main(void)
         save_shown = pn_save_poll(&set, &dirty);
         if (save_shown) t_change = fm1_ms;      /* (a changed last patch is written to the settings 2 s later) */
 
-        while (midi_get(&st, &d1, &d2)) {       /* USB-MIDI in, any channel */
-            if ((st & 0xF0u) == 0xB0u && (d1 == 120u || d1 == 123u))     /* all sound / notes off: nothing is latched any more */
+        while (midi_get(&st, &d1, &d2)) { /* Universal MIDI in, any channel */
+            uint8_t type = st & 0xF0u;
+            if (type == 0xB0u && (d1 == 120u || d1 == 123u)) /* all sound / notes off */
                 for (k = 0; k < 16u; k++) lat[k] = 0;
-            if (st == 0xF8u) arp_ext.ticks++;                            /* MIDI clock and start: the arp follows them */
+            if (st == 0xF8u) arp_ext.ticks++; /* MIDI clock and start */
             else if (st == 0xFAu) arp_ext.start++;
+            
+            /* 🔓 Intercept Note On/Off bytes from the serial driver streams universally */
+            if (type == 0x90u && d2 > 0) {
+                play(d1, d2);
+            }
+            else if (type == 0x80u || (type == 0x90u && d2 == 0)) {
+                stop(d1);
+            }
+            
             eng_midi(st, d1, d2);
         }
+
 
         if (fm1_ms - t_cpu >= 250u) {           /* the ISR cost, 4 times a second */
             uint32_t t = cpu_max > 4000000u ? 4000000u : cpu_max;
