@@ -13,7 +13,10 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install Pillow uv lz4
-      - name: Get JieLi Toolchain
+      - name: Get Missing JieLi AC79 SDK Framework
+        run: |
+          git clone --depth=1 https://github.com /home/runner/fw-AC79_AIoT_SDK
+      - name: Get JieLi Compiler Toolchain
         run: tools/get_toolchain.sh || true
       - name: Build Firmware Package Directly
         env:
