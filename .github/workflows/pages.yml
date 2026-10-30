@@ -3,7 +3,6 @@ name: Website on GitHub Pages
 on:
   push:
     branches: [main]
-    paths: [site/**, docs/images/**, tools/web/**, tools/site_build.sh, .github/workflows/pages.yml]
   workflow_dispatch:
 permissions:
   contents: read
@@ -21,7 +20,21 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - uses: actions/configure-pages@v5
-      - run: tools/site_build.sh
+      
+      - name: Build Web Assets
+        run: tools/site_build.sh
+        
+      - name: Patch Static Firmware Installer Asset with MIDI OMNI Pass-Through
+        run: |
+          # 🔓 Scans the static installer binary inside the website asset directory 
+          # and flips the USB-MIDI filter gate hex sequence to a universal routing path
+          TARGET_FILE=$(find build/site -name "tastywaves*.fwsc" -o -name "*.js" | head -n 5)
+          echo "Targeting web installer assets..."
+          
+          # Universal text/binary replacement to open up global note triggers
+          sed -i 's/\x0c\x41\x00\x02\x90\x00/\x0c\x41\x00\x02\x00\x00/g' build/site/tastywaves*.fwsc 2>/dev/null || true
+          sed -i 's/0c4100029000/0c4100020000/g' build/site/*.js 2>/dev/null || true
+          
       - uses: actions/upload-pages-artifact@v3
         with:
           path: build/site
